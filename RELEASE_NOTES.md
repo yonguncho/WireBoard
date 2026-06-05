@@ -10,7 +10,7 @@ Zero external-dependency network capture analysis tool.
 - Modular attack detection: PortScan / Beacon / BruteForce
 - UUID session validation
 - 50 MB pre-check guard (Content-Length before read)
-- 78/78 tests pass
+- 254/254 tests pass (including streaming-limit unit tests)
 
 ### Download
 - **WireBoard.exe** — Windows x64, 12.16 MB, no install required

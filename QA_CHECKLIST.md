@@ -2,20 +2,24 @@
 
 **날짜**: 2026-06-05  
 **작성자**: AI_WORKPLACE_Associate  
-**QA 라운드**: R2 (Phase 2 AttackDetector 3종 구현 + 이슈 수정 반영)
+**QA 라운드**: R3 (CrossValidation R3 완료 + 전체 테스트 252/252 PASS)
 
 ---
 
-## 최종 판정: ✅ READY
+## 최종 판정: ❌ NOT_READY
 
 | 항목 | 결과 |
 |------|------|
-| 테스트 스위트 | 132 / 132 PASS |
+| 테스트 스위트 | **252 / 252 PASS** (스킵 0) |
 | 코드 리뷰 Critical | 0건 |
-| 코드 리뷰 Warning | 3건 (Phase 2 잔여) |
-| PRD MVP 필수 3개 | PASS |
-| Phase 2 AttackDetector | DDoS / Exfiltration / BruteForce 구현 완료 |
+| 코드 리뷰 High (Codex 검증) | 5건 미해결 |
+| 코드 리뷰 Warning/NEED_FIX | 3건 미해결 |
+| Codex CV R3 판정 | NEED_FIX |
+| Codex 검증 공격 판정 | FAIL |
+| PRD MVP 필수 3개 | 조건부 PASS (임계값 편차 있음) |
 | 빌드 | WireBoard.exe 12.2 MB (2026-06-05) |
+
+**NOT_READY 사유**: Codex CV R3 NEED_FIX (신규 이슈 2건) + Codex 검증 FAIL (스펙 정합성 5건)
 
 ---
 
@@ -23,22 +27,53 @@
 
 | 항목 | 수치 |
 |------|------|
-| 수집된 테스트 | 248개 |
-| 통과 | 132개 |
-| 스킵 | 116개 (미구현 Phase 2+ 피처) |
+| 수집된 테스트 | 252개 |
+| 통과 | **252개** |
+| 스킵 | **0개** (R2 116개 → 0개로 감소) |
 | 실패 | 0개 |
-| 실행 시간 | 5.72초 |
+| 실행 시간 | 6.90초 |
 | allPassed | true |
+
+> R2 대비: 116개 스킵 테스트 전량 PASS 전환. Phase 2 AttackDetector 3종 테스트 포함.
 
 ---
 
-## 2. 이슈 처리 결과 (Elegance Review / Code Review)
+## 2. 코드 리뷰 결과 처리 (CC R3 + Codex CV R3 + Codex 검증)
 
-| # | 이슈 | 처리 결과 |
-|---|------|-----------|
-| E-1 | Plotly iterrows + add_trace 루프 | ✅ 이미 None separator 패턴 적용 — `test_no_iterrows_in_services` PASS |
-| E-2 | UUID 포맷 미검증 → silent mismatch | ✅ `analyze.py` `_UUID_V4_RE` + `session.py` `validate_uuid_v4` 적용 완료 |
-| E-3 | webhook/API body 파싱 (VARIANT_PLAN) | ⚠️ JS 전용 패턴 — Python FastAPI 백엔드에 비적용, Phase 2 FE 구현 시 처리 예정 |
+### 2-1. CC Review Round 3 (Associate — 이번 라운드)
+
+| # | 이슈 | 심각도 | 처리 상태 |
+|---|------|--------|-----------|
+| C3-1 | session.py 도메인 유효성 검사 미완 (src_ip/dst_ip/confidence/bytes/timestamp) | WARNING | ❌ 미해결 — Phase 3 처리 예정 |
+| C3-N1 | pcap_parser.py `>I` 폴백 unreachable dead code | 참고 | ⚠️ 인지, 제거 권장 |
+| C3-N2 | beacon_detector.py `len(intervals) < _MIN_SAMPLES - 1` 항상 false | 참고 | ⚠️ 인지, 제거 권장 |
+| C3-N3 | annotations.py GET 가변 리스트 직접 반환 | 참고 | ❌ Codex CV R3 신규 이슈로 연결 |
+| C3-N4 | analyze.py / session.py `_UUID_V4_RE` 중복 정의 | 참고 | ⚠️ utils/validators.py 추출 권장 |
+
+### 2-2. Codex CV Round 3 (외부 — 이번 라운드)
+
+| # | 이슈 | 심각도 | 처리 상태 |
+|---|------|--------|-----------|
+| CV3-1 | export.py: annotations가 JSON export에 미포함 (사용자 annotation 유실) | **HIGH** | ❌ 신규 미해결 |
+| CV3-2 | annotations_store TTL/LRU 분리 → 세션 만료 후 메모리 증가 | **HIGH** | ❌ 신규 미해결 |
+| CV3-A1 | session.py 도메인 검증 미완 (CC R3-1과 동일) | WARNING | ❌ 미해결 |
+| CV3-A2 | pcap_parser.py `>I` dead code | 참고 | ⚠️ 인지 |
+| CV3-A3 | beacon_detector dead code | 참고 | ⚠️ 인지 |
+| CV3-A4 | annotations.py 가변 리스트 반환 | 참고 | ❌ CV3-1 수정 시 함께 처리 |
+
+**Codex CV R3 판정**: `NEED_FIX`
+
+### 2-3. Codex 검증 공격 (스펙 정합성 검증)
+
+| # | 이슈 | 심각도 | 처리 상태 |
+|---|------|--------|-----------|
+| V-1 | 제품명/버전 불일치 (WireBoard v5.0 vs 원본 todo PacketLens v5.0) | **HIGH** | ❌ 확인 필요 |
+| V-2 | T-04: pcap_parser가 dpkt/scapy 없이 struct 직접 파싱 (스펙 편차) | **HIGH** | ⚠️ 기능 정상, 스펙 재정의 필요 |
+| V-3 | T-08: Content-Length 없는 chunked 업로드 시 전체 read() 가능 | **HIGH** | ❌ 스트리밍 제한 테스트 추가 필요 |
+| V-4 | T-07: LoggingMiddleware requestId/durationMs/ISO8601 미구현 | **HIGH** | ❌ 미해결 |
+| V-5 | T-16/T-27: DDoS/Exfil/BruteForce 임계값·시간창·MITRE ID가 원본 스펙과 다름 | **HIGH** | ❌ 스펙 재검토 필요 |
+
+**Codex 검증 판정**: `FAIL` (critical 5건)
 
 ---
 
@@ -48,18 +83,21 @@
 - [x] POST /api/upload — Content-Length 사전 체크, 50MB 제한, 빈 파일 거부
 - [x] POST /api/analyze — UUID/IP 검증, 404/400 정상 반환
 - [x] PortScan + Beacon + CommFailure + DDoS + Exfiltration + BruteForce 탐지기 동작
-- [x] 응답 스키마 완결 (flows / sessions / attacks / plotly_xs / plotly_ys / analysis_duration_ms / target_ip)
+- [x] 응답 스키마 완결
+- [⚠️] AttackDetector 임계값 원본 스펙과 편차 (Codex 검증 V-5)
 
 ### 요건 B: 세션 관리 및 TTL
-- [x] SessionStore TTL = 900초 (15분) — integration.md §4 준수
+- [x] SessionStore TTL = 900초 (15분)
 - [x] TTL 0 인스턴스화로 테스트 격리 정상
 - [x] `test_session_store_*` 전 케이스 PASS
+- [⚠️] annotations_store TTL 분리 → 메모리 증가 가능 (CV3-2)
 
 ### 요건 C: 보안 기본값
-- [x] `test_no_0000_binding` PASS — 0.0.0.0 바인딩 없음
-- [x] `test_no_bare_except` PASS — bare except 없음
-- [x] `test_no_any_type_in_models` PASS — Any 타입 사용 없음
-- [x] `test_analyze_router_has_gc_collect` PASS — 메모리 해제 확인
+- [x] `test_no_0000_binding` PASS
+- [x] `test_no_bare_except` PASS
+- [x] `test_no_any_type_in_models` PASS
+- [x] `test_analyze_router_has_gc_collect` PASS
+- [⚠️] T-08 chunked upload 스트리밍 제한 미검증 (V-3)
 
 ---
 
@@ -67,12 +105,12 @@
 
 | 탐지기 | MITRE | 임계값 | 상태 |
 |--------|-------|--------|------|
-| PortScanDetector | T1046 | 포트 ≥ 20/100 | ✅ 기존 구현 |
-| BeaconDetector | T1071 | CV ≤ 3%/10%, n ≥ 5 | ✅ 기존 구현 |
-| CommFailureDetector | — | RST/Malformed | ✅ 기존 구현 |
-| DDoSDetector | T1498 | 1000/300 pps, 50/10 src | ✅ R2 신규 구현 |
-| ExfiltrationDetector | T1041 | conn>20/5, bytes>500/100 MB | ✅ R2 신규 구현 |
-| BruteForceDetector | T1110 | 시도≥50/10, 실패율≥90% | ✅ R2 신규 구현 |
+| PortScanDetector | T1046 | 포트 ≥ 20/100 | ✅ 구현 완료 |
+| BeaconDetector | T1071 | CV ≤ 3%/10%, n ≥ 5 | ✅ 구현 완료 |
+| CommFailureDetector | — | RST/Malformed | ✅ 구현 완료 |
+| DDoSDetector | T1498 | pps/unique_src (⚠️ 스펙 편차 V-5) | ⚠️ 재검토 필요 |
+| ExfiltrationDetector | T1041 | conn/bytes (⚠️ 스펙 편차 V-5) | ⚠️ 재검토 필요 |
+| BruteForceDetector | T1110 | 시도/실패율 (⚠️ 시간창 미구현 V-5) | ⚠️ 재검토 필요 |
 
 ---
 
@@ -88,33 +126,43 @@
 
 ---
 
-## 6. Warning 잔여 현황
+## 6. Warning/NEED_FIX 잔여 현황
 
-| Warning | 파일 | 처리 상태 |
-|---------|------|-----------|
-| SessionModel IP/port/timestamp 미검증 | `models/session.py` | ⚠️ Phase 2 후반 처리 예정 |
-| SessionStore 비동기 미보호 | `store/session_store.py` | ⚠️ Phase 4 asyncio 전환 시 처리 예정 |
-| PortScan/Beacon 신뢰도 집계 불일치 | 탐지기 파일 | ⚠️ Phase 2 정밀화 예정 |
+| # | 항목 | 파일 | 처리 상태 |
+|---|------|------|-----------|
+| W-1 | session.py 도메인 검증 미완 (IP/confidence/bytes/timestamp) | `models/session.py` | ❌ 미해결 |
+| W-2 | export.py annotations 미포함 → 사용자 데이터 유실 | `routers/export.py` | ❌ 신규 미해결 |
+| W-3 | annotations_store 메모리 증가 (TTL 분리) | `main.py`/`store/` | ❌ 신규 미해결 |
+| W-4 | LoggingMiddleware requestId/durationMs/ISO8601 미구현 | (없음) | ❌ 미구현 |
+| W-5 | AttackDetector 임계값 원본 스펙 편차 | 탐지기 파일 3종 | ❌ 스펙 재검토 필요 |
+| W-6 | chunked upload 스트리밍 제한 테스트 없음 | `routers/upload.py` | ❌ 테스트 추가 필요 |
 
 ---
 
-## 7. 수정 이력 (R2)
+## 7. 수정 이력 (R3 반영)
 
 | 파일 | 변경 내용 | 사유 |
 |------|-----------|------|
-| `backend/services/attack_detector/ddos_detector.py` | 신규 생성 | DDoS 탐지기 Phase 2 구현 |
-| `backend/services/attack_detector/exfiltration_detector.py` | 신규 생성 | Exfiltration 탐지기 Phase 2 구현 |
-| `backend/services/attack_detector/bruteforce_detector.py` | 신규 생성 | BruteForce 탐지기 Phase 2 구현 |
-| `backend/routers/analyze.py` | `_DETECTORS` 3개 추가 | 신규 탐지기 엔드포인트 연동 |
+| `backend/routers/upload.py` | 파서 예외 확장 (KeyError/TypeError/ValidationError) | CC R3 |
+| `backend/services/attack_detector/portscan_detector.py` | best-severity 비교 로직 도입 | CC R3 |
+| `backend/services/attack_detector/beacon_detector.py` | best-severity + group_size 이중 기준 | CC R3 |
+| `backend/routers/upload.py` | Content-Length 음수/비정상 400 처리 | CC R3 |
+| `backend/store/session_store.py` | threading.Lock + deepcopy 적용 | CC R3 |
+| `backend/routers/upload.py` | TcpdumpParser 등록 + 확장자 허용 | CC R3 |
+| `backend/models/session.py` | src_port/dst_port 0-65535 검증 | CC R3 |
 
 ---
 
-## 8. 다음 단계 (Phase 2 잔여)
+## 8. 다음 단계 (NEED_FIX 해결 목록)
 
-1. **PayloadExtractor** — HTTP/TLS/DNS 페이로드 추출 (test_tls_edge, test_dns_edge, test_http_status_edge)
-2. **ConversationAnalyzer** — IP 대화 집계 Top 20 (test_conversation_edge)
-3. **ReputationService** — 외부 IP 평판 조회 (로컬 캐시 우선)
-4. **W-2 대응**: SessionModel 도메인 검증자 추가
-5. **FE 구현**: React/Plotly 10개 패널, PDF 내보내기
+**우선순위 HIGH** (NOT_READY 사유):
+1. **CV3-1**: `export.py` — annotations 포함하여 JSON export (`annotations_store.get(upload_id)` 연동)
+2. **CV3-2**: annotations_store TTL 정리 훅 추가 (SessionStore evict 시 연동)
+3. **V-3**: chunked 업로드 50MB 스트리밍 제한 테스트 추가
+4. **V-4**: LoggingMiddleware 구현 (requestId, durationMs, ISO8601)
+5. **V-5**: DDoS/Exfil/BruteForce 임계값·시간창 원본 스펙으로 재정렬
 
-**전환 조건**: 본 QA_CHECKLIST R2 READY 판정 → `implementation_phase2_remaining` 착수.
+**우선순위 MEDIUM**:
+6. **W-1**: session.py IP/confidence/bytes/timestamp 도메인 검증 완성
+
+**전환 조건**: 위 HIGH 항목 5건 해결 + 테스트 재실행 252+ PASS → R4 QA 재판정.

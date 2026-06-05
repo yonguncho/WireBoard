@@ -191,3 +191,55 @@ def test_upload_corrupted_pcap_returns_error(api_client: TestClient) -> None:
         files={"file": ("bad.pcap", io.BytesIO(b"\xff\xff\xff\xff" * 6), "application/octet-stream")},
     )
     assert resp.status_code in {400, 422}
+
+
+# ─────────────────────────── V-3: 스트리밍 제한 (단위) ──────────────────
+
+
+def test_read_stream_limited_raises_413_on_overflow() -> None:
+    """Content-Length 없는 chunked 경로: _read_stream_limited가 50 MB 초과 시 413."""
+    import asyncio
+    from fastapi import HTTPException
+    from routers.upload import _read_stream_limited
+
+    total_size = MAX_UPLOAD_BYTES + 1
+
+    class _FakeFile:
+        """UploadFile.read() 를 흉내낸 가짜 파일."""
+        _pos = 0
+
+        async def read(self, n: int = -1) -> bytes:
+            if n < 0:
+                n = total_size
+            remaining = total_size - self._pos
+            if remaining <= 0:
+                return b""
+            to_read = min(n, remaining)
+            self._pos += to_read
+            return b"\x00" * to_read
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(_read_stream_limited(_FakeFile(), MAX_UPLOAD_BYTES))
+    assert exc_info.value.status_code == 413
+
+
+def test_read_stream_limited_allows_exactly_max() -> None:
+    """Content-Length 없는 chunked 경로: 정확히 50 MB 는 통과."""
+    import asyncio
+    from routers.upload import _read_stream_limited
+
+    class _FakeFile:
+        _pos = 0
+
+        async def read(self, n: int = -1) -> bytes:
+            if n < 0:
+                n = MAX_UPLOAD_BYTES
+            remaining = MAX_UPLOAD_BYTES - self._pos
+            if remaining <= 0:
+                return b""
+            to_read = min(n, remaining)
+            self._pos += to_read
+            return b"\x00" * to_read
+
+    result = asyncio.run(_read_stream_limited(_FakeFile(), MAX_UPLOAD_BYTES))
+    assert len(result) == MAX_UPLOAD_BYTES
