@@ -1,0 +1,44 @@
+"""TlsAnalyzer — Panel 7: TLS 핸드셰이크 분석."""
+from collections import defaultdict
+from dataclasses import dataclass, field
+
+from models.session import SessionModel
+
+
+@dataclass
+class TlsAnalysisResult:
+    sni_counts: dict = field(default_factory=dict)
+    ja4_fingerprints: list = field(default_factory=list)
+    tls_versions: dict = field(default_factory=dict)
+    cert_cns: list = field(default_factory=list)
+
+
+class TlsAnalyzer:
+    def analyze(self, sessions: list[SessionModel]) -> TlsAnalysisResult:
+        sni_counts: dict[str, int] = defaultdict(int)
+        ja4_set: set[str] = set()
+        version_counts: dict[str, int] = defaultdict(int)
+        cert_cns: list[str] = []
+
+        for s in sessions:
+            if not s.meta:
+                continue
+            sni = s.meta.get("tls_sni")
+            if sni:
+                sni_counts[sni] += 1
+            ja4 = s.meta.get("ja4")
+            if ja4:
+                ja4_set.add(ja4)
+            ver = s.meta.get("tls_version")
+            if ver:
+                version_counts[ver] += 1
+            cn = s.meta.get("cert_cn")
+            if cn and cn not in cert_cns:
+                cert_cns.append(cn)
+
+        return TlsAnalysisResult(
+            sni_counts=dict(sni_counts),
+            ja4_fingerprints=sorted(ja4_set),
+            tls_versions=dict(version_counts),
+            cert_cns=cert_cns,
+        )

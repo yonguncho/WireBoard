@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.benchmarks/
+*.tsbuildinfo
+dist/
+build/
+*.spec
+*.egg-info/
+.env
+.venv/
+venv/
+test_results.json

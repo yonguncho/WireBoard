@@ -1,0 +1,4 @@
+OUTCOMES_RETRY_1_DONE
+completed: 2026-06-05
+fix: observability — logging added to all backend files, pcap_parser parse_warnings connected, analyze/panels/export routers instrumented
+tests: 248/248 passed
