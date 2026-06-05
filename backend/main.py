@@ -26,6 +26,7 @@ from routers.annotations import router as annotations_router
 from routers.export import router as export_router
 from routers.filter import router as filter_router
 from routers.compare import router as compare_router
+from routers.drilldown import router as drilldown_router
 from store.session_store import SessionStore
 
 
@@ -86,11 +87,29 @@ app.include_router(annotations_router)
 app.include_router(export_router)
 app.include_router(filter_router)
 app.include_router(compare_router)
+app.include_router(drilldown_router)
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(_STATIC_DIR):
-    app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")
-    logger.info("정적 파일 서빙: %s", _STATIC_DIR)
+    _assets_dir = os.path.join(_STATIC_DIR, "assets")
+    if os.path.isdir(_assets_dir):
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    async def _favicon():
+        return FileResponse(os.path.join(_STATIC_DIR, "favicon.svg"))
+
+    @app.get("/icons.svg", include_in_schema=False)
+    async def _icons():
+        return FileResponse(os.path.join(_STATIC_DIR, "icons.svg"))
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def _spa_fallback(full_path: str):
+        # ADR-EXE-002: React Router SPA fallback — 알 수 없는 경로는 index.html 반환
+        index_path = os.path.join(_STATIC_DIR, "index.html")
+        return FileResponse(index_path)
+
+    logger.info("정적 파일 서빙 (SPA fallback): %s", _STATIC_DIR)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import { PlotlyChart } from './PlotlyChart'
 
-interface Props { data: { counts: Record<string, number>; groups: Record<string, number>; top_errors: { status: number; count: number }[] } }
+interface Props { data: { counts: Record<string, number>; groups: Record<string, number>; top_errors: { status_code: number; count: number }[] } }
 
 const STATUS_COLOR: Record<string, string> = {
   '2xx': '#48bb78', '3xx': '#4299e1', '4xx': '#f6ad55', '5xx': '#fc8181',
@@ -26,8 +26,8 @@ export function Panel4Http({ data }: Props) {
           <thead><tr><th>상태 코드</th><th>횟수</th></tr></thead>
           <tbody>
             {data.top_errors.slice(0, 5).map(e => (
-              <tr key={e.status} className={e.status >= 500 ? 'row-error' : ''}>
-                <td>{e.status}</td><td>{e.count}</td>
+              <tr key={e.status_code} className={e.status_code >= 500 ? 'row-error' : ''}>
+                <td>{e.status_code}</td><td>{e.count}</td>
               </tr>
             ))}
           </tbody>

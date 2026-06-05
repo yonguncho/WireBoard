@@ -127,10 +127,10 @@ export default function App() {
         <div className="panels-grid">
           <div className="panel"><h3>Panel 1 · IP 랭킹</h3><Panel1Ip data={panels.panel1_ip} /></div>
           <div className="panel"><h3>Panel 2 · 프로토콜 분포</h3><Panel2Protocol data={panels.panel2_protocol} /></div>
-          <div className="panel panel-wide"><h3>Panel 3 · 트래픽 타임라인</h3><Panel3Timeline data={panels.panel3_timeline} /></div>
+          <div className="panel panel-wide"><h3>Panel 3 · 트래픽 타임라인</h3><Panel3Timeline data={panels.panel3_timeline} uploadId={uploadId ?? undefined} /></div>
           <div className="panel"><h3>Panel 4 · HTTP 상태 코드</h3><Panel4Http data={panels.panel4_http} /></div>
           <div className="panel"><h3>Panel 5 · 이상 지표</h3><Panel5Anomalies data={panels.panel5_anomalies} /></div>
-          <div className="panel"><h3>Panel 6 · IP 순위표</h3><Panel6IpRanking data={panels.panel6_ip_ranking} /></div>
+          <div className="panel"><h3>Panel 6 · IP 순위표</h3><Panel6IpRanking data={panels.panel6_ip_ranking} uploadId={uploadId ?? undefined} /></div>
           <div className="panel"><h3>Panel 7 · TLS 세션</h3><Panel7Tls data={panels.panel7_tls} /></div>
           <div className="panel"><h3>Panel 8 · DNS 쿼리</h3><Panel8Dns data={panels.panel8_dns} /></div>
           <div className="panel panel-wide"><h3>Panel 9 · 대화 목록</h3><Panel9Conversations data={panels.panel9_conversations} /></div>

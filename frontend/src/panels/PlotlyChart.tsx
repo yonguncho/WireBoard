@@ -5,9 +5,10 @@ interface Props {
   data: Plotly.Data[]
   layout?: Partial<Plotly.Layout>
   height?: number
+  onRelayout?: (e: Record<string, unknown>) => void
 }
 
-export function PlotlyChart({ data, layout, height = 260 }: Props) {
+export function PlotlyChart({ data, layout, height = 260, onRelayout }: Props) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -22,8 +23,15 @@ export function PlotlyChart({ data, layout, height = 260 }: Props) {
       ...layout,
     }
     Plotly.newPlot(ref.current, data, l, config)
+
+    if (onRelayout) {
+      // Plotly attaches .on() to the DOM element after newPlot
+      const el = ref.current as HTMLDivElement & { on?: (event: string, fn: (e: Record<string, unknown>) => void) => void }
+      el.on?.('plotly_relayout', onRelayout)
+    }
+
     return () => { if (ref.current) Plotly.purge(ref.current) }
-  }, [data, layout, height])
+  }, [data, layout, height, onRelayout])
 
   return <div ref={ref} style={{ width: '100%' }} />
 }

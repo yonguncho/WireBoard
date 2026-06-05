@@ -88,38 +88,97 @@ def _build_pdf(lines: list[str]) -> bytes:
     return header + body + xref + trailer
 
 
+def _build_narrative(target_ip: str, sessions: list, attacks: list, annotations: list) -> list[str]:
+    """룰 기반 자동 내러티브 문장 생성 (LLM 없음)."""
+    lines = []
+
+    # 분석 기간
+    ts_list = [s.get("start_ts", 0) if isinstance(s, dict) else getattr(s, "start_ts", 0) for s in sessions]
+    if ts_list:
+        t_start = min(ts_list)
+        t_end = max(ts_list)
+        duration_s = max(int(t_end - t_start), 1)
+        start_str = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(t_start))
+        lines += [
+            f"Analysis Period: {start_str}  (duration: {duration_s}s)",
+            f"Target IP: {target_ip}",
+            f"Total Sessions: {len(sessions)}",
+        ]
+    else:
+        lines += [f"Target IP: {target_ip}", f"Total Sessions: {len(sessions)}"]
+
+    # 트래픽 요약 — 상위 통신 쌍
+    pair_bytes: dict[tuple, int] = {}
+    for s in sessions:
+        src = s.get("src_ip") if isinstance(s, dict) else getattr(s, "src_ip", "?")
+        dst = s.get("dst_ip") if isinstance(s, dict) else getattr(s, "dst_ip", "?")
+        byt = (s.get("bytes_sent", 0) + s.get("bytes_recv", 0)) if isinstance(s, dict) else (getattr(s, "bytes_sent", 0) + getattr(s, "bytes_recv", 0))
+        pair_bytes[(src, dst)] = pair_bytes.get((src, dst), 0) + byt
+    if pair_bytes:
+        top_pair = max(pair_bytes, key=lambda k: pair_bytes[k])
+        top_bytes = pair_bytes[top_pair]
+        lines.append(f"Top Flow: {top_pair[0]} -> {top_pair[1]}  ({top_bytes:,} bytes)")
+
+    # 공격 탐지 내러티브
+    lines += ["", "=== THREAT ASSESSMENT ==="]
+    if not attacks:
+        lines.append("No attack patterns detected.")
+    else:
+        for atk in attacks:
+            atype = atk.get("attack_type", atk.get("type", "Unknown"))
+            sev = atk.get("severity", "?").upper()
+            mitre = atk.get("mitre_id", "")
+            desc = atk.get("description", "")
+            lines.append(f"[{sev}] {atype} ({mitre})")
+            if desc:
+                lines.append(f"  Detail: {desc[:120]}")
+
+    # 마커/코멘트 (있으면)
+    if annotations:
+        lines += ["", "=== TIMELINE EVENTS ==="]
+        for ann in annotations:
+            t0 = ann.get("start_ts", 0)
+            t1 = ann.get("end_ts", 0)
+            comment = ann.get("comment", "")
+            t0_str = time.strftime("%H:%M:%S", time.gmtime(t0))
+            t1_str = time.strftime("%H:%M:%S", time.gmtime(t1))
+            lines.append(f"  [{t0_str} - {t1_str}] {comment}")
+
+    return lines
+
+
 class PdfExporter:
     def generate(self, analysis_result: dict, output_path: Path | None = None) -> Path:
         target_ip = analysis_result.get("target_ip", "unknown")
         sessions = analysis_result.get("sessions", [])
         attacks = analysis_result.get("attacks", [])
-        summary = analysis_result.get("summary", {})
+        annotations = analysis_result.get("annotations", [])
 
+        # Executive Summary — 자동 내러티브
         lines = [
-            "WireBoard Analysis Report",
+            "WireBoard v5.0 — Analysis Report",
             f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}",
+            "=" * 60,
             "",
-            f"Target IP: {target_ip}",
-            f"Total Sessions: {summary.get('total_sessions', len(sessions))}",
-            f"Total Bytes: {summary.get('total_bytes', 0)}",
-            "",
-            "--- Attack Detection ---",
+            "=== EXECUTIVE SUMMARY ===",
         ]
-        if attacks:
-            for atk in attacks:
-                lines.append(
-                    f"  [{atk.get('severity', '?').upper()}] "
-                    f"{atk.get('type', atk.get('attack_type', '?'))} "
-                    f"({atk.get('mitre_id', '')})"
-                )
-        else:
-            lines.append("  No attacks detected.")
+        lines += _build_narrative(target_ip, sessions, attacks, annotations)
 
-        lines += [
-            "",
-            "--- Session Summary ---",
-            f"  Sessions analysed: {len(sessions)}",
-        ]
+        # 기술 상세 — 세션 TOP 10
+        lines += ["", "=== TOP 10 SESSIONS (by bytes) ==="]
+        sorted_sessions = sorted(
+            sessions,
+            key=lambda s: (s.get("bytes_sent", 0) + s.get("bytes_recv", 0)) if isinstance(s, dict)
+                          else (getattr(s, "bytes_sent", 0) + getattr(s, "bytes_recv", 0)),
+            reverse=True,
+        )[:10]
+        for s in sorted_sessions:
+            src = s.get("src_ip") if isinstance(s, dict) else getattr(s, "src_ip", "?")
+            dst = s.get("dst_ip") if isinstance(s, dict) else getattr(s, "dst_ip", "?")
+            dport = s.get("dst_port") if isinstance(s, dict) else getattr(s, "dst_port", 0)
+            proto = s.get("protocol") if isinstance(s, dict) else getattr(s, "protocol", "?")
+            byt = (s.get("bytes_sent", 0) + s.get("bytes_recv", 0)) if isinstance(s, dict) else (getattr(s, "bytes_sent", 0) + getattr(s, "bytes_recv", 0))
+            lines.append(f"  {src} -> {dst}:{dport} [{proto}]  {byt:,} bytes")
 
         pdf_bytes = _build_pdf(lines)
 

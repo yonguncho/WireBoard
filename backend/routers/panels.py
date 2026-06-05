@@ -58,7 +58,7 @@ async def get_panels(upload_id: str, request: Request):
     panel5_anomalies = {
         "rst_count": rst_count,
         "malformed_count": rst_result.malformed_count,
-        "retransmit_count": 0,
+        "retransmit_count": rst_result.retransmit_count,
     }
 
     # panel6_ip_ranking: IpRankEntry[] — bytes per IP (src+dst combined)
