@@ -1,0 +1,13 @@
+{
+  "product": "WireBoard",
+  "version": "v5.1.1",
+  "deploy_method": "pyinstaller",
+  "deployed_at": "2026-06-05T12:36:23+09:00",
+  "url": "https://github.com/yonguncho/products/tree/main/WireBoard",
+  "release_url": "https://github.com/yonguncho/products/releases/tag/v5.1.1",
+  "exe_size_mb": 13.57,
+  "exe_sha256": "7f5e2e00afe329753933d1ab50de6aeb7d0b27e45bc7d3e0958dfe971246420a",
+  "edr_status": "PASS",
+  "tests_passed": 254,
+  "tests_total": 254
+}
