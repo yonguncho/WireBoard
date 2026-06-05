@@ -69,7 +69,7 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
             raise
 
 
-app = FastAPI(title="PacketLens", version="5.0.0")
+app = FastAPI(title="WireBoard", version="5.1.0")
 app.add_middleware(StructuredLoggingMiddleware)
 
 _annotations_store: defaultdict = defaultdict(list)
@@ -78,7 +78,7 @@ app.state.session_store = SessionStore(
     ttl_seconds=900.0,  # 15분 — integration.md §4 TTL_SECONDS=900
     on_evict=lambda key: _annotations_store.pop(key, None),
 )
-logger.info("PacketLens 서버 초기화 완료 (session TTL=900s)")
+logger.info("WireBoard 서버 초기화 완료 (session TTL=900s)")
 
 app.include_router(upload_router)
 app.include_router(analyze_router)

@@ -19,31 +19,24 @@ async def drilldown(upload_id: str, ip: str = Query(..., description="드릴다�
     except KeyError:
         raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
 
-    sessions = capture.sessions
     matched = []
-    for s in sessions:
-        src = s.get("src_ip") if isinstance(s, dict) else getattr(s, "src_ip", None)
-        dst = s.get("dst_ip") if isinstance(s, dict) else getattr(s, "dst_ip", None)
-        if src != ip and dst != ip:
+    for s in capture.sessions:
+        if s.src_ip != ip and s.dst_ip != ip:
             continue
-
-        def _get(obj, key, default=None):
-            return obj.get(key, default) if isinstance(obj, dict) else getattr(obj, key, default)
-
         matched.append({
-            "session_id": _get(s, "session_id", ""),
-            "src_ip": src,
-            "dst_ip": dst,
-            "src_port": _get(s, "src_port", 0),
-            "dst_port": _get(s, "dst_port", 0),
-            "protocol": _get(s, "protocol", "?"),
-            "bytes_sent": _get(s, "bytes_sent", 0),
-            "bytes_recv": _get(s, "bytes_recv", 0),
-            "packet_count": _get(s, "packet_count", 0),
-            "start_ts": _get(s, "start_ts", 0),
-            "end_ts": _get(s, "end_ts", 0),
-            "duration_s": round(_get(s, "end_ts", 0) - _get(s, "start_ts", 0), 3),
-            "rst": _get(s, "rst", False),
+            "session_id": s.session_id,
+            "src_ip": s.src_ip,
+            "dst_ip": s.dst_ip,
+            "src_port": s.src_port,
+            "dst_port": s.dst_port,
+            "protocol": s.protocol,
+            "bytes_sent": s.bytes_sent,
+            "bytes_recv": s.bytes_recv,
+            "packet_count": s.packet_count,
+            "start_ts": s.start_ts,
+            "end_ts": s.end_ts,
+            "duration_s": round(s.end_ts - s.start_ts, 3),
+            "rst": s.rst,
         })
 
     matched.sort(key=lambda x: x["bytes_sent"] + x["bytes_recv"], reverse=True)
