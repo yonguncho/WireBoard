@@ -32,7 +32,7 @@ class DDoSDetector:
             unique_src = len({s.src_ip for s in grp})
             ts_min = min(s.start_ts for s in grp)
             ts_max = max(s.end_ts for s in grp)
-            window_s = max(1.0, ts_max - ts_min)
+            window_s = ts_max - ts_min if ts_max > ts_min else 0.001
             rate = total_pkts / window_s
 
             if rate >= _RATE_HIGH or unique_src >= _SRC_HIGH:

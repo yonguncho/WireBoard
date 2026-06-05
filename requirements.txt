@@ -2,3 +2,5 @@ fastapi==0.115.0
 uvicorn==0.30.6
 python-multipart==0.0.9
 httpx==0.28.1
+dpkt>=1.9.8
+scapy>=2.5.0

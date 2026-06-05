@@ -14,6 +14,7 @@ class DnsAnalysisResult:
     nxdomain_count: int = 0
     nxdomain_domains: list = field(default_factory=list)
     nxdomain_sources: list = field(default_factory=list)
+    entries: list = field(default_factory=list)
 
 
 class DnsAnalyzer:
@@ -24,6 +25,8 @@ class DnsAnalyzer:
         nxdomain_domains: set[str] = set()
         src_total: dict[str, int] = defaultdict(int)
         src_nxdomain: dict[str, int] = defaultdict(int)
+        entries: list[dict] = []
+        seen_entries: set[tuple] = set()
 
         for s in sessions:
             if not s.meta:
@@ -32,7 +35,7 @@ class DnsAnalyzer:
             if not domain:
                 continue
             query_counts[domain] += 1
-            qtype = s.meta.get("dns_type", "")
+            qtype = s.meta.get("dns_type", "") or "A"
             if qtype:
                 query_types[qtype] += 1
             rcode = s.meta.get("dns_rcode", "")
@@ -41,6 +44,12 @@ class DnsAnalyzer:
                 nxdomain_count += 1
                 nxdomain_domains.add(domain)
                 src_nxdomain[s.src_ip] += 1
+            nxdomain = rcode == "NXDOMAIN"
+            response = s.meta.get("dns_response") or (rcode if rcode and rcode not in ("NOERROR", "") else None)
+            key = (domain, qtype, rcode)
+            if key not in seen_entries:
+                seen_entries.add(key)
+                entries.append({"domain": domain, "type": qtype, "response": response, "nxdomain": nxdomain})
 
         nxdomain_sources = [
             ip for ip, cnt in src_nxdomain.items()
@@ -53,4 +62,5 @@ class DnsAnalyzer:
             nxdomain_count=nxdomain_count,
             nxdomain_domains=sorted(nxdomain_domains),
             nxdomain_sources=nxdomain_sources,
+            entries=entries,
         )

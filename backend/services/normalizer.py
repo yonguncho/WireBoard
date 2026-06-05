@@ -32,7 +32,7 @@ class SessionNormalizer:
             payload_length = sum(s.payload_length for s in group)
             rst = any(s.rst for s in group)
             confidence = "low" if any(s.confidence == "low" for s in group) else "normal"
-            meta = group[0].meta
+            meta = {k: v for d in group for k, v in (d.meta or {}).items()} or None
 
             result.append(SessionModel(
                 session_id=str(uuid.uuid4()),

@@ -1,9 +1,9 @@
 """ExfiltrationDetector — T1041 데이터 유출 탐지."""
-import ipaddress
 from collections import defaultdict
 
 from models.session import SessionModel
 from services.attack_detector.base import AttackResult
+from utils.net_utils import is_private as _is_private
 
 _MB = 1_048_576
 _BYTES_HIGH = 500 * _MB
@@ -11,21 +11,7 @@ _BYTES_MEDIUM = 100 * _MB
 _CONN_HIGH = 20
 _CONN_MEDIUM = 5
 
-_RFC1918 = [
-    ipaddress.ip_network("10.0.0.1/8", strict=False),
-    ipaddress.ip_network("172.16.0.1/12", strict=False),
-    ipaddress.ip_network("192.168.0.1/16", strict=False),
-]
-
 _SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3}
-
-
-def _is_private(ip: str) -> bool:
-    try:
-        addr = ipaddress.ip_address(ip)
-        return any(addr in net for net in _RFC1918)
-    except ValueError:
-        return False
 
 
 def _rank(s: str) -> int:

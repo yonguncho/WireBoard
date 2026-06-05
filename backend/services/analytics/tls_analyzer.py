@@ -11,6 +11,7 @@ class TlsAnalysisResult:
     ja4_fingerprints: list = field(default_factory=list)
     tls_versions: dict = field(default_factory=dict)
     cert_cns: list = field(default_factory=list)
+    entries: list = field(default_factory=list)
 
 
 class TlsAnalyzer:
@@ -19,6 +20,8 @@ class TlsAnalyzer:
         ja4_set: set[str] = set()
         version_counts: dict[str, int] = defaultdict(int)
         cert_cns: list[str] = []
+        entries: list[dict] = []
+        seen_entries: set[tuple] = set()
 
         for s in sessions:
             if not s.meta:
@@ -35,10 +38,16 @@ class TlsAnalyzer:
             cn = s.meta.get("cert_cn")
             if cn and cn not in cert_cns:
                 cert_cns.append(cn)
+            if sni or ver:
+                key = (sni or "", ver or "", s.dst_ip)
+                if key not in seen_entries:
+                    seen_entries.add(key)
+                    entries.append({"sni": sni or "", "version": ver or "", "dst_ip": s.dst_ip})
 
         return TlsAnalysisResult(
             sni_counts=dict(sni_counts),
             ja4_fingerprints=sorted(ja4_set),
             tls_versions=dict(version_counts),
             cert_cns=cert_cns,
+            entries=entries,
         )

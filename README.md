@@ -19,18 +19,31 @@ Network packet capture analysis tool — FastAPI backend with multi-format parse
 - Session-based storage with 15-minute TTL
 - 50 MB file size limit with pre-check
 
-## Quick Start (Standalone EXE)
+## Installation
+
+**Standalone EXE (no Python required):**
+
+Download `WireBoard.exe` from the [Releases](https://github.com/yonguncho/products/releases) page and run it directly.
+
+**From source:**
+
+```bash
+pip install -r requirements.txt
+```
+
+## Usage
+
+**Standalone EXE:**
 
 ```
 WireBoard.exe
 ```
 
-Opens the API server at `http://127.0.0.1:8000`.
+Opens the API server at `http://127.0.0.1:8000`. Upload a capture file via `POST /api/upload`, then analyze with `POST /api/analyze`.
 
-## Quick Start (Python)
+**From source:**
 
 ```bash
-pip install -r requirements.txt
 cd backend
 uvicorn main:app --host 127.0.0.1 --port 8000
 ```

@@ -1,10 +1,19 @@
 """PdfExporter — 분석 결과 PDF 리포트 생성 (외부 라이브러리 없음)."""
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
+
+_UNICODE_ASCII_MAP = {
+    "→": "->", "←": "<-", "↑": "^", "↓": "v", "⇒": "=>", "⇐": "<=",
+    "…": "...", "–": "-", "—": "--", "•": "*", "·": ".", "×": "x",
+}
 
 
 def _pdf_escape(text: str) -> str:
+    for k, v in _UNICODE_ASCII_MAP.items():
+        text = text.replace(k, v)
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 

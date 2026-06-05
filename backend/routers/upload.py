@@ -22,6 +22,22 @@ router = APIRouter()
 
 _ALLOWED_EXTENSIONS = {".pcap", ".har", ".log", ".txt", ".tcpdump"}
 _PARSERS = [PcapParser(), HarParser(), FortigateParser(), TcpdumpParser()]
+_CHUNK_SIZE = 65_536  # 64 KB read chunks
+
+
+async def _read_stream_limited(file: UploadFile, max_bytes: int) -> bytes:
+    """Read file in chunks; raise 413 without buffering the full payload on overflow."""
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_CHUNK_SIZE)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=413, detail="파일 크기가 50 MB 제한 초과")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 @router.post("/api/upload")
@@ -33,7 +49,7 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
         raise HTTPException(status_code=415, detail=f"허용되지 않는 파일 확장자: {ext!r}")
 
     content_length = request.headers.get("content-length")
-    if content_length:
+    if content_length is not None:
         try:
             cl_int = int(content_length)
             if cl_int < 0:
@@ -43,10 +59,7 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid Content-Length header")
 
-    raw = await file.read()
-
-    if len(raw) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="파일 크기가 50 MB 제한 초과")
+    raw = await _read_stream_limited(file, MAX_UPLOAD_BYTES)
 
     if len(raw) == 0:
         raise HTTPException(status_code=400, detail="빈 파일은 허용되지 않습니다")

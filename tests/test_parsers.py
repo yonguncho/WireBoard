@@ -287,3 +287,65 @@ class TestSessionModelValidation:
     def test_strict_mode_enabled(self) -> None:
         from models.session import SessionModel
         assert SessionModel.model_config.get("strict") is True
+
+    def test_invalid_ip_raises_validation_error(self) -> None:
+        """유효하지 않은 IP → ValidationError."""
+        from pydantic import ValidationError
+        from models.session import SessionModel
+        with pytest.raises(ValidationError):
+            SessionModel(
+                session_id=str(uuid.uuid4()),
+                src_ip="999.999.999.999",
+                dst_ip="10.0.0.1",
+                src_port=80, dst_port=8080,
+                protocol="TCP",
+                start_ts=1_000_000.0, end_ts=1_000_001.0,
+                bytes_sent=100, bytes_recv=200,
+                packet_count=5, payload_length=0,
+            )
+
+    def test_invalid_confidence_raises_validation_error(self) -> None:
+        """허용되지 않는 confidence 값 → ValidationError."""
+        from pydantic import ValidationError
+        from models.session import SessionModel
+        with pytest.raises(ValidationError):
+            SessionModel(
+                session_id=str(uuid.uuid4()),
+                src_ip="10.0.0.1", dst_ip="10.0.0.2",
+                src_port=80, dst_port=8080,
+                protocol="TCP",
+                start_ts=1_000_000.0, end_ts=1_000_001.0,
+                bytes_sent=100, bytes_recv=200,
+                packet_count=5, payload_length=0,
+                confidence="high",
+            )
+
+    def test_negative_bytes_raises_validation_error(self) -> None:
+        """bytes_sent 음수 → ValidationError."""
+        from pydantic import ValidationError
+        from models.session import SessionModel
+        with pytest.raises(ValidationError):
+            SessionModel(
+                session_id=str(uuid.uuid4()),
+                src_ip="10.0.0.1", dst_ip="10.0.0.2",
+                src_port=80, dst_port=8080,
+                protocol="TCP",
+                start_ts=1_000_000.0, end_ts=1_000_001.0,
+                bytes_sent=-1, bytes_recv=200,
+                packet_count=5, payload_length=0,
+            )
+
+    def test_end_ts_before_start_ts_raises(self) -> None:
+        """end_ts < start_ts → ValidationError."""
+        from pydantic import ValidationError
+        from models.session import SessionModel
+        with pytest.raises(ValidationError):
+            SessionModel(
+                session_id=str(uuid.uuid4()),
+                src_ip="10.0.0.1", dst_ip="10.0.0.2",
+                src_port=80, dst_port=8080,
+                protocol="TCP",
+                start_ts=1_000_002.0, end_ts=1_000_001.0,
+                bytes_sent=100, bytes_recv=200,
+                packet_count=5, payload_length=0,
+            )

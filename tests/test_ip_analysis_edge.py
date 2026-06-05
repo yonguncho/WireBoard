@@ -5,19 +5,19 @@
 인터페이스 가정:
   IpAnalyzer().analyze(sessions: list[SessionModel]) -> IpAnalysisResult
   IpAnalysisResult:
-    top_src: list[dict]  # [{"ip": str, "count": int, "is_private": bool}, ...]
+    top_src: list[dict]  # [{"ip": str, "bytes": int, "is_private": bool}, ...]
     top_dst: list[dict]
-    # 각 리스트 최대 20개, count 내림차순 정렬
+    # 각 리스트 최대 20개, bytes 내림차순 정렬
 
 검증 항목:
 - Top 20 제한: 21개 IP → 상위 20개만
 - 정확히 20개 IP → 전부 포함
 - RFC1918 분류: 10.x, 172.16-31.x, 192.168.x.x → is_private=True
 - 공인 IP (203.0.113.x) → is_private=False
-- count 내림차순 정렬 보장
+- bytes 내림차순 정렬 보장
 - 동점 tie-breaking: 안정적 정렬 (순서 보존)
 - 빈 세션 → top_src=[], top_dst=[]
-- 동일 src_ip 세션 여러 개 → 합산 카운트
+- 동일 src_ip 세션 여러 개 → bytes 합산
 - src/dst 별 독립 집계
 """
 import uuid
@@ -77,18 +77,18 @@ class TestIpAnalyzerTopN:
         result = analyzer.analyze(sessions)
         assert len(result.top_src) == 20
 
-    def test_sorted_by_count_descending(self):
-        """count 내림차순 정렬."""
+    def test_sorted_by_bytes_descending(self):
+        """bytes 내림차순 정렬."""
         analyzer = _load_analyzer()
-        # 10.0.0.1: 5회, 10.0.0.2: 3회, 10.0.0.3: 1회
+        # 10.0.0.1: 5회(2560B), 10.0.0.2: 3회(1536B), 10.0.0.3: 1회(512B)
         sessions = (
             _make_session("10.0.0.1", "192.168.1.1", count=5)
             + _make_session("10.0.0.2", "192.168.1.1", count=3)
             + _make_session("10.0.0.3", "192.168.1.1", count=1)
         )
         result = analyzer.analyze(sessions)
-        counts = [item["count"] for item in result.top_src]
-        assert counts == sorted(counts, reverse=True)
+        vals = [item["bytes"] for item in result.top_src]
+        assert vals == sorted(vals, reverse=True)
 
     def test_top20_excludes_rank21(self):
         """21번째 IP(최소 count)는 top_src 에 포함되지 않는다."""
@@ -150,12 +150,12 @@ class TestIpAnalyzerEdge:
         assert result.top_dst == []
 
     def test_same_src_ip_aggregated(self):
-        """같은 src_ip 5회 → top_src 에 count=5 로 집계."""
+        """같은 src_ip 5회 → top_src 에 bytes=2560(5×512) 으로 집계."""
         analyzer = _load_analyzer()
         sessions = _make_session("10.0.0.1", "192.168.1.1", count=5)
         result = analyzer.analyze(sessions)
-        counts = {item["ip"]: item["count"] for item in result.top_src}
-        assert counts.get("10.0.0.1") == 5
+        byte_map = {item["ip"]: item["bytes"] for item in result.top_src}
+        assert byte_map.get("10.0.0.1") == 5 * 512
 
     def test_src_dst_independent(self):
         """같은 IP가 src, dst 양쪽에 등장 — 각각 독립 집계."""
@@ -165,15 +165,15 @@ class TestIpAnalyzerEdge:
             + _make_session("10.0.0.2", "10.0.0.1", count=2)
         )
         result = analyzer.analyze(sessions)
-        src_counts = {item["ip"]: item["count"] for item in result.top_src}
-        dst_counts = {item["ip"]: item["count"] for item in result.top_dst}
-        assert src_counts.get("10.0.0.1") == 3
-        assert dst_counts.get("10.0.0.2") == 3
+        src_bytes = {item["ip"]: item["bytes"] for item in result.top_src}
+        dst_bytes = {item["ip"]: item["bytes"] for item in result.top_dst}
+        assert src_bytes.get("10.0.0.1") == 3 * 512
+        assert dst_bytes.get("10.0.0.2") == 3 * 512
 
     def test_single_session_in_top1(self):
-        """세션 1개 → top_src[0].count == 1."""
+        """세션 1개 → top_src[0].bytes == 512(bytes_sent)."""
         analyzer = _load_analyzer()
         sessions = _make_session("10.0.0.1", "10.0.0.2")
         result = analyzer.analyze(sessions)
         assert len(result.top_src) == 1
-        assert result.top_src[0]["count"] == 1
+        assert result.top_src[0]["bytes"] == 512

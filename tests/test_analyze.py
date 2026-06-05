@@ -81,9 +81,10 @@ class TestAnalyzeErrors:
         resp = api_client.post("/api/analyze", json={"target_ip": "192.168.1.1"})
         assert resp.status_code == 422
 
-    def test_missing_target_ip_returns_422(self, api_client: TestClient) -> None:
+    def test_missing_target_ip_returns_404(self, api_client: TestClient) -> None:
+        # target_ip는 optional (자동 감지). 존재하지 않는 upload_id → 404
         resp = api_client.post("/api/analyze", json={"upload_id": str(uuid.uuid4())})
-        assert resp.status_code == 422
+        assert resp.status_code == 404
 
     def test_invalid_ip_format_returns_400(self, api_client: TestClient, pcap_bytes: bytes) -> None:
         """IP 형식 검증 실패 → 400."""
@@ -351,7 +352,8 @@ class TestSessionStore:
         uid = str(uuid.uuid4())
         capture = ParsedCapture(sessions=[], source_type="pcap")
         store.put(uid, capture)
-        assert store.get(uid) is capture
+        result = store.get(uid)
+        assert result == capture  # get()은 deepcopy를 반환하므로 == 사용
 
     def test_lru_11th_evicts_oldest(self) -> None:
         """11 건 입력 → 1번째 자동 퇴출 (LRU 최대 10, ADR todo.md T-03)."""

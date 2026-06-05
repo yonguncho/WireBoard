@@ -5,7 +5,7 @@
 인터페이스 가정:
   FlowTimeline(window_seconds=60).compute(sessions) -> TimelineResult
   TimelineResult:
-    buckets: list[dict]  # [{"ts": float, "count": int}, ...]
+    buckets: list[dict]  # [{"ts": float, "bytes": int}, ...]
     # ts = 버킷 시작 타임스탬프, window_seconds 간격
     # 오름차순 정렬
 
@@ -17,7 +17,7 @@
 - 빈 세션 → buckets=[]
 - window_seconds 파라미터 변경 반영
 - 버킷 경계(ts % window == 0) 정확성
-- count 합산 = len(sessions)
+- bytes 합산 = len(sessions) * (bytes_sent + bytes_recv)
 """
 import uuid
 import pytest
@@ -68,16 +68,16 @@ class TestFlowTimelineBuckets:
         sessions = [_make_session(1_748_000_000.0)]
         result = tl.compute(sessions)
         assert len(result.buckets) == 1
-        assert result.buckets[0]["count"] == 1
+        assert result.buckets[0]["bytes"] == 1024  # bytes_sent(512) + bytes_recv(512)
 
     def test_sessions_in_same_window_one_bucket(self):
-        """60 초 윈도우 내 5개 세션 → 1개 버킷 count=5."""
+        """60 초 윈도우 내 5개 세션 → 1개 버킷 bytes=5120."""
         tl = _load_timeline(window_seconds=60)
         base = 1_748_000_000.0
         sessions = [_make_session(base + i) for i in range(5)]
         result = tl.compute(sessions)
         assert len(result.buckets) == 1
-        assert result.buckets[0]["count"] == 5
+        assert result.buckets[0]["bytes"] == 5 * 1024
 
     def test_two_windows_two_buckets(self):
         """60 초 이상 간격 → 2개 버킷."""
@@ -101,13 +101,13 @@ class TestFlowTimelineBuckets:
         tss = [b["ts"] for b in result.buckets]
         assert tss == sorted(tss)
 
-    def test_total_count_equals_session_count(self):
-        """모든 버킷 count 합 == 입력 세션 수."""
+    def test_total_bytes_equals_session_count_times_per_session(self):
+        """모든 버킷 bytes 합 == 입력 세션 수 × 세션당 bytes."""
         tl = _load_timeline(window_seconds=60)
         sessions = [_make_session(1_748_000_000.0 + i * 10) for i in range(20)]
         result = tl.compute(sessions)
-        total = sum(b["count"] for b in result.buckets)
-        assert total == 20
+        total = sum(b["bytes"] for b in result.buckets)
+        assert total == 20 * 1024
 
     def test_window_parameter_respected(self):
         """window_seconds=30 → 30 초 경계에서 분리."""
@@ -140,5 +140,5 @@ class TestFlowTimelineEdge:
         ]
         result = tl.compute(sessions)
         assert len(result.buckets) == 2
-        total = sum(b["count"] for b in result.buckets)
-        assert total == 2
+        total = sum(b["bytes"] for b in result.buckets)
+        assert total == 2 * 1024
