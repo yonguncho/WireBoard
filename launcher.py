@@ -1,11 +1,12 @@
 """WireBoard v5.1 — PyInstaller entry point."""
+import logging
 import os
 import socket
 import sys
 import traceback
 from pathlib import Path
 
-_VERSION = "5.1.1"
+_VERSION = "5.1.4"
 _DEFAULT_PORT = 8765
 
 _BANNER = """
@@ -62,6 +63,13 @@ def main():
         print(f"\n[오류] 포트 할당 실패: {e}")
         _pause()
         sys.exit(1)
+
+    # 브라우저 HTTP/2 preconnect 프로브 경고 억제 (기능 영향 없는 노이즈)
+    class _SuppressInvalidHTTP(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            return "Invalid HTTP request received" not in record.getMessage()
+
+    logging.getLogger("uvicorn.error").addFilter(_SuppressInvalidHTTP())
 
     print(_BANNER)
     print(f"  >> 접속 주소 : http://127.0.0.1:{port}")
