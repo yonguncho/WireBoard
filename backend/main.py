@@ -76,7 +76,7 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
             raise
 
 
-app = FastAPI(title="WireBoard", version="5.4.1")
+app = FastAPI(title="WireBoard", version="5.4.2")
 app.add_middleware(StructuredLoggingMiddleware)
 
 _annotations_store: defaultdict = defaultdict(list)

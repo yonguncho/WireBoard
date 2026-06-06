@@ -6,7 +6,7 @@ import sys
 import traceback
 from pathlib import Path
 
-_VERSION = "5.4.1"
+_VERSION = "5.4.2"
 _DEFAULT_PORT = 8765
 
 _BANNER = """
