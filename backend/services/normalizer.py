@@ -6,12 +6,19 @@ from models.session import SessionModel
 
 
 class SessionNormalizer:
-    def normalize(self, sessions: list[SessionModel]) -> list[SessionModel]:
+    def normalize(
+        self,
+        sessions: list[SessionModel],
+        packet_map: dict[str, list] | None = None,
+    ) -> tuple[list[SessionModel], dict[str, list]]:
         """같은 4-tuple을 하나의 세션으로 합친다.
 
         FortiGate verbose3 출력처럼 src_port=0/dst_port=0인 세션은
         병합하면 비컨 타이밍이 파괴되므로 session_id로 고유 키를 부여해
         개별 세션을 그대로 보존한다.
+
+        packet_map을 함께 전달하면 새 session_id로 리매핑된 map을 반환한다.
+        이를 생략하면 빈 dict를 반환한다.
         """
         groups: dict[tuple, list[SessionModel]] = defaultdict(list)
         for s in sessions:
@@ -22,6 +29,8 @@ class SessionNormalizer:
             groups[key].append(s)
 
         result: list[SessionModel] = []
+        new_pkt_map: dict[str, list] = {}
+
         for key, group in groups.items():
             src_ip, dst_ip, src_port, dst_port, proto, _ = key
             start_ts = min(s.start_ts for s in group)
@@ -34,8 +43,9 @@ class SessionNormalizer:
             confidence = "low" if any(s.confidence == "low" for s in group) else "normal"
             meta = {k: v for d in group for k, v in (d.meta or {}).items()} or None
 
+            new_sid = str(uuid.uuid4())
             result.append(SessionModel(
-                session_id=str(uuid.uuid4()),
+                session_id=new_sid,
                 src_ip=src_ip,
                 dst_ip=dst_ip,
                 src_port=src_port,
@@ -52,4 +62,13 @@ class SessionNormalizer:
                 meta=meta,
             ))
 
-        return result
+            # 구 session_id들의 패킷을 새 session_id로 모두 합산
+            if packet_map is not None:
+                merged: list = []
+                for old_s in group:
+                    merged.extend(packet_map.get(old_s.session_id, []))
+                if merged:
+                    merged.sort(key=lambda p: p.ts)
+                    new_pkt_map[new_sid] = merged
+
+        return result, new_pkt_map

@@ -94,7 +94,7 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
                  if parse_warnings else "지원하지 않는 파일 형식 또는 손상된 파일"
         raise HTTPException(status_code=400, detail=detail)
 
-    sessions = SessionNormalizer().normalize(sessions)
+    sessions, pkt_map = SessionNormalizer().normalize(sessions, pkt_map)
 
     upload_id = str(uuid.uuid4())
     capture = ParsedCapture(

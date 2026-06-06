@@ -209,8 +209,8 @@ class TestSessionNormalizer:
     def test_normalize_assigns_uuid_session_ids(self, pcap_bytes: bytes) -> None:
         from services.parser.pcap_parser import PcapParser
         from services.normalizer import SessionNormalizer
-        raw, _ = PcapParser().parse(pcap_bytes)
-        sessions = SessionNormalizer().normalize(raw)
+        raw, pkt_map = PcapParser().parse(pcap_bytes)
+        sessions, _ = SessionNormalizer().normalize(raw, pkt_map)
         for s in sessions:
             assert UUID_RE.match(s.session_id)
 
@@ -218,8 +218,8 @@ class TestSessionNormalizer:
         """같은 4-tuple 패킷들이 하나의 세션으로 합쳐진다."""
         from services.parser.pcap_parser import PcapParser
         from services.normalizer import SessionNormalizer
-        raw, _ = PcapParser().parse(pcap_bytes)
-        sessions = SessionNormalizer().normalize(raw)
+        raw, pkt_map = PcapParser().parse(pcap_bytes)
+        sessions, _ = SessionNormalizer().normalize(raw, pkt_map)
         # conftest pcap 은 src=192.168.1.1:80 → dst=192.168.1.2:8080 단일 플로우
         assert len(sessions) >= 1
 
@@ -232,8 +232,8 @@ class TestFlowExtractor:
         from services.parser.pcap_parser import PcapParser
         from services.normalizer import SessionNormalizer
         from services.flow_extractor import FlowExtractor
-        raw, _ = PcapParser().parse(pcap_bytes)
-        sessions = SessionNormalizer().normalize(raw)
+        raw, pkt_map = PcapParser().parse(pcap_bytes)
+        sessions, _ = SessionNormalizer().normalize(raw, pkt_map)
         extractor = FlowExtractor()
         flows = extractor.extract(sessions)
         xs, ys = extractor.build_plotly_data(flows)
