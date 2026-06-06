@@ -1,9 +1,24 @@
 """StateLoader — JSON → 세션 + 어노테이션 복원."""
+import logging
+
+from pydantic import ValidationError
+
 from models.session import SessionModel
+
+logger = logging.getLogger(__name__)
 
 
 class StateLoader:
-    def load(self, data: dict) -> tuple[list[SessionModel], list]:
+    def load(
+        self,
+        data: dict,
+        parse_warnings: list[str] | None = None,
+    ) -> tuple[list[SessionModel], list]:
+        """data를 세션 + 어노테이션으로 복원한다.
+
+        parse_warnings가 주어지면 개별 세션 오류를 skip하고 경고를 수집한다.
+        주어지지 않으면(기본) 오류 시 즉시 예외를 올린다 (ADR-004 준수).
+        """
         if not isinstance(data, dict):
             raise ValueError("data는 dict여야 합니다")
         if "sessions" not in data:
@@ -15,8 +30,21 @@ class StateLoader:
         sessions = []
         for item in raw_sessions:
             if not isinstance(item, dict):
+                if parse_warnings is not None:
+                    msg = f"세션 항목 타입 오류 (skip): {item!r}"
+                    logger.warning(msg)
+                    parse_warnings.append(msg)
+                    continue
                 raise ValueError(f"세션 항목은 dict여야 합니다: {item!r}")
-            sessions.append(SessionModel(**item))
+            try:
+                sessions.append(SessionModel(**item))
+            except (ValidationError, KeyError, TypeError) as exc:
+                if parse_warnings is not None:
+                    msg = f"세션 복원 실패 (skip): {exc}"
+                    logger.warning(msg)
+                    parse_warnings.append(msg)
+                else:
+                    raise
 
         annotations = data.get("annotations", [])
         if not isinstance(annotations, list):

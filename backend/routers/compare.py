@@ -3,7 +3,7 @@ import logging
 import re
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +21,6 @@ class CompareRequest(BaseModel):
     base_upload_id: str
     current_upload_id: str
 
-    @field_validator("base_upload_id", "current_upload_id")
-    @classmethod
-    def validate_uuid(cls, v: str) -> str:
-        if not UUID_RE.match(v):
-            raise ValueError("upload_id must be a valid UUID")
-        return v
-
 
 def _extract_ports(sessions) -> set[int]:
     ports: set[int] = set()
@@ -38,6 +31,16 @@ def _extract_ports(sessions) -> set[int]:
 
 @router.post("/api/compare")
 async def compare_captures(body: CompareRequest, request: Request):
+    if not UUID_RE.match(body.base_upload_id):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_uuid", "msg": "base_upload_id must be a valid UUID"},
+        )
+    if not UUID_RE.match(body.current_upload_id):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_uuid", "msg": "current_upload_id must be a valid UUID"},
+        )
     logger.info(
         "비교 요청: base=%s current=%s",
         body.base_upload_id,

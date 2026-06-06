@@ -1,9 +1,13 @@
 """SessionModel — 공유 도메인 모델."""
 import ipaddress
+import logging
+import math
 import re
-from typing import Literal, Optional
+from typing import ClassVar, Literal, Optional
 
 from pydantic import BaseModel, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
 
 _UUID_V4_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
@@ -46,11 +50,33 @@ class SessionModel(BaseModel):
             raise ValueError(f"유효하지 않은 IP 주소: {v!r}")
         return v
 
+    # Known transport/network protocols; values outside this set are accepted but warned.
+    KNOWN_PROTOCOLS: ClassVar[frozenset[str]] = frozenset({
+        "TCP", "UDP", "ICMP", "ICMP6", "ARP", "GRE", "ESP", "SCTP", "IGMP",
+    })
+
+    @field_validator("protocol")
+    @classmethod
+    def validate_protocol_str(cls, v: str) -> str:
+        upper = v.strip().upper()
+        if not upper:
+            raise ValueError("protocol cannot be empty")
+        if upper not in cls.KNOWN_PROTOCOLS:
+            logger.warning("비표준 프로토콜 값: %r (허용은 되나 알려진 값 아님)", upper)
+        return upper
+
     @field_validator("src_port", "dst_port")
     @classmethod
     def validate_port(cls, v: int) -> int:
         if not 0 <= v <= 65535:
             raise ValueError(f"port must be 0-65535, got {v}")
+        return v
+
+    @field_validator("start_ts", "end_ts")
+    @classmethod
+    def validate_finite_ts(cls, v: float) -> float:
+        if not math.isfinite(v) or v < 0:
+            raise ValueError(f"timestamp must be finite and non-negative: {v}")
         return v
 
     @field_validator("bytes_sent", "bytes_recv", "packet_count", "payload_length")

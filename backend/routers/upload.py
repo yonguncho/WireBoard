@@ -20,7 +20,7 @@ from utils.constants import MAX_UPLOAD_BYTES
 
 router = APIRouter()
 
-_ALLOWED_EXTENSIONS = {".pcap", ".har", ".log", ".txt", ".tcpdump"}
+_ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".har", ".log", ".txt", ".tcpdump"}
 _PARSERS = [PcapParser(), HarParser(), FortigateParser(), TcpdumpParser()]
 _CHUNK_SIZE = 65_536  # 64 KB read chunks
 

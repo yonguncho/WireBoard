@@ -8,6 +8,9 @@ _RATE_HIGH = 1000.0   # pps
 _RATE_MEDIUM = 300.0
 _SRC_HIGH = 50
 _SRC_MEDIUM = 10
+# PRD: 분산 DDoS — 5개 이상 소스 + 5000 pkt/min (83.33 pps)
+_PRD_SRC_MIN = 5
+_PRD_RATE_MIN = 5000.0 / 60.0  # 5000/min → pps
 
 _SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3}
 
@@ -38,6 +41,9 @@ class DDoSDetector:
             if rate >= _RATE_HIGH or unique_src >= _SRC_HIGH:
                 severity = "high"
             elif rate >= _RATE_MEDIUM or unique_src >= _SRC_MEDIUM:
+                severity = "medium"
+            elif unique_src >= _PRD_SRC_MIN and rate >= _PRD_RATE_MIN:
+                # PRD: 분산 DDoS — 5+ 소스 AND 5000 pkt/min
                 severity = "medium"
             else:
                 continue

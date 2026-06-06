@@ -2,6 +2,7 @@
 import ipaddress
 import json
 import logging
+import random
 import uuid
 from datetime import datetime
 from urllib.parse import urlparse
@@ -43,12 +44,15 @@ class HarParser:
             scheme = parsed.scheme or "http"
             port = parsed.port or (443 if scheme == "https" else 80)
 
-            # hostname이 이미 IPv4면 dst_ip로 직접 사용, 아니면 placeholder
+            # hostname이 이미 IPv4면 dst_ip로 직접 사용, 아니면 RFC5737 TEST-NET-3 placeholder
             try:
                 ipaddress.ip_address(host)
                 dst_ip = host
+                unresolved = False
             except ValueError:
-                dst_ip = "203.0.113.1"  # RFC 5737 TEST-NET-3 placeholder for unresolvable hosts
+                dst_ip = "203.0.113.1"
+                unresolved = True
+                logger.debug("HAR entry %d: hostname '%s' unresolvable, using placeholder dst_ip", i, host)
 
             started = entry.get("startedDateTime", "")
             time_ms = float(entry.get("time") or 0)
@@ -56,14 +60,14 @@ class HarParser:
             try:
                 start_ts = datetime.fromisoformat(started.replace("Z", "+00:00")).timestamp()
             except (ValueError, AttributeError):
-                start_ts = float(1_748_000_000 + i)
+                start_ts = datetime.now().timestamp() + i * 0.001
 
             resp = entry.get("response", {})
             sessions.append(SessionModel(
                 session_id=str(uuid.uuid4()),
                 src_ip="127.0.0.1",
                 dst_ip=dst_ip,
-                src_port=(50000 + i) % 65536,
+                src_port=random.randint(49152, 65535),
                 dst_port=port,
                 protocol="TCP",
                 start_ts=start_ts,
@@ -72,7 +76,7 @@ class HarParser:
                 bytes_recv=max(0, resp.get("bodySize") or 0),
                 packet_count=1,
                 payload_length=max(0, resp.get("bodySize") or 0),
-                confidence="normal",
+                confidence="low" if unresolved else "normal",
                 meta={"method": method, "url": url, "status_code": resp.get("status") or 0, "hostname": host},
             ))
 

@@ -3,21 +3,61 @@ import re
 from dataclasses import dataclass, field
 
 _PROTOCOL_KEYWORDS: dict[str, str] = {
-    "dns": "dns",
-    "http": "http",
-    "https": "tls",
-    "tls": "tls",
+    # 전송 계층
     "tcp": "tcp",
     "udp": "udp",
     "icmp": "icmp",
     "arp": "arp",
+    # 애플리케이션 계층 — 웹
+    "http": "http",
+    "https": "tls",
+    "http2": "tls",
+    "h2": "tls",
+    "quic": "quic",
+    "websocket": "http",
+    "ws": "http",
+    "wss": "tls",
+    # 보안/암호화
+    "tls": "tls",
+    "ssl": "tls",
+    # 이메일
     "smtp": "smtp",
+    "imap": "imap",
+    "pop3": "pop3",
+    # 파일/원격
     "ftp": "ftp",
+    "sftp": "ssh",
     "ssh": "ssh",
     "telnet": "telnet",
+    "rdp": "rdp",
+    "vnc": "vnc",
+    # 디렉터리/인증
+    "ldap": "ldap",
+    "ldaps": "ldap",
+    "kerberos": "kerberos",
+    "radius": "radius",
+    # 네트워크 서비스
+    "dns": "dns",
+    "mdns": "dns",
     "snmp": "snmp",
     "ntp": "ntp",
     "dhcp": "dhcp",
+    "tftp": "tftp",
+    "sip": "sip",
+    "rtp": "rtp",
+    # 파일 공유
+    "smb": "smb",
+    "cifs": "smb",
+    "netbios": "nbns",
+    # 데이터베이스
+    "mysql": "mysql",
+    "mssql": "tcp",
+    "postgresql": "tcp",
+    "redis": "tcp",
+    "mongodb": "tcp",
+    # API/마이크로서비스
+    "grpc": "tls",
+    "thrift": "tcp",
 }
 
 _IPv4_PATTERN = re.compile(

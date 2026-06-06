@@ -10,6 +10,9 @@ _BYTES_HIGH = 500 * _MB
 _BYTES_MEDIUM = 100 * _MB
 _CONN_HIGH = 20
 _CONN_MEDIUM = 5
+# PRD: 아웃바운드 비율 기반 탐지
+_PRD_RATIO_THRESHOLD = 0.8   # 80% outbound
+_PRD_BYTES_MIN = 1 * _MB     # 최소 1MB 전송
 
 _SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3}
 
@@ -33,11 +36,21 @@ class ExfiltrationDetector:
         for src_ip, grp in by_src.items():
             connections = len(grp)
             bytes_out = sum(s.bytes_sent for s in grp)
+            bytes_total = sum(s.bytes_sent + s.bytes_recv for s in grp)
+            outbound_ratio = bytes_out / bytes_total if bytes_total > 0 else 0.0
 
             if connections > _CONN_HIGH or bytes_out > _BYTES_HIGH:
                 severity = "high"
-            elif connections > _CONN_MEDIUM and bytes_out > _BYTES_MEDIUM:
+            elif connections > _CONN_MEDIUM or bytes_out > _BYTES_MEDIUM:
                 severity = "medium"
+            elif outbound_ratio >= _PRD_RATIO_THRESHOLD and bytes_total >= _PRD_BYTES_MIN:
+                # PRD: 80% 이상 아웃바운드 + 1MB 이상 전송
+                if bytes_out >= _BYTES_HIGH:
+                    severity = "high"
+                elif bytes_out >= _BYTES_MEDIUM:
+                    severity = "medium"
+                else:
+                    continue
             else:
                 continue
 
@@ -45,7 +58,7 @@ class ExfiltrationDetector:
                 attack_type="Exfiltration",
                 severity=severity,
                 mitre_id="T1041",
-                description=f"{src_ip}: {connections}개 외부 연결, {bytes_out // _MB} MB 전송",
+                description=f"{src_ip}: {connections}개 외부 연결, {bytes_out // _MB} MB 전송 (아웃바운드 {outbound_ratio:.0%})",
             )
 
             if any(s.confidence == "low" for s in grp):

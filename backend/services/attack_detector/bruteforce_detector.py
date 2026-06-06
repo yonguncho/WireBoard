@@ -7,6 +7,8 @@ from services.attack_detector.base import AttackResult
 _ATTEMPTS_HIGH = 50
 _ATTEMPTS_MEDIUM = 10
 _FAIL_RATE_THRESHOLD = 0.9
+# PRD: 1초 윈도우 내 RST/ICMP 에러 10회 이상
+_RST_PER_SEC_THRESHOLD = 10
 
 _SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3}
 
@@ -15,6 +17,9 @@ def _is_failed(s: SessionModel) -> bool:
     if s.bytes_recv == 0:
         return True
     if s.meta and s.meta.get("auth_success") is False:
+        return True
+    if s.rst:
+        # PRD: RST 플래그 = 연결 거부(실패) 지표
         return True
     return False
 
@@ -59,5 +64,24 @@ class BruteForceDetector:
 
             if best is None or _rank(result.severity) > _rank(best.severity):
                 best = result
+
+        # PRD: 1초 윈도우 내 RST 패킷 10회 이상 → 브루트포스 탐지
+        rst_sessions = [s for s in sessions if s.rst]
+        if rst_sessions:
+            windows: dict[int, int] = defaultdict(int)
+            for s in rst_sessions:
+                windows[int(s.start_ts)] += 1
+            max_rst_per_sec = max(windows.values())
+            if max_rst_per_sec >= _RST_PER_SEC_THRESHOLD:
+                rst_result = AttackResult(
+                    attack_type="BruteForce",
+                    severity="high" if max_rst_per_sec >= _ATTEMPTS_HIGH else "medium",
+                    mitre_id="T1110",
+                    description=f"RST flood: {max_rst_per_sec}회/초 탐지",
+                )
+                if any(s.confidence == "low" for s in rst_sessions):
+                    rst_result = rst_result.downgrade()
+                if best is None or _rank(rst_result.severity) > _rank(best.severity):
+                    best = rst_result
 
         return best

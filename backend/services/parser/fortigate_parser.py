@@ -65,11 +65,12 @@ class FortigateParser:
                 dt = datetime.strptime(ts_str.strip(), "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=timezone.utc)
                 start_ts = dt.timestamp()
             except ValueError:
-                start_ts = 0.0
+                start_ts = datetime.now(tz=timezone.utc).timestamp()
 
             # verbose 3: payload=0 → confidence="low"
             # verbose 6: payload>0 → confidence="normal"
-            confidence = "low" if payload_len == 0 else "normal"
+            # port 0: 포트 정보 없음 (verbose 3 일부) → confidence="low"
+            confidence = "low" if payload_len == 0 or src_port == 0 or dst_port == 0 else "normal"
 
             sessions.append(SessionModel(
                 session_id=str(uuid.uuid4()),

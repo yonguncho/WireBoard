@@ -56,7 +56,13 @@ class TcpdumpParser:
                 protocol = "TCP"
                 is_rst = "R" in flags_token
             else:
-                protocol = "UDP" if (proto_token or "").upper() == "UDP" else "TCP"
+                proto_upper = (proto_token or "").upper()
+                if proto_upper == "UDP":
+                    protocol = "UDP"
+                elif proto_upper in ("ICMP", "ICMP6", "ARP"):
+                    protocol = proto_upper
+                else:
+                    protocol = "TCP"
                 is_rst = False
 
             sessions.append(SessionModel(

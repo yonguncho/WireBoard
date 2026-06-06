@@ -8,6 +8,7 @@ from collections import Counter
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -70,37 +71,51 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
         effective_target_ip = req_body.target_ip
     else:
         src_counts = Counter(s.src_ip for s in sessions)
-        effective_target_ip = src_counts.most_common(1)[0][0] if src_counts else ""
+        if not src_counts:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "no_sessions", "msg": "캡처 파일에 분석 가능한 세션이 없습니다"},
+            )
+        effective_target_ip = src_counts.most_common(1)[0][0]
         logger.info("target_ip 자동 감지: %s", effective_target_ip)
 
     target_sessions = [
         s for s in sessions
         if s.src_ip == effective_target_ip or s.dst_ip == effective_target_ip
     ]
+    if not target_sessions:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "no_matching_sessions", "msg": f"target_ip {effective_target_ip!r}에 해당하는 세션이 없습니다"},
+        )
     extractor = FlowExtractor()
     flows = extractor.extract(target_sessions)
 
-    attacks = []
-    for detector in _DETECTORS:
+    loop = asyncio.get_running_loop()
+
+    async def _run_one(det):
         try:
-            result = detector.detect(target_sessions)
+            res = await loop.run_in_executor(None, det.detect, target_sessions)
         except Exception as exc:
-            logger.error("detector 예외: detector=%s error=%s", type(detector).__name__, exc)
-            attacks.append({
+            logger.error("detector 예외: detector=%s error=%s", type(det).__name__, exc)
+            return {
                 "attack_type": "ERROR",
                 "severity": "unknown",
                 "mitre_id": "",
-                "description": f"{type(detector).__name__} failed: {exc}",
+                "description": f"{type(det).__name__} failed: {exc}",
                 "detector_error": True,
-            })
-            continue
-        if result is not None:
-            attacks.append({
-                "attack_type": result.attack_type,
-                "severity": result.severity,
-                "mitre_id": result.mitre_id,
-                "description": result.description,
-            })
+            }
+        if res is None:
+            return None
+        return {
+            "attack_type": res.attack_type,
+            "severity": res.severity,
+            "mitre_id": res.mitre_id,
+            "description": res.description,
+        }
+
+    raw_results = await asyncio.gather(*[_run_one(d) for d in _DETECTORS])
+    attacks = [r for r in raw_results if r is not None]
 
     flow_dicts = [
         {
@@ -133,7 +148,8 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
     del sessions, target_sessions, flows, capture
     await asyncio.get_running_loop().run_in_executor(None, gc.collect)
 
-    return {
+    partial_failure = any(a.get("detector_error") for a in attacks)
+    response_body = {
         "flows": flow_dicts,
         "sessions": session_dicts,
         "attacks": attacks,
@@ -141,4 +157,6 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
         "plotly_ys": plotly_ys,
         "analysis_duration_ms": duration_ms,
         "target_ip": effective_target_ip,
+        "partial_failure": partial_failure,
     }
+    return JSONResponse(content=response_body, status_code=207 if partial_failure else 200)
