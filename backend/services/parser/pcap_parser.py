@@ -17,6 +17,7 @@ _MAGIC_NS_BE = 0x4D3CB2A1
 _MAGIC_PCAPNG = 0x0A0D0D0A
 
 _VALID_MAGICS_LE = {_MAGIC_LE, _MAGIC_BE, _MAGIC_NS_LE, _MAGIC_NS_BE, _MAGIC_PCAPNG}
+_STRUCT_MAGICS = {_MAGIC_LE, _MAGIC_BE, _MAGIC_NS_LE, _MAGIC_NS_BE}
 
 _VLAN_ETHERTYPES = {0x8100, 0x88A8}
 
@@ -135,6 +136,15 @@ class PcapParser:
 
     def _parse_struct(self, data: bytes, parse_warnings: list[str] | None) -> list[SessionModel]:
         magic = struct.unpack_from("<I", data, 0)[0]
+        if magic == _MAGIC_PCAPNG:
+            # pcapng requires dpkt/scapy; struct parser cannot decode it
+            if parse_warnings is not None:
+                parse_warnings.append(
+                    "PCAPNG 형식은 dpkt 없이는 파싱할 수 없습니다. "
+                    "dpkt가 설치되어 있는지 확인하세요."
+                )
+            return []
+
         if magic in {_MAGIC_LE, _MAGIC_NS_LE}:
             big_endian, nanosec = False, magic == _MAGIC_NS_LE
         elif magic in {_MAGIC_BE, _MAGIC_NS_BE}:

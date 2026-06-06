@@ -56,7 +56,7 @@ export function Panel6IpRanking({ data, uploadId }: Props) {
       </table>
       {loading && <div style={{ textAlign: 'center', color: '#a0aec0', fontSize: 12, marginTop: 4 }}>로딩 중...</div>}
       {modal && (
-        <div className="marker-modal" style={{ maxHeight: 360, overflowY: 'auto', minWidth: 480 }}>
+        <div className="drilldown-modal">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <strong style={{ color: '#63b3ed' }}>{modal.ip} — {modal.count}개 세션</strong>
             <button className="filter-btn" style={{ background: '#4a5568', padding: '2px 8px' }} onClick={() => setModal(null)}>✕</button>

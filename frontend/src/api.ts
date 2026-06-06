@@ -1,10 +1,22 @@
 const BASE = ''
 
-export async function uploadPcap(file: File): Promise<{ upload_id: string }> {
+async function handleError(r: Response, label: string): Promise<never> {
+  let msg = `${label} (${r.status})`
+  try {
+    const body = await r.json()
+    const d = body.detail
+    if (d?.message) msg = d.message
+    else if (typeof d === 'string') msg = d
+    if (d?.errors?.length) msg += '\n' + (d.errors as string[]).slice(0, 3).join('\n')
+  } catch { /* ignore */ }
+  throw new Error(msg)
+}
+
+export async function uploadPcap(file: File): Promise<{ upload_id: string; session_count: number; source_type: string; parse_warnings: string[] }> {
   const fd = new FormData()
   fd.append('file', file)
   const r = await fetch(`${BASE}/api/upload`, { method: 'POST', body: fd })
-  if (!r.ok) throw new Error(`Upload failed: ${r.status}`)
+  if (!r.ok) return handleError(r, '파일 형식을 인식할 수 없습니다')
   return r.json()
 }
 
@@ -16,13 +28,13 @@ export async function analyzePcap(upload_id: string, target_ip?: string): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!r.ok) throw new Error(`Analyze failed: ${r.status}`)
+  if (!r.ok) return handleError(r, '분석 실패')
   return r.json()
 }
 
 export async function getPanels(upload_id: string): Promise<PanelData> {
   const r = await fetch(`${BASE}/api/panels/${upload_id}`)
-  if (!r.ok) throw new Error(`Panels failed: ${r.status}`)
+  if (!r.ok) return handleError(r, '패널 로드 실패')
   return r.json()
 }
 
@@ -32,13 +44,13 @@ export async function addAnnotation(upload_id: string, start_ts: number, end_ts:
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ upload_id, start_ts, end_ts, comment }),
   })
-  if (!r.ok) throw new Error(`Annotation failed: ${r.status}`)
+  if (!r.ok) return handleError(r, '마커 저장 실패')
   return r.json()
 }
 
 export async function getDrilldown(upload_id: string, ip: string): Promise<DrilldownResult> {
   const r = await fetch(`${BASE}/api/drilldown/${upload_id}?ip=${encodeURIComponent(ip)}`)
-  if (!r.ok) throw new Error(`Drilldown failed: ${r.status}`)
+  if (!r.ok) return handleError(r, '드릴다운 실패')
   return r.json()
 }
 
@@ -48,7 +60,7 @@ export async function filterSessions(upload_id: string, query: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ upload_id, query }),
   })
-  if (!r.ok) throw new Error(`Filter failed: ${r.status}`)
+  if (!r.ok) return handleError(r, '필터 실패')
   return r.json()
 }
 
