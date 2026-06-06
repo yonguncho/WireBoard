@@ -10,6 +10,7 @@ class AttackResult:
     severity: str
     mitre_id: str
     description: str = ""
+    src_ip: str = ""   # 공격 출발지 IP (분산 공격이면 빈 문자열)
 
     def downgrade(self) -> "AttackResult":
         """severity를 1단계 낮춘다."""
@@ -20,4 +21,5 @@ class AttackResult:
             severity=new_severity,
             mitre_id=self.mitre_id,
             description=self.description,
+            src_ip=self.src_ip,
         )

@@ -1,4 +1,5 @@
 import type { AttackEntry } from '../api'
+import { Tooltip } from '../ui/Tooltip'
 
 interface Props { data: AttackEntry[] }
 
@@ -14,9 +15,13 @@ export function Panel10Attacks({ data }: Props) {
       {attacks.map((a, i) => (
         <div key={i} className={`attack-card sev-${a.severity}`}>
           <div className="attack-header">
-            <span className="attack-type">{a.attack_type}</span>
+            <Tooltip term={a.attack_type}>
+              <span className="attack-type">{a.attack_type}</span>
+            </Tooltip>
             <span className={`badge ${SEV_CLASS[a.severity] ?? 'badge-ok'}`}>{a.severity.toUpperCase()}</span>
-            <span className="mitre-id">{a.mitre_id}</span>
+            <Tooltip term={a.mitre_id} position="bottom">
+              <span className="mitre-id">{a.mitre_id}</span>
+            </Tooltip>
             {a.src_ip && <span className="mono attack-ip">{a.src_ip}</span>}
           </div>
           <div className="attack-desc">{a.description}</div>

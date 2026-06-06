@@ -84,7 +84,7 @@ class TestPdfFileCreation:
         """PDF 파일이 생성된다."""
         exporter = _load_exporter()
         output = tmp_path / "report.pdf"
-        result = exporter.generate(_make_analysis_result(), output_path=output)
+        result, _ = exporter.generate(_make_analysis_result(), output_path=output)
         assert result.exists(), "PDF 파일 생성 실패"
 
     def test_pdf_file_not_empty(self, tmp_path: Path):
@@ -128,7 +128,7 @@ class TestPdfEdge:
         """세션 없어도 PDF 생성 (에러 없음)."""
         exporter = _load_exporter()
         output = tmp_path / "empty.pdf"
-        result = exporter.generate(_make_analysis_result(session_count=0), output_path=output)
+        result, _ = exporter.generate(_make_analysis_result(session_count=0), output_path=output)
         assert result.exists()
 
     def test_overwrite_existing_file(self, tmp_path: Path):
@@ -142,7 +142,7 @@ class TestPdfEdge:
     def test_auto_temp_path(self):
         """output_path 미지정 → 임시 파일 자동 생성."""
         exporter = _load_exporter()
-        result = exporter.generate(_make_analysis_result())
+        result, _ = exporter.generate(_make_analysis_result())
         assert result is not None
         assert result.exists()
         result.unlink(missing_ok=True)

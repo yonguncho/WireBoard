@@ -57,6 +57,7 @@ class BruteForceDetector:
                 severity=severity,
                 mitre_id="T1110",
                 description=f"{src_ip} → {dst_ip}:{dst_port}: {total}회 시도, 실패율 {fail_rate:.0%}",
+                src_ip=src_ip,
             )
 
             if any(s.confidence == "low" for s in grp):

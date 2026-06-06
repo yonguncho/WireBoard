@@ -27,6 +27,9 @@ from routers.export import router as export_router
 from routers.filter import router as filter_router
 from routers.compare import router as compare_router
 from routers.drilldown import router as drilldown_router
+from routers.summary import router as summary_router
+from routers.flow import router as flow_router
+from routers.packets import router as packets_router
 from store.session_store import SessionStore
 
 
@@ -69,7 +72,7 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
             raise
 
 
-app = FastAPI(title="WireBoard", version="5.1.0")
+app = FastAPI(title="WireBoard", version="5.4.0")
 app.add_middleware(StructuredLoggingMiddleware)
 
 _annotations_store: defaultdict = defaultdict(list)
@@ -88,6 +91,9 @@ app.include_router(export_router)
 app.include_router(filter_router)
 app.include_router(compare_router)
 app.include_router(drilldown_router)
+app.include_router(summary_router)
+app.include_router(flow_router)
+app.include_router(packets_router)
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(_STATIC_DIR):

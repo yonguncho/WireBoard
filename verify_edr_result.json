@@ -1,6 +1,6 @@
 ﻿{
     "exe":  "C:\\AI_WORKPLACE\\today_product\\dist\\WireBoard.exe",
-    "scanned_at":  "2026-06-05T12:53:03-04:00",
+    "scanned_at":  "2026-06-06T00:43:54-04:00",
     "defender_available":  true,
     "threat_found":  false,
     "threat_detail":  null,
@@ -9,6 +9,6 @@
     "signature_status":  "NotSigned",
     "signer_subject":  null,
     "code_signed":  false,
-    "file_sha256":  "77fec7754f170b8d7d7ec5a89e026272658598d65e31ada2cbbee4fa02101852",
-    "file_size_mb":  13.66
+    "file_sha256":  "21840b043b6d649ca62f64bdbbf63a7136ea9cc2eb0b64bc94f98bb0f71a756b",
+    "file_size_mb":  38.08
 }

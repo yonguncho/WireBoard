@@ -1,6 +1,5 @@
 """GET /api/panels/{upload_id} — 패널 통합 분석 결과."""
 import logging
-import re
 from collections import defaultdict
 
 from fastapi import APIRouter, HTTPException, Request
@@ -14,13 +13,10 @@ from services.analytics.http_status_analyzer import HttpStatusAnalyzer
 from services.analytics.rst_analyzer import RstAnalyzer
 from services.analytics.tls_analyzer import TlsAnalyzer
 from services.analytics.dns_analyzer import DnsAnalyzer
+from utils.constants import UUID_RE
 from utils.net_utils import is_private as _is_private
 
 router = APIRouter()
-
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
-)
 
 _ip_analyzer = IpAnalyzer()
 _proto_stats = ProtocolStats()
@@ -33,7 +29,7 @@ _dns_analyzer = DnsAnalyzer()
 
 @router.get("/api/panels/{upload_id}")
 async def get_panels(upload_id: str, request: Request):
-    if not _UUID_RE.match(upload_id):
+    if not UUID_RE.match(upload_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "upload_id must be a valid UUID"})
     logger.info("패널 요청: upload_id=%s", upload_id)
     store = request.app.state.session_store

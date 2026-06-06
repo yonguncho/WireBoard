@@ -2,7 +2,6 @@
 import asyncio
 import gc
 import logging
-import re
 import time
 from collections import Counter
 from typing import Annotated
@@ -20,17 +19,9 @@ from services.attack_detector.comm_failure_detector import CommFailureDetector
 from services.attack_detector.ddos_detector import DDoSDetector
 from services.attack_detector.exfiltration_detector import ExfiltrationDetector
 from services.attack_detector.bruteforce_detector import BruteForceDetector
+from utils.constants import UUID_V4_RE, IPv4_RE
 
 router = APIRouter()
-
-_UUID_V4_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-    re.IGNORECASE,
-)
-
-_IP_RE = re.compile(
-    r"^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$"
-)
 
 _DETECTORS = [
     PortScanDetector(),
@@ -49,10 +40,10 @@ class AnalyzeRequest(BaseModel):
 
 @router.post("/api/analyze")
 async def analyze(req_body: AnalyzeRequest, request: Request):
-    if not _UUID_V4_RE.match(req_body.upload_id):
+    if not UUID_V4_RE.match(req_body.upload_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "upload_id must be UUID v4"})
 
-    if req_body.target_ip is not None and not _IP_RE.match(req_body.target_ip):
+    if req_body.target_ip is not None and not IPv4_RE.match(req_body.target_ip):
         raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": "target_ip must be a valid IPv4 address"})
 
     logger.info("분석 요청: upload_id=%s target_ip=%s", req_body.upload_id, req_body.target_ip)
@@ -112,6 +103,7 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
             "severity": res.severity,
             "mitre_id": res.mitre_id,
             "description": res.description,
+            "src_ip": res.src_ip,
         }
 
     raw_results = await asyncio.gather(*[_run_one(d) for d in _DETECTORS])

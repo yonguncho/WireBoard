@@ -83,6 +83,7 @@ class BeaconDetector:
                 severity=severity,
                 mitre_id="T1071",
                 description=f"{src_ip} → {dst_ip}: CV={cv:.1f}%, {len(group)}회 접속 ({len(burst_ts)} bursts)",
+                src_ip=src_ip,
             )
 
             if any(s.confidence == "low" for s in group):

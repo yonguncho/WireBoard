@@ -54,13 +54,33 @@ class TestPcapParserDetect:
 class TestPcapParserParse:
     def test_returns_session_list(self, pcap_bytes: bytes) -> None:
         from services.parser.pcap_parser import PcapParser
-        sessions = PcapParser().parse(pcap_bytes)
+        sessions, pkt_map = PcapParser().parse(pcap_bytes)
         assert isinstance(sessions, list)
         assert len(sessions) >= 1
 
+    def test_returns_packet_map(self, pcap_bytes: bytes) -> None:
+        from services.parser.pcap_parser import PcapParser
+        sessions, pkt_map = PcapParser().parse(pcap_bytes)
+        assert isinstance(pkt_map, dict)
+        # 각 세션 ID가 packet_map에 존재해야 함
+        for s in sessions:
+            assert s.session_id in pkt_map
+
+    def test_packet_records_have_seq(self, pcap_bytes: bytes) -> None:
+        """PacketRecord에 seq/ack/flags 필드 존재."""
+        from services.parser.pcap_parser import PcapParser
+        sessions, pkt_map = PcapParser().parse(pcap_bytes)
+        for sid, pkts in pkt_map.items():
+            for p in pkts:
+                assert hasattr(p, "seq")
+                assert hasattr(p, "ack")
+                assert hasattr(p, "flags")
+                assert hasattr(p, "direction")
+                assert p.direction in ("fwd", "rev")
+
     def test_session_ids_are_uuid(self, pcap_bytes: bytes) -> None:
         from services.parser.pcap_parser import PcapParser
-        sessions = PcapParser().parse(pcap_bytes)
+        sessions, _ = PcapParser().parse(pcap_bytes)
         for s in sessions:
             assert UUID_RE.match(s.session_id), f"session_id 가 UUID 형식 아님: {s.session_id!r}"
 
@@ -81,13 +101,13 @@ class TestPcapParserParse:
 
         header = struct.pack("<IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, 1)
         garbage = header + b"\xde\xad\xbe\xef" * 100
-        # 예외가 아닌 리스트 반환 (빈 리스트 허용)
-        result = PcapParser().parse(garbage)
-        assert isinstance(result, list)
+        sessions, pkt_map = PcapParser().parse(garbage)
+        assert isinstance(sessions, list)
+        assert isinstance(pkt_map, dict)
 
     def test_sessions_have_required_fields(self, pcap_bytes: bytes) -> None:
         from services.parser.pcap_parser import PcapParser
-        sessions = PcapParser().parse(pcap_bytes)
+        sessions, _ = PcapParser().parse(pcap_bytes)
         for s in sessions:
             assert hasattr(s, "src_ip")
             assert hasattr(s, "dst_ip")
@@ -189,7 +209,7 @@ class TestSessionNormalizer:
     def test_normalize_assigns_uuid_session_ids(self, pcap_bytes: bytes) -> None:
         from services.parser.pcap_parser import PcapParser
         from services.normalizer import SessionNormalizer
-        raw = PcapParser().parse(pcap_bytes)
+        raw, _ = PcapParser().parse(pcap_bytes)
         sessions = SessionNormalizer().normalize(raw)
         for s in sessions:
             assert UUID_RE.match(s.session_id)
@@ -198,7 +218,7 @@ class TestSessionNormalizer:
         """같은 4-tuple 패킷들이 하나의 세션으로 합쳐진다."""
         from services.parser.pcap_parser import PcapParser
         from services.normalizer import SessionNormalizer
-        raw = PcapParser().parse(pcap_bytes)
+        raw, _ = PcapParser().parse(pcap_bytes)
         sessions = SessionNormalizer().normalize(raw)
         # conftest pcap 은 src=192.168.1.1:80 → dst=192.168.1.2:8080 단일 플로우
         assert len(sessions) >= 1
@@ -212,7 +232,8 @@ class TestFlowExtractor:
         from services.parser.pcap_parser import PcapParser
         from services.normalizer import SessionNormalizer
         from services.flow_extractor import FlowExtractor
-        sessions = SessionNormalizer().normalize(PcapParser().parse(pcap_bytes))
+        raw, _ = PcapParser().parse(pcap_bytes)
+        sessions = SessionNormalizer().normalize(raw)
         extractor = FlowExtractor()
         flows = extractor.extract(sessions)
         xs, ys = extractor.build_plotly_data(flows)

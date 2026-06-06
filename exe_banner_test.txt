@@ -1,0 +1,9 @@
+
+[치명적 오류]
+Traceback (most recent call last):
+  File "launcher.py", line 90, in <module>
+  File "launcher.py", line 74, in main
+UnicodeEncodeError: 'cp949' codec can't encode character '\u2554' in position 2: illegal multibyte sequence
+
+
+[Enter] 키를 눌러 창을 닫으세요...

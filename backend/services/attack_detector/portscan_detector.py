@@ -40,6 +40,7 @@ class PortScanDetector:
                 severity=severity,
                 mitre_id="T1046",
                 description=f"{src_ip} → {dst_ip}: {count}개 포트 스캔",
+                src_ip=src_ip,
             )
 
             if low_confidence.get((src_ip, dst_ip)):

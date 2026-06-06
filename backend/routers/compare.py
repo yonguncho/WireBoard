@@ -1,6 +1,5 @@
 """POST /api/compare — 두 pcap 세션 비교 분석."""
 import logging
-import re
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -8,10 +7,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 from services.analytics.pcap_comparator import PcapComparator
-
-UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
-)
+from utils.constants import UUID_RE
 
 router = APIRouter()
 _comparator = PcapComparator()
@@ -66,8 +62,10 @@ async def compare_captures(body: CompareRequest, request: Request):
     b_total = result.byte_ratio.get("b_total", 0)
     if a_total > 0:
         traffic_delta_pct = round((b_total - a_total) / a_total * 100.0, 2)
+    elif b_total > 0:
+        traffic_delta_pct = None  # base가 비어있어 의미있는 % 계산 불가
     else:
-        traffic_delta_pct = 0.0
+        traffic_delta_pct = 0.0  # 양쪽 모두 트래픽 없음
 
     return {
         "new_ips": sorted(result.only_in_b),

@@ -21,6 +21,9 @@ class StateLoader:
         """
         if not isinstance(data, dict):
             raise ValueError("data는 dict여야 합니다")
+        version = data.get("version", "1.0")
+        if version != "1.0":
+            logger.warning("예상치 못한 state version: %s (expected 1.0) — 하위 호환 시도", version)
         if "sessions" not in data:
             raise KeyError("sessions 필드가 없습니다")
         raw_sessions = data["sessions"]

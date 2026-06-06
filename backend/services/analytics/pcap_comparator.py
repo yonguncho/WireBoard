@@ -55,12 +55,13 @@ class PcapComparator:
 
         a_total = sum(s.bytes_sent + s.bytes_recv for s in sessions_a)
         b_total = sum(s.bytes_sent + s.bytes_recv for s in sessions_b)
-        ratio = a_total / b_total if b_total else 0.0
+        # None when b_total=0: current capture is empty, ratio is undefined
+        ratio = None if b_total == 0 else round(a_total / b_total, 4)
 
         return CompareResult(
             common_ips=common,
             only_in_a=only_a,
             only_in_b=only_b,
             protocol_diff=protocol_diff,
-            byte_ratio={"a_total": a_total, "b_total": b_total, "ratio": round(ratio, 4)},
+            byte_ratio={"a_total": a_total, "b_total": b_total, "ratio": ratio},
         )

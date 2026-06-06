@@ -1,9 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { PlotlyChart } from './PlotlyChart'
-import { addAnnotation } from '../api'
-import type { BucketEntry } from '../api'
-
-interface Marker { start_ts: number; end_ts: number; comment: string }
+import { addAnnotation, getAnnotations } from '../api'
+import type { BucketEntry, Annotation } from '../api'
 
 interface Props {
   data: { buckets: BucketEntry[] }
@@ -11,9 +9,17 @@ interface Props {
 }
 
 export function Panel3Timeline({ data, uploadId }: Props) {
-  const [markers, setMarkers] = useState<Marker[]>([])
+  const [markers, setMarkers] = useState<Annotation[]>([])
   const [pendingRange, setPendingRange] = useState<[number, number] | null>(null)
   const [comment, setComment] = useState('')
+  const [saveErr, setSaveErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!uploadId) return
+    getAnnotations(uploadId).then(setMarkers).catch((e) => {
+      console.warn(JSON.stringify({ event: 'load_annotations_failed', error: (e as Error)?.message }))
+    })
+  }, [uploadId])
 
   const buckets = data.buckets ?? []
   if (!buckets.length) return <div className="no-data">데이터 없음</div>
@@ -25,7 +31,6 @@ export function Panel3Timeline({ data, uploadId }: Props) {
     ys.push(b.bytes)
   }
 
-  // 저장된 마커를 차트 shape으로 변환
   const shapes = markers.flatMap((m) => [
     {
       type: 'line' as const,
@@ -43,7 +48,7 @@ export function Panel3Timeline({ data, uploadId }: Props) {
     },
   ])
 
-  const annotations = markers.map((m) => ({
+  const chartAnnotations = markers.map((m) => ({
     x: new Date(((m.start_ts + m.end_ts) / 2) * 1000).toISOString(),
     y: 1, yref: 'paper' as const,
     text: m.comment,
@@ -67,10 +72,14 @@ export function Panel3Timeline({ data, uploadId }: Props) {
   const saveMarker = async () => {
     if (!pendingRange || !uploadId || !comment.trim()) return
     const [t0, t1] = pendingRange
+    setSaveErr(null)
     try {
       await addAnnotation(uploadId, t0, t1, comment.trim())
-      setMarkers((prev) => [...prev, { start_ts: t0, end_ts: t1, comment: comment.trim() }])
-    } catch (_) { /* ignore */ }
+      setMarkers((prev) => [...prev, { upload_id: uploadId, start_ts: t0, end_ts: t1, comment: comment.trim() }])
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : '저장 실패')
+      console.warn(JSON.stringify({ event: 'save_annotation_failed', error: (e as Error)?.message }))
+    }
     setPendingRange(null)
     setComment('')
   }
@@ -90,7 +99,7 @@ export function Panel3Timeline({ data, uploadId }: Props) {
           xaxis: { title: { text: '시간' }, type: 'date' },
           yaxis: { title: { text: 'bytes' } },
           shapes,
-          annotations,
+          annotations: chartAnnotations,
           dragmode: 'zoom' as const,
         }}
         height={240}
@@ -110,10 +119,26 @@ export function Panel3Timeline({ data, uploadId }: Props) {
             onKeyDown={(e) => e.key === 'Enter' && saveMarker()}
             autoFocus
           />
+          {saveErr && <span style={{ color: '#fc8181', fontSize: 12 }}>{saveErr}</span>}
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="filter-btn" onClick={saveMarker}>저장</button>
-            <button className="filter-btn" style={{ background: '#4a5568' }} onClick={() => setPendingRange(null)}>취소</button>
+            <button className="filter-btn" style={{ background: '#4a5568' }} onClick={() => { setPendingRange(null); setSaveErr(null) }}>취소</button>
           </div>
+        </div>
+      )}
+      {uploadId && markers.length > 0 && (
+        <div className="annotation-list">
+          <div className="annotation-list-title">저장된 마커 ({markers.length})</div>
+          <ul className="annotation-items">
+            {markers.map((m, i) => (
+              <li key={i} className="annotation-item">
+                <span className="annotation-time">
+                  {new Date(m.start_ts * 1000).toLocaleTimeString()} – {new Date(m.end_ts * 1000).toLocaleTimeString()}
+                </span>
+                <span className="annotation-comment">{m.comment}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

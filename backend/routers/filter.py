@@ -7,7 +7,8 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-from services.filter_translator import FilterTranslator, UUID_RE
+from services.filter_translator import FilterTranslator
+from utils.constants import UUID_RE
 
 router = APIRouter()
 _translator = FilterTranslator()
@@ -60,11 +61,11 @@ def _session_matches(session, filter_expr: str, translator_tokens: list[str]) ->
         if token == "frame":
             continue
         if token.startswith("ip.src =="):
-            ip = token.split("==")[1].strip()
+            ip = token.split("==", 1)[1].strip()
             if session.src_ip != ip:
                 return False
         elif token.startswith("ip.dst =="):
-            ip = token.split("==")[1].strip()
+            ip = token.split("==", 1)[1].strip()
             if session.dst_ip != ip:
                 return False
         elif token.startswith("(ip.src =="):

@@ -243,3 +243,28 @@ class TestE2EPdfExport:
         if resp.status_code == 200:
             ct = resp.headers.get("content-type", "")
             assert "pdf" in ct or resp.content[:4] == b"%PDF"
+
+    def test_pdf_includes_annotations(self, api_client: TestClient, pcap_bytes: bytes):
+        """PDF export에 어노테이션 코멘트가 포함되어야 한다."""
+        upload_id = _upload(api_client, pcap_bytes)
+        _analyze(api_client, upload_id)
+
+        ann_resp = api_client.post(
+            "/api/annotations",
+            json={
+                "upload_id": upload_id,
+                "start_ts": 1000.0,
+                "end_ts": 1005.0,
+                "comment": "SuspiciousPortScan",
+            },
+        )
+        if ann_resp.status_code == 404:
+            pytest.skip("/api/annotations 미구현")
+        assert ann_resp.status_code == 201
+
+        pdf_resp = api_client.post(f"/api/export/{upload_id}/pdf")
+        if pdf_resp.status_code == 404:
+            pytest.skip("/api/export/pdf 미구현")
+        assert pdf_resp.status_code == 200
+        assert pdf_resp.content[:4] == b"%PDF"
+        assert b"SuspiciousPortScan" in pdf_resp.content

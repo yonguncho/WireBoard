@@ -17,15 +17,20 @@ def _pdf_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
-def _build_pdf(lines: list[str]) -> bytes:
-    """최소한의 유효한 PDF (PDF 1.4, Type1 Helvetica 폰트) 를 생성한다."""
+def _build_pdf(lines: list[str]) -> tuple[bytes, bool]:
+    """최소한의 유효한 PDF (PDF 1.4, Type1 Helvetica 폰트) 를 생성한다.
+
+    Returns (pdf_bytes, truncated) — truncated=True 이면 1페이지 용량 초과로 잘렸음.
+    """
     text_ops = []
     y = 750
+    truncated = False
     for line in lines:
         safe = _pdf_escape(line[:100])
         text_ops.append(f"BT /F1 10 Tf 50 {y} Td ({safe}) Tj ET")
         y -= 14
         if y < 50:
+            truncated = True
             break
 
     stream_content = "\n".join(text_ops)
@@ -85,7 +90,7 @@ def _build_pdf(lines: list[str]) -> bytes:
         + b"\n%%EOF\n"
     )
 
-    return header + body + xref + trailer
+    return header + body + xref + trailer, truncated
 
 
 def _build_narrative(target_ip: str, sessions: list, attacks: list, annotations: list) -> list[str]:
@@ -93,10 +98,11 @@ def _build_narrative(target_ip: str, sessions: list, attacks: list, annotations:
     lines = []
 
     # 분석 기간
-    ts_list = [s.get("start_ts", 0) if isinstance(s, dict) else getattr(s, "start_ts", 0) for s in sessions]
-    if ts_list:
-        t_start = min(ts_list)
-        t_end = max(ts_list)
+    start_ts_list = [s.get("start_ts", 0) if isinstance(s, dict) else getattr(s, "start_ts", 0) for s in sessions]
+    end_ts_list = [s.get("end_ts", 0) if isinstance(s, dict) else getattr(s, "end_ts", 0) for s in sessions]
+    if start_ts_list:
+        t_start = min(start_ts_list)
+        t_end = max(end_ts_list)
         duration_s = max(int(t_end - t_start), 1)
         start_str = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(t_start))
         lines += [
@@ -148,7 +154,7 @@ def _build_narrative(target_ip: str, sessions: list, attacks: list, annotations:
 
 
 class PdfExporter:
-    def generate(self, analysis_result: dict, output_path: Path | None = None) -> Path:
+    def generate(self, analysis_result: dict, output_path: Path | None = None) -> tuple[Path, bool]:
         target_ip = analysis_result.get("target_ip", "unknown")
         sessions = analysis_result.get("sessions", [])
         attacks = analysis_result.get("attacks", [])
@@ -180,7 +186,7 @@ class PdfExporter:
             byt = (s.get("bytes_sent", 0) + s.get("bytes_recv", 0)) if isinstance(s, dict) else (getattr(s, "bytes_sent", 0) + getattr(s, "bytes_recv", 0))
             lines.append(f"  {src} -> {dst}:{dport} [{proto}]  {byt:,} bytes")
 
-        pdf_bytes = _build_pdf(lines)
+        pdf_bytes, truncated = _build_pdf(lines)
 
         if output_path is None:
             tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
@@ -189,4 +195,4 @@ class PdfExporter:
 
         output_path = Path(output_path)
         output_path.write_bytes(pdf_bytes)
-        return output_path
+        return output_path, truncated

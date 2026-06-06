@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { getDrilldown } from '../api'
 import type { IpRankEntry, DrilldownSession } from '../api'
 
-interface Props { data: IpRankEntry[]; uploadId?: string }
+interface Props {
+  data: IpRankEntry[]
+  uploadId?: string
+  onFlowSelect?: (sessionId: string) => void
+}
 
 function fmt(b: number) {
   if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB'
@@ -16,7 +20,7 @@ function fmtTs(ts: number) {
 
 interface DrilldownModal { ip: string; sessions: DrilldownSession[]; count: number }
 
-export function Panel6IpRanking({ data, uploadId }: Props) {
+export function Panel6IpRanking({ data, uploadId, onFlowSelect }: Props) {
   const rows = (data ?? []).slice(0, 20)
   const [modal, setModal] = useState<DrilldownModal | null>(null)
   const [loading, setLoading] = useState(false)
@@ -29,6 +33,13 @@ export function Panel6IpRanking({ data, uploadId }: Props) {
       setModal({ ip: r.ip, sessions: r.sessions, count: r.session_count })
     } catch (_) { /* ignore */ }
     finally { setLoading(false) }
+  }
+
+  const handleSessionClick = (sessionId: string) => {
+    if (onFlowSelect) {
+      setModal(null)
+      onFlowSelect(sessionId)
+    }
   }
 
   if (!rows.length) return <div className="no-data">데이터 없음</div>
@@ -63,12 +74,15 @@ export function Panel6IpRanking({ data, uploadId }: Props) {
           </div>
           <table className="mini-table full-width">
             <thead>
-              <tr><th>대상</th><th>포트</th><th>프로토콜</th><th>바이트</th><th>시작</th><th>RST</th></tr>
+              <tr>
+                <th>대상</th><th>포트</th><th>프로토콜</th><th>바이트</th><th>시작</th><th>RST</th>
+                {onFlowSelect && <th>Flow</th>}
+              </tr>
             </thead>
             <tbody>
               {modal.sessions.map((s) => {
-                const peer = s.src_ip === modal.ip ? s.dst_ip : s.src_ip
-                const port = s.src_ip === modal.ip ? s.dst_port : s.src_port
+                const peer  = s.src_ip === modal.ip ? s.dst_ip  : s.src_ip
+                const port  = s.src_ip === modal.ip ? s.dst_port : s.src_port
                 const total = s.bytes_sent + s.bytes_recv
                 return (
                   <tr key={s.session_id} className={s.rst ? 'row-error' : ''}>
@@ -78,6 +92,17 @@ export function Panel6IpRanking({ data, uploadId }: Props) {
                     <td>{fmt(total)}</td>
                     <td>{fmtTs(s.start_ts)}</td>
                     <td>{s.rst ? '⚠' : ''}</td>
+                    {onFlowSelect && (
+                      <td>
+                        <button
+                          className="flow-open-btn"
+                          onClick={() => handleSessionClick(s.session_id)}
+                          title="패킷 뷰어 열기"
+                        >
+                          패킷 ▶
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 )
               })}

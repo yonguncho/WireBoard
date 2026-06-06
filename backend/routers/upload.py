@@ -66,19 +66,25 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
 
     parse_warnings: list[str] = []
     sessions = None
+    pkt_map: dict = {}
     source_type = None
 
     for parser in _PARSERS:
         if parser.detect(raw):
             try:
-                sessions = parser.parse(raw, parse_warnings=parse_warnings)
+                result = parser.parse(raw, parse_warnings=parse_warnings)
+                # PcapParser returns (sessions, pkt_map); legacy parsers return list
+                if isinstance(result, tuple):
+                    sessions, pkt_map = result
+                else:
+                    sessions, pkt_map = result, {}
                 source_type = _source_type(parser)
                 logger.info("파일 파싱 완료: parser=%s sessions=%d warnings=%d",
                             type(parser).__name__, len(sessions), len(parse_warnings))
                 break
             except (ValueError, KeyError, TypeError, json.JSONDecodeError, ValidationError) as exc:
                 logger.warning("파서 예외: parser=%s error=%s", type(parser).__name__, exc)
-                parse_warnings.append(str(exc))
+                parse_warnings.append(f"{type(exc).__name__}: {exc}")
 
     if sessions is None:
         if ext == ".log":
@@ -92,7 +98,12 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
     sessions = SessionNormalizer().normalize(sessions)
 
     upload_id = str(uuid.uuid4())
-    capture = ParsedCapture(sessions=sessions, source_type=source_type, parse_warnings=parse_warnings)
+    capture = ParsedCapture(
+        sessions=sessions,
+        source_type=source_type,
+        parse_warnings=parse_warnings,
+        packet_map=pkt_map,
+    )
     request.app.state.session_store.put(upload_id, capture)
 
     logger.info("업로드 완료: upload_id=%s source=%s sessions=%d",

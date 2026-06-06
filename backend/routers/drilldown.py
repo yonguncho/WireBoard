@@ -1,19 +1,17 @@
 """GET /api/drilldown/{upload_id}?ip=<ip> — IP별 세션 드릴다운."""
-import re
-
 from fastapi import APIRouter, HTTPException, Query, Request
+
+from utils.constants import UUID_RE, IPv4_RE
 
 router = APIRouter()
 
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
-)
-
 
 @router.get("/api/drilldown/{upload_id}")
-async def drilldown(upload_id: str, ip: str = Query(..., description="드릴다운할 IP 주소"), request: Request = None):
-    if not _UUID_RE.match(upload_id):
+async def drilldown(request: Request, upload_id: str, ip: str = Query(..., description="드릴다운할 IP 주소")):
+    if not UUID_RE.match(upload_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "upload_id must be a valid UUID"})
+    if not IPv4_RE.match(ip):
+        raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": "ip must be a valid IPv4 address"})
     try:
         capture = request.app.state.session_store.get(upload_id)
     except KeyError:

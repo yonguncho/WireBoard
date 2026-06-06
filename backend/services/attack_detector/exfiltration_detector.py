@@ -59,6 +59,7 @@ class ExfiltrationDetector:
                 severity=severity,
                 mitre_id="T1041",
                 description=f"{src_ip}: {connections}개 외부 연결, {bytes_out // _MB} MB 전송 (아웃바운드 {outbound_ratio:.0%})",
+                src_ip=src_ip,
             )
 
             if any(s.confidence == "low" for s in grp):

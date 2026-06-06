@@ -16,6 +16,7 @@ class ParsedCapture:
     parse_warnings: list = field(default_factory=list)
     target_ip: str = ""
     attacks: list = field(default_factory=list)
+    packet_map: dict = field(default_factory=dict)  # session_id -> list[PacketRecord]
 
 
 class SessionStore:

@@ -87,6 +87,31 @@ export interface DnsEntry { domain: string; type: string; response?: string; nxd
 export interface ConvEntry { src: string; dst: string; packets: number; bytes: number; duration_s: number }
 export interface AttackEntry { attack_type: string; severity: string; mitre_id: string; description: string; src_ip?: string }
 
+export async function getSummary(upload_id: string): Promise<SummaryData> {
+  const r = await fetch(`${BASE}/api/summary/${upload_id}`)
+  if (!r.ok) return handleError(r, '요약 로드 실패')
+  return r.json()
+}
+
+export interface SummaryData {
+  headline: string
+  narrative: string
+  risk_level: 'HIGH' | 'MEDIUM' | 'LOW' | 'CLEAN'
+  attacker_ips: string[]
+  victim_ips: string[]
+  recommendations: string[]
+  attack_timeline: AttackTimelineEntry[]
+  attack_explanations: Record<string, string>
+}
+
+export interface AttackTimelineEntry {
+  ts: number
+  attack_type: string
+  severity: string
+  mitre_id: string
+  description: string
+}
+
 export interface DrilldownSession {
   session_id: string; src_ip: string; dst_ip: string
   src_port: number; dst_port: number; protocol: string
@@ -94,3 +119,104 @@ export interface DrilldownSession {
   start_ts: number; end_ts: number; duration_s: number; rst: boolean
 }
 export interface DrilldownResult { ip: string; session_count: number; sessions: DrilldownSession[] }
+
+export interface FlowPacket {
+  ts: number; rel_ts: number; direction: 'fwd' | 'rev'
+  proto: string; seq: number; ack: number; flags: string
+  length: number; payload_len: number; payload_hex: string
+}
+export interface FlowSession {
+  session_id: string; src_ip: string; dst_ip: string
+  src_port: number; dst_port: number; protocol: string
+  packet_count: number; bytes_sent: number; bytes_recv: number
+  start_ts: number; end_ts: number; duration_s: number; rst: boolean
+}
+export interface FlowData {
+  session: FlowSession
+  packets: FlowPacket[]
+  packet_count: number
+  truncated: boolean
+}
+
+export async function getFlow(upload_id: string, session_id: string): Promise<FlowData> {
+  const r = await fetch(`${BASE}/api/flow/${upload_id}?session_id=${encodeURIComponent(session_id)}`)
+  if (!r.ok) return handleError(r, '흐름 로드 실패')
+  return r.json()
+}
+
+export interface PacketEntry {
+  no: number; ts: number; rel_ts: number
+  src_ip: string; src_port: number
+  dst_ip: string; dst_port: number
+  proto: string; seq: number; ack: number; flags: string
+  length: number; payload_len: number; payload_hex: string
+  session_id: string
+}
+export interface PacketListData {
+  total: number; total_unfiltered: number; truncated: boolean
+  offset: number; limit: number
+  packets: PacketEntry[]
+}
+
+export async function getPackets(upload_id: string, queryString: string): Promise<PacketListData> {
+  const r = await fetch(`${BASE}/api/packets/${upload_id}?${queryString}`)
+  if (!r.ok) return handleError(r, '패킷 목록 로드 실패')
+  return r.json()
+}
+
+export async function exportJson(upload_id: string): Promise<void> {
+  const r = await fetch(`${BASE}/api/export/${upload_id}`)
+  if (!r.ok) return handleError(r, 'JSON 내보내기 실패')
+  const blob = await r.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `wireboard_${upload_id.slice(0, 8)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export async function exportPdf(upload_id: string): Promise<void> {
+  const r = await fetch(`${BASE}/api/export/${upload_id}/pdf`, { method: 'POST' })
+  if (!r.ok) return handleError(r, 'PDF 내보내기 실패')
+  const blob = await r.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `wireboard_${upload_id.slice(0, 8)}.pdf`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export interface CompareResult {
+  new_ips: string[]
+  removed_ips: string[]
+  common_ips: string[]
+  new_ports: number[]
+  traffic_delta_pct: number | null
+  protocol_diff: Record<string, { a: number; b: number }>
+  byte_ratio: { a_total: number; b_total: number }
+}
+
+export async function compareCaptures(base_upload_id: string, current_upload_id: string): Promise<CompareResult> {
+  const r = await fetch(`${BASE}/api/compare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base_upload_id, current_upload_id }),
+  })
+  if (!r.ok) return handleError(r, '비교 분석 실패')
+  return r.json()
+}
+
+export interface Annotation {
+  upload_id: string
+  start_ts: number
+  end_ts: number
+  comment: string
+}
+
+export async function getAnnotations(upload_id: string): Promise<Annotation[]> {
+  const r = await fetch(`${BASE}/api/annotations/${upload_id}`)
+  if (!r.ok) return handleError(r, '어노테이션 로드 실패')
+  return r.json()
+}

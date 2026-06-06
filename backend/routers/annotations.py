@@ -1,26 +1,32 @@
 """POST /api/annotations + GET /api/annotations/{upload_id} — 어노테이션 관리."""
-import re
+import math
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
+
+from utils.constants import UUID_RE
 
 router = APIRouter()
-
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
-)
 
 
 class AnnotationCreate(BaseModel):
     upload_id: str
     start_ts: float
     end_ts: float
-    comment: str
+    comment: str = Field(..., max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_ts(self) -> "AnnotationCreate":
+        if not math.isfinite(self.start_ts) or self.start_ts < 0:
+            raise ValueError("start_ts must be finite and non-negative")
+        if not math.isfinite(self.end_ts) or self.end_ts < self.start_ts:
+            raise ValueError("end_ts must be finite and >= start_ts")
+        return self
 
 
 @router.post("/api/annotations", status_code=201)
 async def create_annotation(body: AnnotationCreate, request: Request):
-    if not _UUID_RE.match(body.upload_id):
+    if not UUID_RE.match(body.upload_id):
         raise HTTPException(
             status_code=400,
             detail={"code": "invalid_uuid", "msg": "upload_id must be a valid UUID"},
@@ -38,7 +44,7 @@ async def create_annotation(body: AnnotationCreate, request: Request):
 
 @router.get("/api/annotations/{upload_id}")
 async def get_annotations(upload_id: str, request: Request):
-    if not _UUID_RE.match(upload_id):
+    if not UUID_RE.match(upload_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "upload_id must be a valid UUID"})
     try:
         request.app.state.session_store.get(upload_id)

@@ -60,6 +60,12 @@ _PROTOCOL_KEYWORDS: dict[str, str] = {
     "thrift": "tcp",
 }
 
+# 키워드별 word-boundary 패턴 사전 컴파일 (sftp/tftp가 ftp를 포함하는 문제 방지)
+_PROTOCOL_RE: dict[str, re.Pattern] = {
+    kw: re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
+    for kw in _PROTOCOL_KEYWORDS
+}
+
 _IPv4_PATTERN = re.compile(
     r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b"
 )
@@ -67,10 +73,6 @@ _PORT_PATTERN = re.compile(r"\b(?:port|포트)\s*[=:\s]?\s*(\d{1,5})\b", re.IGNO
 _PORT_BARE = re.compile(r"\b(\d{1,5})\s*(?:번?\s*포트|번?\s*port)\b", re.IGNORECASE)
 _SRC_KEYWORDS = re.compile(r"(?:from|src|source|출발|에서|보낸)", re.IGNORECASE)
 _DST_KEYWORDS = re.compile(r"(?:to|dst|dest|destination|목적지|도착|에게|로\s*가는)", re.IGNORECASE)
-
-UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
-)
 
 
 @dataclass
@@ -91,16 +93,11 @@ def _extract_ports(query: str) -> list[str]:
 
 
 def _extract_protocols(query: str) -> list[str]:
-    lower = query.lower()
     found = []
     for kw, expr in _PROTOCOL_KEYWORDS.items():
-        if kw in lower:
+        if _PROTOCOL_RE[kw].search(query):
             found.append(expr)
-    result = list(dict.fromkeys(found))
-    # "https" maps to "tls"; remove the spurious "http" match it also triggers
-    if "tls" in result and "http" in result:
-        result.remove("http")
-    return result
+    return list(dict.fromkeys(found))
 
 
 def _classify_ip_direction(query: str, ip: str) -> str:
