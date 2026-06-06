@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { uploadPcap, analyzePcap, getPanels, filterSessions, getSummary, exportJson, exportPdf } from './api'
+import { useState, useCallback, useEffect } from 'react'
+import { uploadPcap, analyzePcap, getPanels, filterSessions, getSummary, exportJson, exportPdf, exportIoc } from './api'
 import type { PanelData, SummaryData } from './api'
 import { NarrativeSummary } from './panels/NarrativeSummary'
 import { AttackTimeline } from './panels/AttackTimeline'
@@ -7,6 +7,7 @@ import { DefensePanel } from './panels/DefensePanel'
 import { FlowViewer } from './panels/FlowViewer'
 import { PacketList } from './panels/PacketList'
 import { ComparePanel } from './panels/ComparePanel'
+import { GeoIpPanel } from './panels/GeoIpPanel'
 import { Panel1Ip } from './panels/Panel1Ip'
 import { Panel2Protocol } from './panels/Panel2Protocol'
 import { Panel3Timeline } from './panels/Panel3Timeline'
@@ -17,11 +18,12 @@ import { Panel7Tls } from './panels/Panel7Tls'
 import { Panel8Dns } from './panels/Panel8Dns'
 import { Panel9Conversations } from './panels/Panel9Conversations'
 import { Panel10Attacks } from './panels/Panel10Attacks'
+import { YaraPanel } from './panels/YaraPanel'
 import './App.css'
 
 const ALLOWED = /\.(pcap|pcapng|cap|har|log|txt|tcpdump)$/i
 
-type Tab = 'analysis' | 'traffic' | 'protocol' | 'packets' | 'compare'
+type Tab = 'analysis' | 'traffic' | 'protocol' | 'packets' | 'compare' | 'geoip' | 'yara'
 
 interface UploadMeta {
   uploadId: string
@@ -61,6 +63,14 @@ export default function App() {
   const [targetIp, setTargetIp] = useState('')
   const [tab, setTab] = useState<Tab>('analysis')
   const [flowSessionId, setFlowSessionId] = useState<string | null>(null)
+  const [theme, setTheme] = useState<'dark' | 'light'>(() =>
+    (localStorage.getItem('wb-theme') as 'dark' | 'light') ?? 'dark'
+  )
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('wb-theme', theme)
+  }, [theme])
 
   const handleFile = useCallback(async (file: File) => {
     if (!ALLOWED.test(file.name)) {
@@ -123,7 +133,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v5.2</span>
+          <span className="header-ver">v5.4.1</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -136,12 +146,33 @@ export default function App() {
             <button className="btn-export" title="PDF 리포트" onClick={() => exportPdf(meta.uploadId).catch(e => setError(e.message))}>
               ↓ PDF
             </button>
+            <button className="btn-export" title="IOC 내보내기 (CSV)" onClick={async () => {
+              try {
+                const blob = await exportIoc(meta.uploadId)
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `ioc_${meta.uploadId.slice(0, 8)}.csv`
+                a.click()
+                URL.revokeObjectURL(url)
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e))
+              }
+            }}>
+              ↓ IOC
+            </button>
             <button className="btn-new-file" onClick={() => { setMeta(null); setPanels(null); setSummary(null); setError(null) }}>
               새 파일
             </button>
           </div>
         )}
         {!meta && <span className="header-tagline">PCAP 공격/방어 분석 도구</span>}
+        <button
+          className="theme-toggle"
+          onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+        >
+          {theme === 'dark' ? '☀ 라이트' : '◑ 다크'}
+        </button>
       </header>
 
       {/* Upload Page */}
@@ -358,6 +389,26 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* GeoIP 탭 */}
+            {tab === 'geoip' && (
+              <div className="panel-card wide">
+                <div className="panel-card-title">공격자 IP 지리 분포</div>
+                <div className="panel-card-body">
+                  <GeoIpPanel uploadId={meta.uploadId} />
+                </div>
+              </div>
+            )}
+
+            {/* YARA 탭 */}
+            {tab === 'yara' && (
+              <div className="panel-card wide">
+                <div className="panel-card-title">YARA 서명 탐지</div>
+                <div className="panel-card-body">
+                  <YaraPanel uploadId={meta.uploadId} />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -389,4 +440,6 @@ const TAB_META: Record<Tab, { label: string; icon: string }> = {
   protocol: { label: '프로토콜', icon: '◎' },
   packets:  { label: '패킷 뷰어', icon: '📦' },
   compare:  { label: '비교 분석', icon: '⇄' },
+  geoip:    { label: 'GeoIP',    icon: '🌏' },
+  yara:     { label: 'YARA',     icon: '🔍' },
 }

@@ -182,7 +182,7 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
                   </td>
                   <td className="mono">{p.length}</td>
                   <td className="mono pkt-seq">
-                    {p.proto === 'TCP' && p.seq ? p.seq.toLocaleString() : '—'}
+                    {p.proto === 'TCP' && p.seq != null ? p.seq.toLocaleString() : '—'}
                   </td>
                 </tr>
               )

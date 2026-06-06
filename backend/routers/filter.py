@@ -69,9 +69,9 @@ def _session_matches(session, filter_expr: str, translator_tokens: list[str]) ->
             if session.dst_ip != ip:
                 return False
         elif token.startswith("(ip.src =="):
-            m = re.search(r"ip\.src == (\S+) or ip\.dst == (\S+)", token)
+            m = re.search(r"ip\.src == ([\d.]+)", token)
             if m:
-                ip = m.group(1).rstrip(")")
+                ip = m.group(1)
                 if session.src_ip != ip and session.dst_ip != ip:
                     return False
         elif "tcp.port ==" in token or "udp.port ==" in token:

@@ -30,7 +30,11 @@ from routers.drilldown import router as drilldown_router
 from routers.summary import router as summary_router
 from routers.flow import router as flow_router
 from routers.packets import router as packets_router
+from routers.geoip import router as geoip_router
+from routers.yara_scan import router as yara_router
 from store.session_store import SessionStore
+from services.analytics.geoip_analyzer import GeoIpAnalyzer
+from services.attack_detector.yara_detector import YaraDetector
 
 
 class StructuredLoggingMiddleware(BaseHTTPMiddleware):
@@ -72,7 +76,7 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
             raise
 
 
-app = FastAPI(title="WireBoard", version="5.4.0")
+app = FastAPI(title="WireBoard", version="5.4.1")
 app.add_middleware(StructuredLoggingMiddleware)
 
 _annotations_store: defaultdict = defaultdict(list)
@@ -81,6 +85,8 @@ app.state.session_store = SessionStore(
     ttl_seconds=900.0,  # 15분 — integration.md §4 TTL_SECONDS=900
     on_evict=lambda key: _annotations_store.pop(key, None),
 )
+app.state.geoip_analyzer = GeoIpAnalyzer()
+app.state.yara_detector = YaraDetector()
 logger.info("WireBoard 서버 초기화 완료 (session TTL=900s)")
 
 app.include_router(upload_router)
@@ -94,6 +100,8 @@ app.include_router(drilldown_router)
 app.include_router(summary_router)
 app.include_router(flow_router)
 app.include_router(packets_router)
+app.include_router(geoip_router)
+app.include_router(yara_router)
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(_STATIC_DIR):

@@ -150,12 +150,12 @@ class TestHarParser:
         with pytest.raises((ValueError, KeyError)):
             HarParser().parse(b"{not json}")
 
-    def test_har_missing_entries_raises(self) -> None:
+    def test_har_missing_entries_returns_empty(self) -> None:
         import json
         from services.parser.har_parser import HarParser
         bad_har = json.dumps({"log": {"version": "1.2"}}).encode()
-        with pytest.raises((ValueError, KeyError)):
-            HarParser().parse(bad_har)
+        sessions = HarParser().parse(bad_har)
+        assert sessions == []
 
 
 # ─────────────────────── FortiGateParser ────────────────────────────

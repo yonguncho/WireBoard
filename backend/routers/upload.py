@@ -2,8 +2,6 @@
 import json
 import logging
 import uuid
-from typing import Annotated
-
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -43,7 +41,8 @@ async def _read_stream_limited(file: UploadFile, max_bytes: int) -> bytes:
 @router.post("/api/upload")
 async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
     filename = file.filename or ""
-    ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+    _suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    ext = ("." + _suffix) if _suffix else ""
 
     if ext not in _ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=415, detail=f"허용되지 않는 파일 확장자: {ext!r}")

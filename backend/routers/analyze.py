@@ -4,8 +4,6 @@ import gc
 import logging
 import time
 from collections import Counter
-from typing import Annotated
-
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -61,13 +59,17 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
     if req_body.target_ip is not None:
         effective_target_ip = req_body.target_ip
     else:
-        src_counts = Counter(s.src_ip for s in sessions)
-        if not src_counts:
+        if not sessions:
             raise HTTPException(
                 status_code=422,
                 detail={"code": "no_sessions", "msg": "캡처 파일에 분석 가능한 세션이 없습니다"},
             )
-        effective_target_ip = src_counts.most_common(1)[0][0]
+        # src+dst 양방향으로 등장 횟수 집계 → 가장 중심적인 호스트 선택
+        ip_counts: Counter = Counter()
+        for s in sessions:
+            ip_counts[s.src_ip] += 1
+            ip_counts[s.dst_ip] += 1
+        effective_target_ip = ip_counts.most_common(1)[0][0]
         logger.info("target_ip 자동 감지: %s", effective_target_ip)
 
     target_sessions = [

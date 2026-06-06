@@ -106,9 +106,9 @@ async def get_packets(
     if dst_ip:
         flat = [p for p in flat if p["dst_ip"] == dst_ip]
     if proto:
-        flat = [p for p in flat if p["proto"].upper() == proto.upper()]
+        flat = [p for p in flat if p.get("proto") and p["proto"].upper() == proto.upper()]
     if flags:
-        flat = [p for p in flat if flags.upper() in p["flags"].upper()]
+        flat = [p for p in flat if p.get("flags") and flags.upper() in p["flags"].upper()]
     # session_id 필터는 source 단계(iter_items)에서 처리됨
 
     total = len(flat)

@@ -77,7 +77,7 @@ export interface PanelData {
   panel10_attacks: AttackEntry[]
 }
 
-export interface IpEntry { ip: string; bytes: number }
+export interface IpEntry { ip: string; bytes: number; is_private?: boolean }
 export interface PortEntry { port: number; count: number }
 export interface BucketEntry { ts: number; bytes: number }
 export interface ErrorEntry { status_code: number; count: number; path?: string }
@@ -110,6 +110,7 @@ export interface AttackTimelineEntry {
   severity: string
   mitre_id: string
   description: string
+  src_ip?: string
 }
 
 export interface DrilldownSession {
@@ -186,6 +187,12 @@ export async function exportPdf(upload_id: string): Promise<void> {
   a.download = `wireboard_${upload_id.slice(0, 8)}.pdf`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+export async function exportIoc(uploadId: string): Promise<Blob> {
+  const r = await fetch(`${BASE}/api/export/${uploadId}/ioc`)
+  if (!r.ok) return handleError(r, 'IOC 내보내기 실패')
+  return r.blob()
 }
 
 export interface CompareResult {

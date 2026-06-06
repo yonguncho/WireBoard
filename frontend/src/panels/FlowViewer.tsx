@@ -1,6 +1,44 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { getFlow } from '../api'
 import type { FlowData, FlowPacket } from '../api'
+
+function hexToAscii(hex: string): string {
+  const bytes = hex.replace(/\s+/g, '').match(/.{1,2}/g) ?? []
+  return bytes.map(b => {
+    const code = parseInt(b, 16)
+    return (code >= 32 && code < 127) || code === 9 || code === 10 || code === 13
+      ? String.fromCharCode(code) : '.'
+  }).join('')
+}
+
+function isHttpContent(text: string): boolean {
+  return /^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS|HTTP\/[12])/.test(text.trimStart())
+}
+
+function ReplayView({ packets }: { packets: FlowPacket[] }) {
+  const segments = useMemo(() => {
+    return packets
+      .filter(p => p.payload_hex && p.payload_len > 0)
+      .map(p => ({ dir: p.direction, text: hexToAscii(p.payload_hex!) }))
+      .filter(s => s.text.trim().length > 0)
+  }, [packets])
+
+  if (!segments.length) return <div className="replay-empty">재생할 페이로드 없음</div>
+
+  const hasHttp = segments.some(s => isHttpContent(s.text))
+
+  return (
+    <div className="replay-view">
+      {hasHttp && <div className="replay-badge">HTTP 세션 감지됨</div>}
+      {segments.map((seg, i) => (
+        <div key={i} className={`replay-segment ${seg.dir === 'fwd' ? 'replay-fwd' : 'replay-rev'}`}>
+          <div className="replay-dir-label">{seg.dir === 'fwd' ? '→ 클라이언트 송신' : '← 서버 응답'}</div>
+          <pre className="replay-text">{seg.text}</pre>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 interface Props {
   uploadId: string
@@ -66,6 +104,7 @@ function PacketRow({ pkt, idx, base }: { pkt: FlowPacket; idx: number; base: str
 export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
   const [data, setData] = useState<FlowData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [view, setView] = useState<'packets' | 'replay'>('packets')
 
   useEffect(() => {
     setData(null); setError(null)
@@ -103,6 +142,10 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
             <span>↑ {fmtBytes(s.bytes_sent)}</span>
             <span>↓ {fmtBytes(s.bytes_recv)}</span>
             <span>⏱ {s.duration_s.toFixed(3)} s</span>
+            <div className="flow-view-tabs">
+              <button className={`flow-tab ${view === 'packets' ? 'active' : ''}`} onClick={() => setView('packets')}>패킷</button>
+              <button className={`flow-tab ${view === 'replay' ? 'active' : ''}`} onClick={() => setView('replay')}>재생</button>
+            </div>
           </div>
         )}
 
@@ -113,7 +156,7 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
         {!data && !error && <div className="flow-loading"><div className="spinner sm" />로드 중...</div>}
 
         {/* 패킷 테이블 */}
-        {data && data.packets.length > 0 && s && (
+        {data && view === 'packets' && data.packets.length > 0 && s && (
           <div className="flow-table-wrap">
             <table className="flow-table">
               <thead>
@@ -135,6 +178,11 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
               </tbody>
             </table>
           </div>
+        )}
+
+        {/* 세션 재생 */}
+        {data && view === 'replay' && (
+          <ReplayView packets={data.packets} />
         )}
 
         {data && data.packets.length === 0 && (

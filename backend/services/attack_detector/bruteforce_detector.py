@@ -70,15 +70,21 @@ class BruteForceDetector:
         rst_sessions = [s for s in sessions if s.rst]
         if rst_sessions:
             windows: dict[int, int] = defaultdict(int)
+            windows_src: dict[int, dict[str, int]] = defaultdict(lambda: defaultdict(int))
             for s in rst_sessions:
-                windows[int(s.start_ts)] += 1
+                sec = int(s.start_ts)
+                windows[sec] += 1
+                windows_src[sec][s.src_ip] += 1
             max_rst_per_sec = max(windows.values())
             if max_rst_per_sec >= _RST_PER_SEC_THRESHOLD:
+                peak_sec = max(windows, key=windows.__getitem__)
+                rst_src_ip = max(windows_src[peak_sec], key=windows_src[peak_sec].__getitem__, default="")
                 rst_result = AttackResult(
                     attack_type="BruteForce",
                     severity="high" if max_rst_per_sec >= _ATTEMPTS_HIGH else "medium",
                     mitre_id="T1110",
                     description=f"RST flood: {max_rst_per_sec}회/초 탐지",
+                    src_ip=rst_src_ip,
                 )
                 if any(s.confidence == "low" for s in rst_sessions):
                     rst_result = rst_result.downgrade()

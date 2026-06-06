@@ -19,7 +19,7 @@ class HarParser:
             if not text.strip().startswith("{"):
                 return False
             obj = json.loads(text)
-            return "log" in obj
+            return isinstance(obj.get("log"), dict) and "entries" in obj["log"]
         except (json.JSONDecodeError, UnicodeDecodeError):
             return False
 
@@ -30,8 +30,8 @@ class HarParser:
             raise ValueError(f"UTF-8 디코딩 실패: {exc}") from exc
 
         obj = json.loads(text)
-        log = obj["log"]
-        entries = log["entries"]
+        log = obj.get("log") or {}
+        entries = log.get("entries", [])
 
         sessions: list[SessionModel] = []
         for i, entry in enumerate(entries):
@@ -62,7 +62,7 @@ class HarParser:
             except (ValueError, AttributeError):
                 start_ts = datetime.now().timestamp() + i * 0.001
 
-            resp = entry.get("response", {})
+            resp = entry.get("response") or {}
             sessions.append(SessionModel(
                 session_id=str(uuid.uuid4()),
                 src_ip="127.0.0.1",
