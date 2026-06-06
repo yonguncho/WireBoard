@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { uploadPcap, analyzePcap, getPanels, filterSessions, getSummary, exportJson, exportPdf, exportIoc } from './api'
+import { uploadPcap, analyzePcap, getPanels, getSummary, exportJson, exportPdf, exportIoc } from './api'
 import type { PanelData, SummaryData } from './api'
 import { NarrativeSummary } from './panels/NarrativeSummary'
 import { AttackTimeline } from './panels/AttackTimeline'
@@ -20,11 +20,12 @@ import { Panel9Conversations } from './panels/Panel9Conversations'
 import { Panel10Attacks } from './panels/Panel10Attacks'
 import { YaraPanel } from './panels/YaraPanel'
 import { NetworkHealthPanel } from './panels/NetworkHealthPanel'
+import { SessionExplorer } from './panels/SessionExplorer'
 import './App.css'
 
 const ALLOWED = /\.(pcap|pcapng|cap|har|log|txt|tcpdump)$/i
 
-type Tab = 'analysis' | 'traffic' | 'protocol' | 'packets' | 'health' | 'compare' | 'geoip' | 'yara'
+type Tab = 'overview' | 'analysis' | 'traffic' | 'protocol' | 'packets' | 'health' | 'compare' | 'geoip' | 'yara'
 
 interface UploadMeta {
   uploadId: string
@@ -58,11 +59,9 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [filterQuery, setFilterQuery] = useState('')
-  const [filterResult, setFilterResult] = useState<{ filter_expr: string; matched_count: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const [targetIp, setTargetIp] = useState('')
-  const [tab, setTab] = useState<Tab>('analysis')
+  const [tab, setTab] = useState<Tab>('overview')
   const [flowSessionId, setFlowSessionId] = useState<string | null>(null)
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     (localStorage.getItem('wb-theme') as 'dark' | 'light') ?? 'dark'
@@ -84,7 +83,6 @@ export default function App() {
     setPanels(null)
     setMeta(null)
     setSummary(null)
-    setFilterResult(null)
     try {
       const up = await uploadPcap(file)
       if (up.parse_warnings?.length) console.warn('Parse warnings:', up.parse_warnings)
@@ -101,7 +99,7 @@ export default function App() {
       setMeta({ uploadId: up.upload_id, filename: file.name, sessionCount: up.session_count, sourceType: up.source_type })
       setPanels(data)
       setSummary(sum)
-      setTab('analysis')
+      setTab('overview')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -117,16 +115,6 @@ export default function App() {
     if (file) handleFile(file)
   }, [handleFile])
 
-  const runFilter = async () => {
-    if (!meta?.uploadId || !filterQuery.trim()) return
-    try {
-      const r = await filterSessions(meta.uploadId, filterQuery)
-      setFilterResult({ filter_expr: r.filter_expr, matched_count: r.matched_count })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
   return (
     <div className="app">
       {/* Header */}
@@ -134,7 +122,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v5.5.0</span>
+          <span className="header-ver">v5.5.3</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -236,42 +224,6 @@ export default function App() {
       {panels && meta && summary && (
         <div className="dashboard">
 
-          {/* Narrative Summary — 항상 최상단 */}
-          <div className="summary-section">
-            <NarrativeSummary data={summary} />
-          </div>
-
-          {/* Summary Stats Bar */}
-          <div className="summary-bar">
-            <StatCard label="세션" value={meta.sessionCount.toLocaleString()} />
-            <StatCard label="IP" value={panels.panel6_ip_ranking.length.toString()} />
-            <StatCard
-              label="공격 탐지"
-              value={panels.panel10_attacks.length.toString()}
-              level={panels.panel10_attacks.length > 0 ? 'danger' : 'ok'}
-            />
-            <StatCard
-              label="RST"
-              value={panels.panel5_anomalies.rst_count.toLocaleString()}
-              level={panels.panel5_anomalies.rst_count > 100 ? 'warn' : 'ok'}
-            />
-            <div className="filter-bar">
-              <input
-                className="filter-input"
-                placeholder='필터: "192.168.1.10 DNS" 또는 "port 443"'
-                value={filterQuery}
-                onChange={(e) => setFilterQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && runFilter()}
-              />
-              <button className="filter-btn" onClick={runFilter}>적용</button>
-              {filterResult && (
-                <span className="filter-result">
-                  <code>{filterResult.filter_expr}</code> · <strong>{filterResult.matched_count}</strong>개 매치
-                </span>
-              )}
-            </div>
-          </div>
-
           {error && (
             <div className="error-banner inline">
               <span className="error-icon">⚠</span>
@@ -296,7 +248,26 @@ export default function App() {
           {/* Tab Content */}
           <div className="panel-grid">
 
+            {/* 개요 탭 — 통계 현황판 + 세션 탐색기 */}
+            {tab === 'overview' && (
+              <div className="panel-card wide" style={{ padding: 0, overflow: 'hidden' }}>
+                <SessionExplorer
+                  uploadId={meta.uploadId}
+                  panels={panels}
+                  sessionCount={meta.sessionCount}
+                  onFlowSelect={setFlowSessionId}
+                />
+              </div>
+            )}
+
             {/* 분석 탭 — 공격 타임라인 + 방어 권고 + 공격 상세 */}
+            {tab === 'analysis' && (
+              <>
+                <div className="summary-section">
+                  <NarrativeSummary data={summary} />
+                </div>
+              </>
+            )}
             {tab === 'analysis' && (
               <>
                 <div className="attack-defense-row">
@@ -427,15 +398,6 @@ export default function App() {
   )
 }
 
-function StatCard({ label, value, level = 'neutral' }: { label: string; value: string; level?: 'ok' | 'warn' | 'danger' | 'neutral' }) {
-  return (
-    <div className={`stat-card level-${level}`}>
-      <div className="stat-val">{value}</div>
-      <div className="stat-label">{label}</div>
-    </div>
-  )
-}
-
 function PCard({ title, children, wide }: { title: string; children: React.ReactNode; wide?: boolean }) {
   return (
     <div className={`panel-card${wide ? ' wide' : ''}`}>
@@ -446,6 +408,7 @@ function PCard({ title, children, wide }: { title: string; children: React.React
 }
 
 const TAB_META: Record<Tab, { label: string; icon: string }> = {
+  overview: { label: '현황판',   icon: '▤' },
   analysis: { label: '공격 분석', icon: '⚡' },
   traffic:  { label: '트래픽',   icon: '↗' },
   protocol: { label: '프로토콜', icon: '◎' },

@@ -9,7 +9,7 @@ import traceback
 import webbrowser
 from pathlib import Path
 
-_VERSION = "5.5.1"
+_VERSION = "5.5.3"
 _DEFAULT_PORT = 8765
 
 _BANNER = """
