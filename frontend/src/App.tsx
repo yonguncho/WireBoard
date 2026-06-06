@@ -19,11 +19,12 @@ import { Panel8Dns } from './panels/Panel8Dns'
 import { Panel9Conversations } from './panels/Panel9Conversations'
 import { Panel10Attacks } from './panels/Panel10Attacks'
 import { YaraPanel } from './panels/YaraPanel'
+import { NetworkHealthPanel } from './panels/NetworkHealthPanel'
 import './App.css'
 
 const ALLOWED = /\.(pcap|pcapng|cap|har|log|txt|tcpdump)$/i
 
-type Tab = 'analysis' | 'traffic' | 'protocol' | 'packets' | 'compare' | 'geoip' | 'yara'
+type Tab = 'analysis' | 'traffic' | 'protocol' | 'packets' | 'health' | 'compare' | 'geoip' | 'yara'
 
 interface UploadMeta {
   uploadId: string
@@ -133,7 +134,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v5.4.2</span>
+          <span className="header-ver">v5.5.0</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -377,6 +378,16 @@ export default function App() {
               </div>
             )}
 
+            {/* 통신 상태 진단 탭 */}
+            {tab === 'health' && (
+              <div className="panel-card wide">
+                <div className="panel-card-title">통신 상태 진단 (RTT · 재전송 · 핸드셰이크)</div>
+                <div className="panel-card-body">
+                  <NetworkHealthPanel uploadId={meta.uploadId} />
+                </div>
+              </div>
+            )}
+
             {/* 비교 탭 */}
             {tab === 'compare' && (
               <div className="panel-card wide">
@@ -439,6 +450,7 @@ const TAB_META: Record<Tab, { label: string; icon: string }> = {
   traffic:  { label: '트래픽',   icon: '↗' },
   protocol: { label: '프로토콜', icon: '◎' },
   packets:  { label: '패킷 뷰어', icon: '📦' },
+  health:   { label: '통신 진단', icon: '🩺' },
   compare:  { label: '비교 분석', icon: '⇄' },
   geoip:    { label: 'GeoIP',    icon: '🌏' },
   yara:     { label: 'YARA',     icon: '🔍' },

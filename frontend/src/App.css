@@ -1563,3 +1563,350 @@ body {
   color: var(--txt);
   word-break: break-word;
 }
+
+/* ── PacketList — info column & expand ──────────────────────────────────── */
+.pkt-info-cell {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--txt-primary);
+  font-size: 11px;
+}
+.hex-expand-hint {
+  color: var(--txt-muted);
+  font-size: 10px;
+  user-select: none;
+}
+.pkt-row-expanded td { background: var(--hover) !important; }
+.pkt-expand-row td {
+  background: var(--bg);
+  padding: 0;
+  border-bottom: 2px solid var(--card-border);
+}
+.pkt-expand-body {
+  padding: 8px 14px 10px;
+}
+.pkt-ascii-body {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--txt-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 260px;
+  overflow-y: auto;
+  line-height: 1.55;
+}
+.pkt-expand-nodata {
+  padding: 8px 0;
+  color: var(--txt-muted);
+  font-size: 12px;
+}
+
+/* Wireshark-style hex dump (used in both PacketList & FlowViewer) */
+.hex-dump-wireshark {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #68d391;
+  white-space: pre;
+  letter-spacing: 0.04em;
+  line-height: 1.7;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+}
+
+/* ── FlowViewer — score badge ───────────────────────────────────────────── */
+.flow-score-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 10px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* ── FlowViewer — replay info tag ──────────────────────────────────────── */
+.replay-info-tag {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--txt-muted);
+  margin-left: 4px;
+}
+
+/* ── FlowViewer — connection analysis ──────────────────────────────────── */
+.conn-analysis {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.conn-score-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+.conn-score-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 3px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.conn-score-num {
+  font-size: 26px;
+  font-weight: 700;
+  font-family: var(--mono);
+  line-height: 1;
+}
+.conn-score-label {
+  font-size: 11px;
+  color: var(--txt-secondary);
+  margin-top: 2px;
+}
+.conn-metrics {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.metric-label {
+  color: var(--txt-secondary);
+  width: 80px;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.metric-value {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.conn-issues {
+  background: rgba(239,68,68,0.06);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.conn-issues-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fc8181;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.conn-issue-item {
+  font-size: 12px;
+  color: var(--txt-primary);
+  padding: 3px 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.conn-issue-icon { color: #f59e0b; }
+.conn-ok-msg {
+  font-size: 13px;
+  color: #22c55e;
+  padding: 12px 0;
+  text-align: center;
+}
+
+/* ── NetworkHealthPanel ──────────────────────────────────────────────────── */
+.nh-init {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 0;
+}
+.nh-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.nh-summary-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--card-border);
+}
+.nh-overall { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.nh-overall-label { font-size: 10px; color: var(--txt-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.nh-score-circle {
+  width: 70px; height: 70px; border-radius: 50%; border: 3px solid;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.nh-score-num { font-size: 22px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+.nh-score-label { font-size: 10px; color: var(--txt-secondary); margin-top: 2px; }
+
+.nh-counts { display: flex; gap: 10px; }
+.nh-count-item {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 10px 16px; border-radius: 8px; cursor: pointer;
+  border: 1px solid transparent; transition: border-color 0.15s;
+}
+.nh-count-item:hover { border-color: var(--card-border); }
+.nh-count-num { font-size: 22px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+.nh-count-label { font-size: 10px; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+.nh-ok  { background: rgba(34,197,94,0.08);  }
+.nh-ok  .nh-count-num  { color: #22c55e; }
+.nh-ok  .nh-count-label { color: #22c55e; }
+.nh-warn { background: rgba(245,158,11,0.08); }
+.nh-warn .nh-count-num  { color: #f59e0b; }
+.nh-warn .nh-count-label { color: #f59e0b; }
+.nh-crit { background: rgba(239,68,68,0.08);  }
+.nh-crit .nh-count-num  { color: #ef4444; }
+.nh-crit .nh-count-label { color: #ef4444; }
+
+.nh-top-issues { flex: 1; min-width: 220px; }
+.nh-top-issues-title { font-size: 10px; font-weight: 600; color: var(--txt-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.nh-top-issue-item { display: flex; gap: 8px; align-items: baseline; font-size: 11px; padding: 2px 0; }
+.nh-top-issue-count { font-family: var(--mono); color: #f59e0b; min-width: 28px; }
+.nh-top-issue-text  { color: var(--txt-secondary); }
+
+.nh-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+
+.nh-body {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.nh-table-wrap {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 480px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+}
+.nh-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.nh-table thead th {
+  position: sticky; top: 0;
+  background: var(--card);
+  color: var(--txt-muted);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--card-border);
+  text-align: left;
+  white-space: nowrap;
+}
+.nh-session-row td {
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  vertical-align: middle;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.nh-session-row:hover td { background: var(--hover); }
+.nh-row-selected td { background: rgba(59,130,246,0.08) !important; }
+
+.nh-score-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--mono);
+  padding: 1px 7px;
+  border-radius: 10px;
+  min-width: 32px;
+  text-align: center;
+}
+.nh-status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.nh-status-정상 { color: #22c55e; background: rgba(34,197,94,0.12); }
+.nh-status-주의 { color: #f59e0b; background: rgba(245,158,11,0.12); }
+.nh-status-이상 { color: #ef4444; background: rgba(239,68,68,0.12); }
+
+.nh-addr   { font-size: 11px; }
+.nh-arrow  { color: var(--txt-muted); }
+.nh-proto  { font-family: var(--mono); font-size: 10px; font-weight: 600; color: #63b3ed; }
+.nh-handshake { color: var(--txt-secondary); font-size: 10px; }
+.nh-root-cause { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--txt-secondary); font-size: 11px; }
+
+/* Detail panel */
+.nh-detail-wrap {
+  width: 340px;
+  flex-shrink: 0;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  position: relative;
+  max-height: 480px;
+  overflow-y: auto;
+}
+.nh-close-btn {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: none; color: var(--txt-muted); cursor: pointer; font-size: 14px;
+}
+.nh-close-btn:hover { color: var(--txt-primary); }
+.nh-detail { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+.nh-detail-header {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding-right: 24px;
+  font-size: 11px; color: var(--txt-secondary);
+}
+.nh-detail-grid { display: flex; flex-direction: column; gap: 8px; }
+.nh-detail-card {
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.nh-detail-card-title {
+  font-size: 10px; font-weight: 600; color: var(--txt-muted);
+  text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+}
+.nh-detail-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11px; padding: 2px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  color: var(--txt-secondary);
+}
+.nh-detail-row .mono { color: var(--txt-primary); }
+
+.nh-issues {
+  background: rgba(239,68,68,0.06);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 6px; padding: 8px 10px;
+}
+.nh-issues-title {
+  font-size: 10px; font-weight: 600; color: #fc8181;
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px;
+}
+.nh-issue-item { font-size: 11px; color: var(--txt-primary); padding: 2px 0; display: flex; align-items: baseline; gap: 5px; }
+.nh-issue-icon { color: #f59e0b; }
+
+.nh-recs {
+  background: rgba(34,197,94,0.05);
+  border: 1px solid rgba(34,197,94,0.18);
+  border-radius: 6px; padding: 8px 10px;
+}
+.nh-recs-title {
+  font-size: 10px; font-weight: 600; color: #68d391;
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px;
+}
+.nh-rec-item { font-size: 11px; color: var(--txt-secondary); padding: 2px 0; display: flex; align-items: baseline; gap: 5px; }
+.nh-rec-icon { color: #68d391; }

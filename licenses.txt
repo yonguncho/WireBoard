@@ -1,0 +1,88 @@
+WireBoard v5.4.0 — Third-Party Licenses
+========================================
+
+This product includes the following open-source components:
+
+------------------------------------------------------------
+FastAPI (MIT License)
+Copyright (c) 2018 Sebastián Ramírez
+https://github.com/tiangolo/fastapi
+------------------------------------------------------------
+
+------------------------------------------------------------
+Uvicorn (BSD 3-Clause License)
+Copyright (c) 2017-present, Encode OSS Ltd.
+https://github.com/encode/uvicorn
+------------------------------------------------------------
+
+------------------------------------------------------------
+Pydantic (MIT License)
+Copyright (c) 2017 Samuel Colvin and other contributors
+https://github.com/pydantic/pydantic
+------------------------------------------------------------
+
+------------------------------------------------------------
+dpkt (BSD 3-Clause License)
+Copyright (c) 2004 Dug Song <dugsong@monkey.org>
+https://github.com/kbandla/dpkt
+------------------------------------------------------------
+
+------------------------------------------------------------
+Scapy (GPL-2.0 License)
+Copyright (c) 2003-2023 Philippe Biondi and contributors
+https://github.com/secdev/scapy
+------------------------------------------------------------
+
+------------------------------------------------------------
+ReportLab (BSD License)
+Copyright (c) 2000-2023 ReportLab Inc.
+https://www.reportlab.com
+------------------------------------------------------------
+
+------------------------------------------------------------
+python-multipart (Apache 2.0 License)
+Copyright (c) 2012 Andrew Dunstan
+https://github.com/Kludex/python-multipart
+------------------------------------------------------------
+
+------------------------------------------------------------
+httpx (BSD 3-Clause License)
+Copyright (c) 2019 Tom Christie and contributors
+https://github.com/encode/httpx
+------------------------------------------------------------
+
+------------------------------------------------------------
+React (MIT License)
+Copyright (c) Meta Platforms, Inc. and affiliates
+https://github.com/facebook/react
+------------------------------------------------------------
+
+------------------------------------------------------------
+Plotly.js (MIT License)
+Copyright (c) 2016-2023 Plotly, Inc.
+https://github.com/plotly/plotly.js
+------------------------------------------------------------
+
+------------------------------------------------------------
+Vite (MIT License)
+Copyright (c) 2019-present, Yuxi (Evan) You and Vite contributors
+https://github.com/vitejs/vite
+------------------------------------------------------------
+
+------------------------------------------------------------
+TypeScript (Apache 2.0 License)
+Copyright (c) Microsoft Corporation
+https://github.com/microsoft/TypeScript
+------------------------------------------------------------
+
+------------------------------------------------------------
+PyInstaller (GPL-2.0 with Bootloader Exception)
+Copyright (c) 2010-2023, PyInstaller Development Team
+https://github.com/pyinstaller/pyinstaller
+
+Note: The Bootloader Exception permits distributing applications
+built with PyInstaller without requiring the application itself
+to be GPL-licensed.
+------------------------------------------------------------
+
+Full license texts are available at the URLs listed above.

@@ -227,3 +227,40 @@ export async function getAnnotations(upload_id: string): Promise<Annotation[]> {
   if (!r.ok) return handleError(r, '어노테이션 로드 실패')
   return r.json()
 }
+
+export interface SessionHealth {
+  session_id: string
+  src_ip: string; dst_ip: string
+  src_port: number; dst_port: number
+  protocol: string
+  duration_s: number
+  packet_count: number
+  bytes_sent: number; bytes_recv: number
+  handshake: string       // COMPLETE | REFUSED | TIMEOUT | HALF_OPEN | N/A
+  rtt_ms: number | null
+  retransmit_count: number
+  retransmit_rate: number
+  rst_type: string        // NONE | EARLY | LATE
+  close_type: string      // NORMAL | RESET | TIMEOUT | N/A
+  score: number
+  status: string          // 정상 | 주의 | 이상
+  issues: string[]
+  root_cause: string
+  recommendations: string[]
+}
+
+export interface NetworkHealthData {
+  total_sessions: number
+  healthy: number
+  warning: number
+  critical: number
+  overall_score: number
+  top_issues: { issue: string; count: number }[]
+  sessions: SessionHealth[]
+}
+
+export async function getNetworkHealth(upload_id: string): Promise<NetworkHealthData> {
+  const r = await fetch(`${BASE}/api/health/${upload_id}`)
+  if (!r.ok) return handleError(r, '통신 상태 진단 실패')
+  return r.json()
+}
