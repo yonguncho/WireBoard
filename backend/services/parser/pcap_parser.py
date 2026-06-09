@@ -17,6 +17,10 @@ _MAGIC_NS_LE = 0xA1B23C4D
 _MAGIC_NS_BE = 0x4D3CB2A1
 _MAGIC_PCAPNG = 0x0A0D0D0A
 
+# 공개 상수 — 테스트에서 import 가능
+PCAP_MAGIC   = _MAGIC_LE
+PCAPNG_MAGIC = _MAGIC_PCAPNG
+
 _VALID_MAGICS_LE = {_MAGIC_LE, _MAGIC_BE, _MAGIC_NS_LE, _MAGIC_NS_BE, _MAGIC_PCAPNG}
 _STRUCT_MAGICS   = {_MAGIC_LE, _MAGIC_BE, _MAGIC_NS_LE, _MAGIC_NS_BE}
 
@@ -26,6 +30,39 @@ _VLAN_ETHERTYPES = {0x8100, 0x88A8}
 _MAX_PKTS_PER_FLOW = 200
 # 패킷당 저장 payload 바이트 수 (YARA 탐지 + 세션 재생 품질 향상)
 _PAYLOAD_CAPTURE_BYTES = 128
+
+# ICMP 에러 타입 → 레이블 매핑
+_ICMP_LABELS: dict[tuple[int, int], str] = {
+    (11, 0): "ttl_expired",
+    (11, 1): "fragment_timeout",
+    (3,  0): "net_unreachable",
+    (3,  1): "host_unreachable",
+    (3,  3): "port_unreachable",
+    (3, 13): "admin_prohibited",
+}
+
+
+def _icmp_label(icmp_type: int, icmp_code: int) -> str:
+    return _ICMP_LABELS.get(
+        (icmp_type, icmp_code),
+        "ttl_expired" if icmp_type == 11 else "unreachable",
+    )
+
+
+def _parse_icmp_embedded(payload: bytes) -> tuple[str, int]:
+    """ICMP 에러 페이로드(임베디드 IP 헤더)에서 (orig_dst_ip, orig_dst_port) 추출."""
+    if len(payload) < 20:
+        return "", 0
+    try:
+        ihl = (payload[0] & 0x0F) * 4
+        proto = payload[9]
+        orig_dst = socket.inet_ntoa(payload[16:20])
+        orig_dst_port = 0
+        if len(payload) >= ihl + 4 and proto in (6, 17):  # TCP/UDP
+            orig_dst_port = struct.unpack_from("!H", payload, ihl + 2)[0]
+        return orig_dst, orig_dst_port
+    except (IndexError, struct.error, OSError):
+        return "", 0
 
 
 def _tcp_flags_str(flags_int: int) -> str:
@@ -40,6 +77,13 @@ def _tcp_flags_str(flags_int: int) -> str:
 
 
 class PcapParser:
+    def __init__(self) -> None:
+        self._icmp_events: list[dict] = []
+
+    @property
+    def icmp_events(self) -> list[dict]:
+        return self._icmp_events
+
     def detect(self, data: bytes) -> bool:
         if len(data) < 4:
             return False
@@ -51,7 +95,9 @@ class PcapParser:
         data: bytes,
         parse_warnings: list[str] | None = None,
     ) -> tuple[list[SessionModel], dict[str, list]]:
-        """(sessions, packet_map) 튜플 반환. packet_map: session_id -> list[PacketRecord]"""
+        """(sessions, packet_map) 튜플 반환. packet_map: session_id -> list[PacketRecord]
+        ICMP 에러 이벤트는 self.icmp_events 에 수집된다."""
+        self._icmp_events = []
         if len(data) > MAX_UPLOAD_BYTES:
             raise ValueError(f"입력 크기 {len(data)} 바이트가 50 MB 제한 초과")
         if len(data) < 24:
@@ -129,6 +175,25 @@ class PcapParser:
                     payload = bytes(t.data) if hasattr(t, "data") else b""
                     # sport/dport=0 고정: _update_flow 양방향 매칭이 Request↔Reply를 같은 flow로 묶음
                     sport, dport = 0, 0
+                    # ICMP 에러 메시지 이벤트 수집 (type 3/11: 임베디드 IP 헤더 파싱)
+                    if t.type in (3, 11) and hasattr(t, "data"):
+                        try:
+                            # dpkt ICMP 에러: t.data = 4바이트 unused + 임베디드 IP
+                            inner = bytes(t.data)[4:]
+                            orig_dst, orig_dst_port = _parse_icmp_embedded(inner)
+                            if orig_dst:
+                                self._icmp_events.append({
+                                    "ts": float(ts),
+                                    "src_ip": socket.inet_ntoa(ip.src),
+                                    "dst_ip": socket.inet_ntoa(ip.dst),
+                                    "orig_dst": orig_dst,
+                                    "orig_dst_port": orig_dst_port,
+                                    "icmp_type": t.type,
+                                    "icmp_code": t.code,
+                                    "label": _icmp_label(t.type, t.code),
+                                })
+                        except Exception:
+                            pass
                 else:
                     continue
 
@@ -201,6 +266,23 @@ class PcapParser:
                     seq, ack_num = 0, 0
                     flags_s = f"{t.type}/{t.code}"
                     payload = bytes(t.payload) if hasattr(t, "payload") else b""
+                    # ICMP 에러 이벤트 수집 (type 3/11: payload = 임베디드 IP 헤더)
+                    if t.type in (3, 11):
+                        try:
+                            orig_dst, orig_dst_port = _parse_icmp_embedded(bytes(t.payload))
+                            if orig_dst:
+                                self._icmp_events.append({
+                                    "ts": float(pkt.time),
+                                    "src_ip": ip.src,
+                                    "dst_ip": ip.dst,
+                                    "orig_dst": orig_dst,
+                                    "orig_dst_port": orig_dst_port,
+                                    "icmp_type": t.type,
+                                    "icmp_code": t.code,
+                                    "label": _icmp_label(t.type, t.code),
+                                })
+                        except Exception:
+                            pass
                 else:
                     continue
 
@@ -318,6 +400,23 @@ class PcapParser:
                     seq, ack_num = 0, 0
                     flags_s = f"{icmp_type}/{icmp_code}"
                     payload = pkt[t_off + 4:] if len(pkt) > t_off + 4 else b""
+                    # ICMP 에러 이벤트 수집 (type 3/11: t_off+8부터 임베디드 IP 헤더)
+                    if icmp_type in (3, 11) and len(pkt) > t_off + 8:
+                        try:
+                            orig_dst, orig_dst_port = _parse_icmp_embedded(pkt[t_off + 8:])
+                            if orig_dst:
+                                self._icmp_events.append({
+                                    "ts": pkt_ts,
+                                    "src_ip": src_ip,
+                                    "dst_ip": dst_ip,
+                                    "orig_dst": orig_dst,
+                                    "orig_dst_port": orig_dst_port,
+                                    "icmp_type": icmp_type,
+                                    "icmp_code": icmp_code,
+                                    "label": _icmp_label(icmp_type, icmp_code),
+                                })
+                        except Exception:
+                            pass
 
                 canonical, direction = self._update_flow(
                     flow_map, pkt_ts, src_ip, dst_ip, sport, dport, proto, pkt_len, rst

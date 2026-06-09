@@ -25,7 +25,8 @@ import './App.css'
 
 const ALLOWED = /\.(pcap|pcapng|cap|har|log|txt|tcpdump)$/i
 
-type Tab = 'overview' | 'analysis' | 'traffic' | 'protocol' | 'packets' | 'health' | 'compare' | 'geoip' | 'yara'
+type Layer = 'overview' | 'investigate' | 'output'
+type InvTab = 'sessions' | 'traffic' | 'protocol' | 'health' | 'geoip' | 'yara'
 
 interface UploadMeta {
   uploadId: string
@@ -52,6 +53,70 @@ function IconUpload() {
   )
 }
 
+// ── Protocol Hierarchy ────────────────────────────────────────────────────────
+
+function ProtocolHierarchy({ data }: { data: PanelData }) {
+  const dist = data.panel2_protocol.distribution
+  const ports = data.panel2_protocol.top_ports
+  const total = Object.values(dist).reduce((a, b) => a + b, 0)
+  if (total === 0) return <div className="ph-empty">프로토콜 데이터 없음</div>
+
+  const sorted = Object.entries(dist).sort(([, a], [, b]) => b - a)
+  const maxCount = sorted[0]?.[1] ?? 1
+
+  return (
+    <div className="ph-tree">
+      <div className="ph-section-title">프로토콜 분포</div>
+      {sorted.map(([proto, count]) => {
+        const pct = ((count / total) * 100).toFixed(1)
+        return (
+          <div key={proto} className="ph-row">
+            <span className="ph-proto">{proto}</span>
+            <div className="ph-bar-wrap">
+              <div className="ph-bar" style={{ width: `${(count / maxCount) * 100}%` }} />
+            </div>
+            <span className="ph-count">{count.toLocaleString()}</span>
+            <span className="ph-pct">{pct}%</span>
+          </div>
+        )
+      })}
+      {ports.length > 0 && (
+        <>
+          <div className="ph-section-title" style={{ marginTop: 16 }}>상위 포트</div>
+          {ports.slice(0, 10).map(p => (
+            <div key={p.port} className="ph-row ph-port-row">
+              <span className="ph-proto">:{p.port}</span>
+              <div className="ph-bar-wrap">
+                <div className="ph-bar ph-bar-port" style={{ width: `${(p.count / (ports[0]?.count ?? 1)) * 100}%` }} />
+              </div>
+              <span className="ph-count">{p.count.toLocaleString()}</span>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Risk Badge ────────────────────────────────────────────────────────────────
+
+function RiskBadge({ level }: { level: string }) {
+  const cfg: Record<string, { color: string; label: string }> = {
+    HIGH:   { color: '#ef4444', label: '고위험' },
+    MEDIUM: { color: '#f59e0b', label: '중위험' },
+    LOW:    { color: '#22c55e', label: '저위험' },
+    CLEAN:  { color: '#3b82f6', label: '정상' },
+  }
+  const c = cfg[level] ?? cfg.CLEAN
+  return (
+    <div className="risk-badge-wrap">
+      <span className="risk-badge" style={{ background: c.color }}>{c.label}</span>
+    </div>
+  )
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [meta, setMeta] = useState<UploadMeta | null>(null)
   const [panels, setPanels] = useState<PanelData | null>(null)
@@ -61,7 +126,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const [targetIp, setTargetIp] = useState('')
-  const [tab, setTab] = useState<Tab>('overview')
+  const [layer, setLayer] = useState<Layer>('overview')
+  const [invTab, setInvTab] = useState<InvTab>('sessions')
   const [flowSessionId, setFlowSessionId] = useState<string | null>(null)
   const [theme, setTheme] = useState<'dark' | 'light'>(() =>
     (localStorage.getItem('wb-theme') as 'dark' | 'light') ?? 'dark'
@@ -99,7 +165,7 @@ export default function App() {
       setMeta({ uploadId: up.upload_id, filename: file.name, sessionCount: up.session_count, sourceType: up.source_type })
       setPanels(data)
       setSummary(sum)
-      setTab('overview')
+      setLayer('overview')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -122,44 +188,29 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v5.5.3</span>
+          <span className="header-ver">v6.0</span>
         </div>
         {meta && (
           <div className="header-file-info">
             <span className="chip chip-file">{meta.filename}</span>
             <span className="chip chip-sessions">{meta.sessionCount.toLocaleString()} 세션</span>
             <span className="chip chip-src">{meta.sourceType.toUpperCase()}</span>
-            <button className="btn-export" title="JSON 내보내기" onClick={() => exportJson(meta.uploadId).catch(e => setError(e.message))}>
-              ↓ JSON
-            </button>
-            <button className="btn-export" title="PDF 리포트" onClick={() => exportPdf(meta.uploadId).catch(e => setError(e.message))}>
-              ↓ PDF
-            </button>
+            <button className="btn-export" title="JSON 내보내기" onClick={() => exportJson(meta.uploadId).catch(e => setError(e.message))}>↓ JSON</button>
+            <button className="btn-export" title="PDF 리포트" onClick={() => exportPdf(meta.uploadId).catch(e => setError(e.message))}>↓ PDF</button>
             <button className="btn-export" title="IOC 내보내기 (CSV)" onClick={async () => {
               try {
                 const blob = await exportIoc(meta.uploadId)
                 const url = URL.createObjectURL(blob)
                 const a = document.createElement('a')
-                a.href = url
-                a.download = `ioc_${meta.uploadId.slice(0, 8)}.csv`
-                a.click()
+                a.href = url; a.download = `ioc_${meta.uploadId.slice(0, 8)}.csv`; a.click()
                 URL.revokeObjectURL(url)
-              } catch (e) {
-                setError(e instanceof Error ? e.message : String(e))
-              }
-            }}>
-              ↓ IOC
-            </button>
-            <button className="btn-new-file" onClick={() => { setMeta(null); setPanels(null); setSummary(null); setError(null) }}>
-              새 파일
-            </button>
+              } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+            }}>↓ IOC</button>
+            <button className="btn-new-file" onClick={() => { setMeta(null); setPanels(null); setSummary(null); setError(null) }}>새 파일</button>
           </div>
         )}
         {!meta && <span className="header-tagline">PCAP 공격/방어 분석 도구</span>}
-        <button
-          className="theme-toggle"
-          onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-        >
+        <button className="theme-toggle" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
           {theme === 'dark' ? '☀ 라이트' : '◑ 다크'}
         </button>
       </header>
@@ -177,13 +228,8 @@ export default function App() {
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
           >
-            <input
-              type="file"
-              id="pcap-input"
-              accept=".pcap,.pcapng,.cap,.har,.log,.txt,.tcpdump"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-              hidden
-            />
+            <input type="file" id="pcap-input" accept=".pcap,.pcapng,.cap,.har,.log,.txt,.tcpdump"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} hidden />
             <label htmlFor="pcap-input" className="drop-label">
               <div className="drop-icon-wrap"><IconUpload /></div>
               <p className="drop-primary">파일을 드래그하거나 클릭하여 업로드</p>
@@ -223,7 +269,6 @@ export default function App() {
       {/* Dashboard */}
       {panels && meta && summary && (
         <div className="dashboard">
-
           {error && (
             <div className="error-banner inline">
               <span className="error-icon">⚠</span>
@@ -231,45 +276,50 @@ export default function App() {
             </div>
           )}
 
-          {/* Tab Nav */}
-          <nav className="tab-nav">
-            {(Object.entries(TAB_META) as [Tab, { label: string; icon: string }][]).map(([key, { label, icon }]) => (
-              <button
-                key={key}
-                className={`tab-btn${tab === key ? ' active' : ''}`}
-                onClick={() => setTab(key)}
-              >
-                <span className="tab-icon">{icon}</span>
-                {label}
-              </button>
-            ))}
+          {/* Layer Navigation */}
+          <nav className="layer-nav">
+            <button className={`layer-btn${layer === 'overview' ? ' active' : ''}`} onClick={() => setLayer('overview')}>
+              <span>▤</span> 현황
+            </button>
+            <button className={`layer-btn${layer === 'investigate' ? ' active' : ''}`} onClick={() => setLayer('investigate')}>
+              <span>🔬</span> 조사
+            </button>
+            <button className={`layer-btn${layer === 'output' ? ' active' : ''}`} onClick={() => setLayer('output')}>
+              <span>⇄</span> 출력
+            </button>
           </nav>
 
-          {/* Tab Content */}
+          {/* Investigate Sub-nav */}
+          {layer === 'investigate' && (
+            <nav className="sub-nav">
+              {([ ['sessions','세션/패킷'], ['traffic','트래픽'], ['protocol','프로토콜'], ['health','통신진단'], ['geoip','GeoIP'], ['yara','YARA'] ] as [InvTab, string][]).map(([key, label]) => (
+                <button key={key} className={`sub-btn${invTab === key ? ' active' : ''}`} onClick={() => setInvTab(key)}>
+                  {label}
+                </button>
+              ))}
+            </nav>
+          )}
+
+          {/* Content */}
           <div className="panel-grid">
 
-            {/* 개요 탭 — 통계 현황판 + 세션 탐색기 */}
-            {tab === 'overview' && (
-              <div className="panel-card wide" style={{ padding: 0, overflow: 'hidden' }}>
-                <SessionExplorer
-                  uploadId={meta.uploadId}
-                  panels={panels}
-                  sessionCount={meta.sessionCount}
-                  onFlowSelect={setFlowSessionId}
-                />
-              </div>
-            )}
-
-            {/* 분석 탭 — 공격 타임라인 + 방어 권고 + 공격 상세 */}
-            {tab === 'analysis' && (
+            {/* ── 현황 레이어 ─────────────────────────────────────────────── */}
+            {layer === 'overview' && (
               <>
+                <div className="overview-header-row">
+                  <RiskBadge level={summary.risk_level} />
+                  <div className="overview-quick-stats">
+                    <span className="qs-item"><span className="qs-num">{meta.sessionCount.toLocaleString()}</span><span className="qs-lbl">세션</span></span>
+                    <span className="qs-item"><span className="qs-num" style={{ color: '#ef4444' }}>{panels.panel10_attacks.length}</span><span className="qs-lbl">공격 탐지</span></span>
+                    <span className="qs-item"><span className="qs-num" style={{ color: '#f59e0b' }}>{panels.panel5_anomalies.rst_count}</span><span className="qs-lbl">RST</span></span>
+                    <span className="qs-item"><span className="qs-num" style={{ color: '#f59e0b' }}>{panels.panel5_anomalies.retransmit_count}</span><span className="qs-lbl">재전송</span></span>
+                  </div>
+                </div>
+
                 <div className="summary-section">
                   <NarrativeSummary data={summary} />
                 </div>
-              </>
-            )}
-            {tab === 'analysis' && (
-              <>
+
                 <div className="attack-defense-row">
                   <PCard title="공격 타임라인">
                     <AttackTimeline events={summary.attack_timeline} />
@@ -280,49 +330,64 @@ export default function App() {
                     victimIps={summary.victim_ips}
                   />
                 </div>
+
                 <PCard title="공격 탐지 상세" wide>
                   <Panel10Attacks data={panels.panel10_attacks} />
                 </PCard>
-                <PCard title="이상 지표">
-                  <Panel5Anomalies data={panels.panel5_anomalies} />
-                </PCard>
-                <PCard title="TLS 세션">
-                  <Panel7Tls data={panels.panel7_tls} />
-                </PCard>
+
+                <div className="overview-bottom-row">
+                  <PCard title="이상 지표">
+                    <Panel5Anomalies data={panels.panel5_anomalies} />
+                  </PCard>
+                  <PCard title="IP 트래픽">
+                    <Panel1Ip data={panels.panel1_ip} />
+                  </PCard>
+                  <PCard title="프로토콜 분포">
+                    <Panel2Protocol data={panels.panel2_protocol} />
+                  </PCard>
+                </div>
               </>
             )}
 
-            {/* 트래픽 탭 */}
-            {tab === 'traffic' && (
+            {/* ── 조사 레이어 ─────────────────────────────────────────────── */}
+            {layer === 'investigate' && invTab === 'sessions' && (
+              <div className="panel-card wide" style={{ padding: 0, overflow: 'hidden' }}>
+                <SessionExplorer
+                  uploadId={meta.uploadId}
+                  panels={panels}
+                  sessionCount={meta.sessionCount}
+                  onFlowSelect={setFlowSessionId}
+                />
+              </div>
+            )}
+
+            {layer === 'investigate' && invTab === 'sessions' && (
+              <div className="panel-card wide">
+                <div className="panel-card-title">Wireshark 스타일 패킷 뷰어</div>
+                <div className="panel-card-body">
+                  <PacketList uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
+                </div>
+              </div>
+            )}
+
+            {layer === 'investigate' && invTab === 'traffic' && (
               <>
                 <PCard title="트래픽 타임라인" wide>
                   <Panel3Timeline data={panels.panel3_timeline} uploadId={meta.uploadId} />
                 </PCard>
                 <PCard title="IP 순위 (클릭 → 드릴다운)">
-                  <Panel6IpRanking
-                    data={panels.panel6_ip_ranking}
-                    uploadId={meta.uploadId}
-                    onFlowSelect={setFlowSessionId}
-                  />
-                </PCard>
-                <PCard title="IP 트래픽 차트">
-                  <Panel1Ip data={panels.panel1_ip} />
+                  <Panel6IpRanking data={panels.panel6_ip_ranking} uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
                 </PCard>
                 <PCard title="상위 대화 (클릭 → 세션)">
-                  <Panel9Conversations
-                    data={panels.panel9_conversations}
-                    uploadId={meta.uploadId}
-                    onFlowSelect={setFlowSessionId}
-                  />
+                  <Panel9Conversations data={panels.panel9_conversations} uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
                 </PCard>
               </>
             )}
 
-            {/* 프로토콜 탭 */}
-            {tab === 'protocol' && (
+            {layer === 'investigate' && invTab === 'protocol' && (
               <>
-                <PCard title="프로토콜 분포">
-                  <Panel2Protocol data={panels.panel2_protocol} />
+                <PCard title="프로토콜 계층">
+                  <ProtocolHierarchy data={panels} />
                 </PCard>
                 <PCard title="HTTP 상태 코드">
                   <Panel4Http data={panels.panel4_http} />
@@ -336,21 +401,7 @@ export default function App() {
               </>
             )}
 
-            {/* 패킷 뷰어 탭 */}
-            {tab === 'packets' && (
-              <div className="panel-card wide">
-                <div className="panel-card-title">Wireshark 스타일 패킷 뷰어</div>
-                <div className="panel-card-body">
-                  <PacketList
-                    uploadId={meta.uploadId}
-                    onFlowSelect={setFlowSessionId}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* 통신 상태 진단 탭 */}
-            {tab === 'health' && (
+            {layer === 'investigate' && invTab === 'health' && (
               <div className="panel-card wide">
                 <div className="panel-card-title">통신 상태 진단 (RTT · 재전송 · 핸드셰이크)</div>
                 <div className="panel-card-body">
@@ -359,21 +410,7 @@ export default function App() {
               </div>
             )}
 
-            {/* 비교 탭 */}
-            {tab === 'compare' && (
-              <div className="panel-card wide">
-                <div className="panel-card-title">캡처 비교 분석</div>
-                <div className="panel-card-body">
-                  <ComparePanel
-                    baseUploadId={meta.uploadId}
-                    baseFilename={meta.filename}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* GeoIP 탭 */}
-            {tab === 'geoip' && (
+            {layer === 'investigate' && invTab === 'geoip' && (
               <div className="panel-card wide">
                 <div className="panel-card-title">공격자 IP 지리 분포</div>
                 <div className="panel-card-body">
@@ -382,8 +419,7 @@ export default function App() {
               </div>
             )}
 
-            {/* YARA 탭 */}
-            {tab === 'yara' && (
+            {layer === 'investigate' && invTab === 'yara' && (
               <div className="panel-card wide">
                 <div className="panel-card-title">YARA 서명 탐지</div>
                 <div className="panel-card-body">
@@ -391,6 +427,17 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* ── 출력 레이어 ─────────────────────────────────────────────── */}
+            {layer === 'output' && (
+              <div className="panel-card wide">
+                <div className="panel-card-title">캡처 비교 분석</div>
+                <div className="panel-card-body">
+                  <ComparePanel baseUploadId={meta.uploadId} baseFilename={meta.filename} />
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       )}
@@ -405,16 +452,4 @@ function PCard({ title, children, wide }: { title: string; children: React.React
       <div className="panel-card-body">{children}</div>
     </div>
   )
-}
-
-const TAB_META: Record<Tab, { label: string; icon: string }> = {
-  overview: { label: '현황판',   icon: '▤' },
-  analysis: { label: '공격 분석', icon: '⚡' },
-  traffic:  { label: '트래픽',   icon: '↗' },
-  protocol: { label: '프로토콜', icon: '◎' },
-  packets:  { label: '패킷 뷰어', icon: '📦' },
-  health:   { label: '통신 진단', icon: '🩺' },
-  compare:  { label: '비교 분석', icon: '⇄' },
-  geoip:    { label: 'GeoIP',    icon: '🌏' },
-  yara:     { label: 'YARA',     icon: '🔍' },
 }

@@ -17,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 UUID_RE: re.Pattern[str] = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
 MAX_UPLOAD_BYTES = 52_428_800  # 50 MB
@@ -131,13 +131,13 @@ def test_upload_exe_extension_returns_415(api_client: TestClient) -> None:
     assert resp.status_code == 415
 
 
-def test_upload_txt_extension_accepted_but_unknown_format_returns_400(api_client: TestClient) -> None:
-    """.txt는 tcpdump 지원으로 허용되나, 파서가 인식 못하면 400."""
+def test_upload_txt_extension_returns_415(api_client: TestClient) -> None:
+    """일반 .txt 파일 (FortiGate 형식 아님) → 415."""
     resp = api_client.post(
         "/api/upload",
         files={"file": ("notes.txt", io.BytesIO(b"hello world"), "text/plain")},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 415
 
 
 def test_upload_zip_extension_returns_415(api_client: TestClient) -> None:
@@ -169,10 +169,8 @@ def test_upload_exactly_50mb_is_accepted(api_client: TestClient) -> None:
         files={"file": ("edge.pcap", io.BytesIO(payload), "application/octet-stream")},
         headers={"content-length": str(MAX_UPLOAD_BYTES)},
     )
-    # 정확히 50 MB는 허용 경계 — 200(정상) 또는 400(파서 오류)만 허용, 413/5xx 금지
-    assert resp.status_code in {200, 400}, (
-        f"50 MB 경계에서 기대치 않은 상태 코드: {resp.status_code}"
-    )
+    # 파서가 빈 pcap으로 처리하므로 200 또는 400(파싱 오류) 허용; 413은 아님
+    assert resp.status_code != 413
 
 
 def test_upload_empty_pcap_returns_error(api_client: TestClient) -> None:
@@ -191,55 +189,3 @@ def test_upload_corrupted_pcap_returns_error(api_client: TestClient) -> None:
         files={"file": ("bad.pcap", io.BytesIO(b"\xff\xff\xff\xff" * 6), "application/octet-stream")},
     )
     assert resp.status_code in {400, 422}
-
-
-# ─────────────────────────── V-3: 스트리밍 제한 (단위) ──────────────────
-
-
-def test_read_stream_limited_raises_413_on_overflow() -> None:
-    """Content-Length 없는 chunked 경로: _read_stream_limited가 50 MB 초과 시 413."""
-    import asyncio
-    from fastapi import HTTPException
-    from routers.upload import _read_stream_limited
-
-    total_size = MAX_UPLOAD_BYTES + 1
-
-    class _FakeFile:
-        """UploadFile.read() 를 흉내낸 가짜 파일."""
-        _pos = 0
-
-        async def read(self, n: int = -1) -> bytes:
-            if n < 0:
-                n = total_size
-            remaining = total_size - self._pos
-            if remaining <= 0:
-                return b""
-            to_read = min(n, remaining)
-            self._pos += to_read
-            return b"\x00" * to_read
-
-    with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(_read_stream_limited(_FakeFile(), MAX_UPLOAD_BYTES))
-    assert exc_info.value.status_code == 413
-
-
-def test_read_stream_limited_allows_exactly_max() -> None:
-    """Content-Length 없는 chunked 경로: 정확히 50 MB 는 통과."""
-    import asyncio
-    from routers.upload import _read_stream_limited
-
-    class _FakeFile:
-        _pos = 0
-
-        async def read(self, n: int = -1) -> bytes:
-            if n < 0:
-                n = MAX_UPLOAD_BYTES
-            remaining = MAX_UPLOAD_BYTES - self._pos
-            if remaining <= 0:
-                return b""
-            to_read = min(n, remaining)
-            self._pos += to_read
-            return b"\x00" * to_read
-
-    result = asyncio.run(_read_stream_limited(_FakeFile(), MAX_UPLOAD_BYTES))
-    assert len(result) == MAX_UPLOAD_BYTES

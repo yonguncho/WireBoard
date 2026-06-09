@@ -97,7 +97,7 @@ async def _do_filter(body: FilterRequest, request: Request) -> dict:
     try:
         capture = store.get(body.upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
     try:
         result = _translator.translate(body.query)

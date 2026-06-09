@@ -8,18 +8,31 @@ _MEDIUM_RST_RATIO = 0.4  # RST 비율 >= 40% → medium
 
 
 class CommFailureDetector:
-    def detect(self, sessions: list[SessionModel]) -> AttackResult | None:
+    def detect(
+        self,
+        sessions: list[SessionModel],
+        rst_count: int = 0,
+        icmp_unreachable: int = 0,
+    ) -> AttackResult | None:
+        # 세션 기반 탐지
         tcp_sessions = [s for s in sessions if s.protocol == "TCP"]
         total = len(tcp_sessions)
-        if total < _MIN_TCP_SESSIONS:
-            return None
+        session_rst = sum(1 for s in tcp_sessions if s.rst)
 
-        rst_count = sum(1 for s in tcp_sessions if s.rst)
-        ratio = rst_count / total
+        # 외부에서 직접 카운트를 전달한 경우 합산
+        effective_rst = session_rst + rst_count
+        effective_total = max(total, effective_rst + icmp_unreachable, 1)
+        ratio = effective_rst / effective_total
 
-        if ratio >= _HIGH_RST_RATIO:
+        if effective_rst + icmp_unreachable == 0:
+            if total < _MIN_TCP_SESSIONS:
+                return None
+            if ratio < _MEDIUM_RST_RATIO:
+                return None
+
+        if effective_rst >= 20 or ratio >= _HIGH_RST_RATIO:
             severity = "high"
-        elif ratio >= _MEDIUM_RST_RATIO:
+        elif effective_rst >= 10 or ratio >= _MEDIUM_RST_RATIO or icmp_unreachable >= 20:
             severity = "medium"
         else:
             return None
@@ -27,6 +40,9 @@ class CommFailureDetector:
         return AttackResult(
             attack_type="CommFailure",
             severity=severity,
-            mitre_id="T1499",
-            description=f"TCP RST 비율 {ratio:.0%} ({rst_count}/{total} 세션) - 연결 거부/차단 의심",
+            mitre_id="T1595",
+            description=(
+                f"RST {effective_rst}건 + ICMP Unreachable {icmp_unreachable}건 "
+                f"— 연결 거부/차단 의심"
+            ),
         )

@@ -3,20 +3,79 @@ import csv
 import io
 import logging
 import re
+from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 from services.export.state_exporter import StateExporter
+from services.export_service import ExportService
 from services.report.pdf_exporter import PdfExporter
+from models.attack import AttackDetectionResult
+from models.session import SessionModel
 from utils.constants import UUID_RE
 
 router = APIRouter()
 
 _exporter = StateExporter()
 _pdf_exporter = PdfExporter()
+_export_svc = ExportService()
+
+_FORMAT_CONTENT_TYPE = {
+    "csv": "text/csv; charset=utf-8",
+    "json": "application/json",
+    "suricata": "text/plain; charset=utf-8",
+    "snort": "text/plain; charset=utf-8",
+    "excel": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "pdf": "application/pdf",
+}
+
+
+class ExportRequest(BaseModel):
+    upload_id: str
+    target_ip: Optional[str] = None
+    format: str = "json"
+
+
+@router.post("/api/export")
+async def export_flexible(body: ExportRequest, request: Request):
+    if not UUID_RE.match(body.upload_id):
+        raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "upload_id must be a valid UUID"})
+
+    store = request.app.state.session_store
+    try:
+        capture = store.get(body.upload_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+
+    sessions: List[SessionModel] = capture.sessions
+    if body.target_ip:
+        sessions = [s for s in sessions if s.src_ip == body.target_ip or s.dst_ip == body.target_ip]
+
+    attacks: List[AttackDetectionResult] = []
+    for a in capture.attacks:
+        if isinstance(a, dict):
+            try:
+                attacks.append(AttackDetectionResult(**a))
+            except Exception:
+                pass
+        elif isinstance(a, AttackDetectionResult):
+            attacks.append(a)
+
+    fmt = body.format.lower()
+    try:
+        data = _export_svc.export(sessions, attacks, fmt)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    content_type = _FORMAT_CONTENT_TYPE.get(fmt, "application/octet-stream")
+    safe_id = re.sub(r"[^a-f0-9]", "", body.upload_id.lower())[:8]
+    ext = fmt if fmt not in ("suricata", "snort") else "rules"
+    headers = {"Content-Disposition": f'attachment; filename="export_{safe_id}.{ext}"'}
+    return Response(content=data, media_type=content_type, headers=headers)
 
 
 def _validate_upload_id(upload_id: str) -> None:
@@ -33,7 +92,7 @@ async def export_json(upload_id: str, request: Request):
         capture = store.get(upload_id)
     except KeyError:
         logger.warning("upload_id 없음: %s", upload_id)
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
     annotations = list(request.app.state.annotations_store.get(upload_id, []))
     data = _exporter.export(capture.sessions, annotations=annotations)
@@ -49,7 +108,7 @@ async def export_pdf(upload_id: str, request: Request):
         capture = store.get(upload_id)
     except KeyError:
         logger.warning("upload_id 없음: %s", upload_id)
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
     annotations = list(request.app.state.annotations_store.get(upload_id, []))
     analysis_result = {
@@ -89,7 +148,7 @@ async def export_ioc(upload_id: str, request: Request):
         capture = store.get(upload_id)
     except KeyError:
         logger.warning("upload_id 없음: %s", upload_id)
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
     # attacker_ips 수집: 각 attack dict의 src_ip 필드 (비어 있지 않은 것만)
     seen_ips: dict[str, str] = {}  # ip -> attack_type

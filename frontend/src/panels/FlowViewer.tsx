@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
-import { getFlow } from '../api'
-import type { FlowData, FlowPacket } from '../api'
+import { getFlow, getStream } from '../api'
+import type { FlowData, FlowPacket, StreamData } from '../api'
 
 // ── HEX 유틸 ────────────────────────────────────────────────────────────────
 
@@ -207,8 +207,44 @@ function MetricRow({ label, value, cls }: { label: string; value: string; cls: s
   )
 }
 
+interface ExpertEvent { severity: 'error' | 'warn' | 'note'; pktIdx: number; relTs: number; msg: string }
+
+function buildExpertEvents(packets: FlowPacket[]): ExpertEvent[] {
+  const events: ExpertEvent[] = []
+  const seenSeqs = new Map<string, number>()
+
+  packets.forEach((p, i) => {
+    const flags = p.flags || ''
+    const relTs = p.rel_ts
+
+    if (flags.includes('SYN') && !flags.includes('ACK') && i > 0)
+      events.push({ severity: 'warn', pktIdx: i, relTs, msg: 'SYN 재전송' })
+
+    if (p.payload_len > 0 && p.proto === 'TCP') {
+      const key = `${p.direction}:${p.seq}`
+      const prev = seenSeqs.get(key)
+      if (prev !== undefined) {
+        events.push({ severity: 'warn', pktIdx: i, relTs, msg: `TCP 재전송 (Seq ${p.seq}, 패킷 #${prev + 1})` })
+      } else {
+        seenSeqs.set(key, i)
+      }
+    }
+
+    if (flags.includes('RST')) {
+      const hasData = packets.slice(0, i).some(q => q.payload_len > 0)
+      events.push({ severity: hasData ? 'error' : 'warn', pktIdx: i, relTs, msg: hasData ? 'RST — 데이터 전송 중 강제 종료' : 'RST — 연결 수립 전 거부' })
+    }
+
+    if (p.seq === 0 && p.ack === 0 && !flags.includes('SYN') && p.payload_len === 0 && p.proto === 'TCP')
+      events.push({ severity: 'note', pktIdx: i, relTs, msg: 'Seq/Ack 모두 0 — 캡처 불완전 가능성' })
+  })
+
+  return events
+}
+
 function ConnAnalysisView({ packets, session }: { packets: FlowPacket[]; session: FlowData['session'] | null }) {
   const a = useMemo(() => computeFlowAnalysis(packets), [packets])
+  const expertEvents = useMemo(() => buildExpertEvents(packets), [packets])
   if (!session) return null
 
   const hsLabel: Record<string, string> = { COMPLETE: '✓ 완료', REFUSED: '✗ 거부됨', TIMEOUT: '✗ 타임아웃', HALF_OPEN: '⚠ 불완전', 'N/A': '— 해당없음' }
@@ -243,6 +279,87 @@ function ConnAnalysisView({ packets, session }: { packets: FlowPacket[]; session
       ) : (
         <div className="conn-ok-msg">✓ 이상 없음 — 정상 통신</div>
       )}
+
+      {expertEvents.length > 0 && (
+        <div className="expert-info">
+          <div className="expert-info-title">Expert Information</div>
+          <table className="expert-table">
+            <thead><tr><th>#</th><th>+시각</th><th>수준</th><th>내용</th></tr></thead>
+            <tbody>
+              {expertEvents.map((ev, i) => {
+                const sev = ev.severity === 'error' ? { color: '#ef4444', icon: '✗' }
+                  : ev.severity === 'warn' ? { color: '#f59e0b', icon: '⚠' }
+                  : { color: '#63b3ed', icon: 'ℹ' }
+                return (
+                  <tr key={i} className="expert-row">
+                    <td className="mono">{ev.pktIdx + 1}</td>
+                    <td className="mono">+{ev.relTs.toFixed(3)}s</td>
+                    <td><span className="expert-sev" style={{ color: sev.color }}>{sev.icon}</span></td>
+                    <td className="expert-msg">{ev.msg}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Follow Stream ────────────────────────────────────────────────────────────
+
+function FollowStreamView({ uploadId, sessionId, session }: {
+  uploadId: string; sessionId: string; session: FlowData['session'] | null
+}) {
+  const [data, setData] = useState<StreamData | null>(null)
+  const [encoding, setEncoding] = useState<'ascii' | 'hex'>('ascii')
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true); setError(null); setData(null)
+    getStream(uploadId, sessionId, encoding)
+      .then(setData)
+      .catch(e => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false))
+  }, [uploadId, sessionId, encoding])
+
+  if (loading) return <div className="flow-loading"><div className="spinner sm" />로드 중...</div>
+  if (error) return <div className="flow-error">{error}</div>
+  if (!data || data.segments.length === 0) return <div className="flow-no-packets">페이로드 없음 — 스트림 재조합 불가</div>
+
+  return (
+    <div className="follow-stream">
+      <div className="follow-stream-toolbar">
+        <span className="follow-stream-stats">
+          ↑ {fmtBytes(data.fwd_bytes)} 송신 · ↓ {fmtBytes(data.rev_bytes)} 수신
+          {data.truncated && <span className="trunc-badge"> (상위 200 패킷)</span>}
+        </span>
+        <div className="follow-encoding-btns">
+          <button className={`follow-enc-btn${encoding === 'ascii' ? ' active' : ''}`} onClick={() => setEncoding('ascii')}>ASCII</button>
+          <button className={`follow-enc-btn${encoding === 'hex' ? ' active' : ''}`} onClick={() => setEncoding('hex')}>HEX</button>
+        </div>
+      </div>
+      {session && (
+        <div className="follow-stream-legend">
+          <span className="follow-fwd-legend">■ {session.src_ip}:{session.src_port} (송신)</span>
+          <span className="follow-rev-legend">■ {session.dst_ip}:{session.dst_port} (수신)</span>
+        </div>
+      )}
+      <div className="follow-stream-body">
+        {data.segments.map((seg, i) => (
+          <div key={i} className={`follow-segment follow-${seg.direction}`}>
+            <div className="follow-seg-header">
+              <span className="follow-seg-dir">{seg.direction === 'fwd' ? '→' : '←'}</span>
+              <span className="follow-seg-ts">+{seg.rel_ts.toFixed(3)}s</span>
+              <span className="follow-seg-len">{seg.length} B</span>
+              {seg.flags && <span className="follow-seg-flags">{seg.flags}</span>}
+            </div>
+            <pre className={`follow-seg-text${encoding === 'hex' ? ' hex-mode' : ''}`}>{seg.text}</pre>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -250,7 +367,7 @@ function ConnAnalysisView({ packets, session }: { packets: FlowPacket[]; session
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 
 interface Props { uploadId: string; sessionId: string; onClose: () => void }
-type ViewTab = 'packets' | 'replay' | 'analysis'
+type ViewTab = 'packets' | 'replay' | 'stream' | 'analysis'
 
 export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
   const [data, setData]   = useState<FlowData | null>(null)
@@ -303,6 +420,7 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
             )}
             <div className="flow-view-tabs">
               <button className={`flow-tab${view === 'packets'  ? ' active' : ''}`} onClick={() => setView('packets')}>패킷</button>
+              <button className={`flow-tab${view === 'stream'   ? ' active' : ''}`} onClick={() => setView('stream')}>Follow Stream</button>
               <button className={`flow-tab${view === 'replay'   ? ' active' : ''}`} onClick={() => setView('replay')}>재생</button>
               <button className={`flow-tab${view === 'analysis' ? ' active' : ''}`} onClick={() => setView('analysis')}>연결 분석</button>
             </div>
@@ -327,6 +445,7 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
           ) : <div className="flow-no-packets">패킷 없음 (PCAP 포맷이 아닌 경우 패킷 뷰어 미지원)</div>
         )}
 
+        {data && view === 'stream'   && <FollowStreamView uploadId={uploadId} sessionId={sessionId} session={s ?? null} />}
         {data && view === 'replay'   && <ReplayView packets={data.packets} />}
         {data && view === 'analysis' && <ConnAnalysisView packets={data.packets} session={s ?? null} />}
       </div>

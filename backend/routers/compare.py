@@ -12,6 +12,8 @@ from utils.constants import UUID_RE
 router = APIRouter()
 _comparator = PcapComparator()
 
+_MAX_SESSIONS = 300  # 응답에 포함할 최대 세션 수 (각 캡처별)
+
 
 class CompareRequest(BaseModel):
     base_upload_id: str
@@ -23,6 +25,23 @@ def _extract_ports(sessions) -> set[int]:
     for s in sessions:
         ports.add(s.dst_port)
     return ports
+
+
+def _serialize_session(s) -> dict:
+    return {
+        "session_id": s.session_id,
+        "src_ip":     s.src_ip,
+        "dst_ip":     s.dst_ip,
+        "src_port":   s.src_port,
+        "dst_port":   s.dst_port,
+        "protocol":   s.protocol,
+        "start_ts":   s.start_ts,
+        "end_ts":     s.end_ts,
+        "bytes_sent": s.bytes_sent,
+        "bytes_recv": s.bytes_recv,
+        "packet_count": s.packet_count,
+        "rst":        s.rst,
+    }
 
 
 @router.post("/api/compare")
@@ -46,11 +65,11 @@ async def compare_captures(body: CompareRequest, request: Request):
     try:
         base_capture = store.get(body.base_upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="base_upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음 (base)"})
     try:
         current_capture = store.get(body.current_upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="current_upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음 (current)"})
 
     result = _comparator.compare(base_capture.sessions, current_capture.sessions)
 
@@ -67,12 +86,19 @@ async def compare_captures(body: CompareRequest, request: Request):
     else:
         traffic_delta_pct = 0.0  # 양쪽 모두 트래픽 없음
 
+    base_sorted = sorted(base_capture.sessions, key=lambda s: s.start_ts)
+    cur_sorted  = sorted(current_capture.sessions, key=lambda s: s.start_ts)
+
     return {
-        "new_ips": sorted(result.only_in_b),
-        "removed_ips": sorted(result.only_in_a),
-        "common_ips": sorted(result.common_ips),
-        "new_ports": new_ports,
+        "new_ips":           sorted(result.only_in_b),
+        "removed_ips":       sorted(result.only_in_a),
+        "common_ips":        sorted(result.common_ips),
+        "new_ports":         new_ports,
         "traffic_delta_pct": traffic_delta_pct,
-        "protocol_diff": result.protocol_diff,
-        "byte_ratio": result.byte_ratio,
+        "protocol_diff":     result.protocol_diff,
+        "byte_ratio":        result.byte_ratio,
+        "base_sessions":     [_serialize_session(s) for s in base_sorted[:_MAX_SESSIONS]],
+        "compare_sessions":  [_serialize_session(s) for s in cur_sorted[:_MAX_SESSIONS]],
+        "base_session_total":    len(base_capture.sessions),
+        "compare_session_total": len(current_capture.sessions),
     }

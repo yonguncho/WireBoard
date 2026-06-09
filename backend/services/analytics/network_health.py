@@ -7,6 +7,16 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Optional
 
+_ICMP_LABEL_KR: dict[str, str] = {
+    "ttl_expired":       "TTL 만료",
+    "fragment_timeout":  "단편화 재조립 타임아웃",
+    "net_unreachable":   "네트워크 도달 불가",
+    "host_unreachable":  "호스트 도달 불가",
+    "port_unreachable":  "포트 도달 불가",
+    "admin_prohibited":  "관리자 차단",
+    "unreachable":       "도달 불가",
+}
+
 
 # ── 플래그 헬퍼 ───────────────────────────────────────────────────────────────
 
@@ -59,6 +69,9 @@ class SessionHealth:
     issues: list
     root_cause: str
     recommendations: list
+    failure_type: str = "none"  # none | connection_refused | no_response | path_issue | slow_response
+    icmp_label: str = ""    # path_issue 시 ICMP 레이블 (예: ttl_expired)
+    icmp_src_ip: str = ""   # path_issue 시 ICMP 응답 라우터 IP
 
 
 # ── TCP 분석 ─────────────────────────────────────────────────────────────────
@@ -170,6 +183,16 @@ def _analyze_tcp(session, packets: list) -> SessionHealth:
     status = "정상" if score >= 80 else ("주의" if score >= 50 else "이상")
     root_cause = issues[0] if issues else "이상 없음 — 정상 통신"
 
+    # failure_type 분류
+    if handshake == "REFUSED":
+        failure_type = "connection_refused"
+    elif handshake in ("TIMEOUT", "HALF_OPEN"):
+        failure_type = "no_response"
+    elif rtt_ms is not None and rtt_ms > 1000:
+        failure_type = "slow_response"
+    else:
+        failure_type = "none"
+
     return SessionHealth(
         session_id=session.session_id,
         src_ip=session.src_ip, dst_ip=session.dst_ip,
@@ -185,6 +208,7 @@ def _analyze_tcp(session, packets: list) -> SessionHealth:
         score=score, status=status,
         issues=issues, root_cause=root_cause,
         recommendations=recommendations,
+        failure_type=failure_type,
     )
 
 
@@ -206,6 +230,7 @@ def _analyze_udp(session, packets: list) -> SessionHealth:
 
     score = max(0, min(100, score))
     status = "정상" if score >= 80 else ("주의" if score >= 50 else "이상")
+    failure_type = "no_response" if (packets and not has_response) else "none"
 
     return SessionHealth(
         session_id=session.session_id,
@@ -222,6 +247,7 @@ def _analyze_udp(session, packets: list) -> SessionHealth:
         issues=issues,
         root_cause=issues[0] if issues else "이상 없음",
         recommendations=recommendations,
+        failure_type=failure_type,
     )
 
 
@@ -264,12 +290,17 @@ def _analyze_no_packets(session) -> SessionHealth:
         issues=issues,
         root_cause=issues[0] if issues else "이상 없음",
         recommendations=recommendations,
+        failure_type="connection_refused" if session.rst else "none",
     )
 
 
 # ── 전체 분석 진입점 ─────────────────────────────────────────────────────────
 
-def analyze(sessions: list, packet_map: dict) -> dict:
+def analyze(
+    sessions: list,
+    packet_map: dict,
+    icmp_events: list | None = None,
+) -> dict:
     """전체 세션 통신 상태 분석. /api/health 에서 호출."""
     healths: list[SessionHealth] = []
 
@@ -283,6 +314,31 @@ def analyze(sessions: list, packet_map: dict) -> dict:
         else:
             sh = _analyze_udp(s, pkts)
         healths.append(sh)
+
+    # ICMP 에러 이벤트로 path_issue 상관 분석
+    if icmp_events:
+        # (orig_dst_ip, orig_dst_port) → 첫 번째 ICMP 이벤트
+        icmp_lookup: dict[tuple[str, int], dict] = {}
+        for ev in icmp_events:
+            key = (ev.get("orig_dst", ""), ev.get("orig_dst_port", 0))
+            if key[0] and key not in icmp_lookup:
+                icmp_lookup[key] = ev
+
+        for sh in healths:
+            ev = icmp_lookup.get((sh.dst_ip, sh.dst_port))
+            if ev and sh.failure_type in ("none", "no_response"):
+                label_kr = _ICMP_LABEL_KR.get(ev.get("label", ""), ev.get("label", ""))
+                msg = f"경로 문제 — {ev['src_ip']}에서 {label_kr}"
+                sh.failure_type = "path_issue"
+                sh.icmp_label   = ev.get("label", "")
+                sh.icmp_src_ip  = ev.get("src_ip", "")
+                sh.issues.append(msg)
+                sh.root_cause = msg
+                sh.recommendations.append(
+                    "네트워크 경로상 라우터 TTL 설정 및 방화벽 정책을 점검하세요"
+                )
+                sh.score  = max(0, sh.score - 30)
+                sh.status = "정상" if sh.score >= 80 else ("주의" if sh.score >= 50 else "이상")
 
     total    = len(healths)
     healthy  = sum(1 for h in healths if h.score >= 80)
@@ -302,6 +358,12 @@ def analyze(sessions: list, packet_map: dict) -> dict:
         key=lambda x: -x["count"],
     )[:10]
 
+    # failure_type 요약 집계
+    failure_summary: dict = defaultdict(int)
+    for h in healths:
+        if h.failure_type != "none":
+            failure_summary[h.failure_type] += 1
+
     return {
         "total_sessions": total,
         "healthy":        healthy,
@@ -309,5 +371,6 @@ def analyze(sessions: list, packet_map: dict) -> dict:
         "critical":       critical,
         "overall_score":  overall,
         "top_issues":     top_issues,
+        "failure_summary": dict(failure_summary),
         "sessions":       [dataclasses.asdict(h) for h in healths],
     }

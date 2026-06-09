@@ -1,4 +1,4 @@
-import type { DnsEntry } from '../api'
+﻿import { DnsEntry } from '../api'
 
 interface Props { data: DnsEntry[] }
 

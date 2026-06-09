@@ -66,6 +66,7 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
     parse_warnings: list[str] = []
     sessions = None
     pkt_map: dict = {}
+    icmp_events: list = []
     source_type = None
 
     for parser in _PARSERS:
@@ -77,9 +78,10 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
                     sessions, pkt_map = result
                 else:
                     sessions, pkt_map = result, {}
+                icmp_events = list(getattr(parser, "icmp_events", []))
                 source_type = _source_type(parser)
-                logger.info("파일 파싱 완료: parser=%s sessions=%d warnings=%d",
-                            type(parser).__name__, len(sessions), len(parse_warnings))
+                logger.info("파일 파싱 완료: parser=%s sessions=%d icmp_events=%d warnings=%d",
+                            type(parser).__name__, len(sessions), len(icmp_events), len(parse_warnings))
                 break
             except (ValueError, KeyError, TypeError, json.JSONDecodeError, ValidationError) as exc:
                 logger.warning("파서 예외: parser=%s error=%s", type(parser).__name__, exc)
@@ -102,6 +104,7 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
         source_type=source_type,
         parse_warnings=parse_warnings,
         packet_map=pkt_map,
+        icmp_events=icmp_events,
     )
     request.app.state.session_store.put(upload_id, capture)
 

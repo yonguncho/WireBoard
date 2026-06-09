@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { PlotlyChart } from './PlotlyChart'
 
 interface GeoEntry {
@@ -20,8 +20,8 @@ export function GeoIpPanel({ uploadId }: Props) {
   useEffect(() => {
     if (!uploadId) return
     fetch(`/api/geoip/${uploadId}`)
-      .then(r => { if (!r.ok) throw new Error(`GeoIP ${r.status}`); return r.json() })
-      .then(d => setEntries(d.entries ?? []))
+      .then(r => r.json())
+      .then(d => setEntries(d.entries))
       .catch(e => setError(String(e)))
   }, [uploadId])
 

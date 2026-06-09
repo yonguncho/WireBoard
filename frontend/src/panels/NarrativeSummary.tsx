@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import type { SummaryData } from '../api'
 
 interface Props {
@@ -35,7 +35,7 @@ export function NarrativeSummary({ data }: Props) {
       </div>
 
       {/* 내러티브 문장 */}
-      <p className="narrative-body" style={{ whiteSpace: 'pre-wrap' }}>{data.narrative}</p>
+      <p className="narrative-body">{data.narrative}</p>
 
       {/* 공격자 / 피해자 IP */}
       {(data.attacker_ips.length > 0 || data.victim_ips.length > 0) && (

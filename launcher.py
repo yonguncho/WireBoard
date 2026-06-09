@@ -1,4 +1,4 @@
-"""WireBoard v5.5.0 — PyInstaller entry point."""
+"""WireBoard v6.0.0 — PyInstaller entry point."""
 import logging
 import os
 import socket
@@ -9,12 +9,12 @@ import traceback
 import webbrowser
 from pathlib import Path
 
-_VERSION = "5.5.3"
-_DEFAULT_PORT = 8765
+_VERSION = "6.0.0"
+_DEFAULT_PORT = 8764
 
 _BANNER = """
 ╔══════════════════════════════════════════════════════╗
-║       WireBoard v{ver} — PCAP Analysis Tool          ║
+║     WireBoard v{ver} — PCAP Analysis Tool            ║
 ╠══════════════════════════════════════════════════════╣
 ║  로컬 전용 서버 (외부 네트워크 미노출)                        ║
 ║  종료: Ctrl+C                                        ║

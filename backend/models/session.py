@@ -14,6 +14,22 @@ _UUID_V4_RE = re.compile(
     re.IGNORECASE,
 )
 
+# 공개 유틸리티 — 테스트 및 라우터에서 직접 import 가능
+UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+)
+
+
+def _is_valid_ip(addr: str) -> bool:
+    """IPv4/IPv6 주소 유효성 검사. 공백 포함 시 False."""
+    if addr != addr.strip():
+        return False
+    try:
+        ipaddress.ip_address(addr)
+        return True
+    except ValueError:
+        return False
+
 
 class SessionModel(BaseModel):
     model_config = {"strict": True}

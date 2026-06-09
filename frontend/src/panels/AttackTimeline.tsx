@@ -1,4 +1,4 @@
-import type { AttackTimelineEntry } from '../api'
+﻿import type { AttackTimelineEntry } from '../api'
 import { Tooltip } from '../ui/Tooltip'
 
 interface Props {

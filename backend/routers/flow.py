@@ -28,11 +28,11 @@ async def get_flow(
     try:
         capture = request.app.state.session_store.get(upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
     session = next((s for s in capture.sessions if s.session_id == session_id), None)
     if session is None:
-        raise HTTPException(status_code=404, detail="session_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "session_not_found", "message": "세션을 찾을 수 없습니다"})
 
     raw_pkts = capture.packet_map.get(session_id, [])
     base_ts  = raw_pkts[0].ts if raw_pkts else 0.0

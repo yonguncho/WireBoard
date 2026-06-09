@@ -37,7 +37,7 @@ async def get_panels(upload_id: str, request: Request):
         capture = store.get(upload_id)
     except KeyError:
         logger.warning("upload_id 없음: %s", upload_id)
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
     sessions = capture.sessions
 
@@ -105,7 +105,7 @@ async def get_panels(upload_id: str, request: Request):
         },
         "panel5_anomalies": panel5_anomalies,
         "panel6_ip_ranking": panel6_ip_ranking,
-        "panel7_tls": tls_result.entries,
+        "panel7_tls": {"entries": tls_result.entries, "no_meta_count": tls_result.port443_no_meta},
         "panel8_dns": dns_result.entries,
         "panel9_conversations": panel9_conversations,
         "panel10_attacks": panel10_attacks,

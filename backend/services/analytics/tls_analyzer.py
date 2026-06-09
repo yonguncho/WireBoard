@@ -12,6 +12,7 @@ class TlsAnalysisResult:
     tls_versions: dict = field(default_factory=dict)
     cert_cns: list = field(default_factory=list)
     entries: list = field(default_factory=list)
+    port443_no_meta: int = 0  # TLS 메타데이터 없는 포트 443 세션 수
 
 
 class TlsAnalyzer:
@@ -22,8 +23,15 @@ class TlsAnalyzer:
         cert_cns: list[str] = []
         entries: list[dict] = []
         seen_entries: set[tuple] = set()
+        port443_no_meta = 0
 
         for s in sessions:
+            # 포트 443 세션 중 TLS 메타데이터 없는 것 집계
+            is_443 = s.dst_port == 443 or s.src_port == 443
+            has_tls_meta = bool(s.meta and (s.meta.get("tls_sni") or s.meta.get("tls_version")))
+            if is_443 and not has_tls_meta:
+                port443_no_meta += 1
+
             if not s.meta:
                 continue
             sni = s.meta.get("tls_sni")
@@ -50,4 +58,5 @@ class TlsAnalyzer:
             tls_versions=dict(version_counts),
             cert_cns=cert_cns,
             entries=entries,
+            port443_no_meta=port443_no_meta,
         )

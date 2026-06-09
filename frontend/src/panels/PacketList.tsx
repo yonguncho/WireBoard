@@ -92,6 +92,7 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
   const [offset, setOffset]     = useState(0)
   const [loading, setLoading]   = useState(false)
   const [loaded, setLoaded]     = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [filters, setFilters]   = useState<Filters>({ src: '', dst: '', proto: '', flags: '' })
   const [applied, setApplied]   = useState<Filters>({ src: '', dst: '', proto: '', flags: '' })
@@ -99,7 +100,7 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
   const limit = 100
 
   const load = useCallback(async (off: number, f: Filters) => {
-    setLoading(true); setExpanded(null)
+    setLoading(true); setExpanded(null); setLoadError(null)
     try {
       const params = new URLSearchParams({ offset: String(off), limit: String(limit) })
       if (f.src)   params.set('src_ip', f.src)
@@ -108,7 +109,11 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
       if (f.flags) params.set('flags', f.flags)
       const r = await getPackets(uploadId, params.toString())
       setPackets(r.packets); setTotal(r.total); setTruncated(r.truncated); setOffset(off); setLoaded(true)
-    } catch (e) { console.error(e) }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setLoadError(msg)
+      console.error('패킷 로드 실패:', msg)
+    }
     finally { setLoading(false) }
   }, [uploadId])
 
@@ -117,9 +122,22 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
     const empty = { src: '', dst: '', proto: '', flags: '' }
     setFilters(empty); setApplied(empty); load(0, empty)
   }
+  const applyPreset = (preset: Partial<Filters>) => {
+    const next = { src: '', dst: '', proto: '', flags: '', ...preset }
+    setFilters(next); setApplied(next); load(0, next)
+  }
 
   const totalPages  = Math.ceil(total / limit)
   const currentPage = Math.floor(offset / limit) + 1
+
+  if (loadError && !loaded) return (
+    <div className="packet-list-init">
+      <div className="pkt-load-error">⚠ 패킷 로드 실패: {loadError}</div>
+      <button className="filter-btn" style={{ marginTop: 8 }} onClick={() => load(0, applied)}>
+        다시 시도
+      </button>
+    </div>
+  )
 
   if (!loaded) return (
     <div className="packet-list-init">
@@ -132,13 +150,36 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
 
   return (
     <div className="packet-list-wrap">
+      {loadError && (
+        <div className="pkt-load-error" style={{ marginBottom: 8 }}>⚠ 필터 적용 실패: {loadError}</div>
+      )}
+      {/* 프리셋 필터 버튼 */}
+      <div className="pkt-preset-bar">
+        <span className="pkt-preset-label">빠른 필터:</span>
+        {([
+          ['RST 연결', { flags: 'RST' }],
+          ['SYN 스캔', { flags: 'SYN', proto: 'TCP' }],
+          ['TCP', { proto: 'TCP' }],
+          ['UDP', { proto: 'UDP' }],
+          ['ICMP', { proto: 'ICMP' }],
+        ] as [string, Partial<Filters>][]).map(([label, preset]) => (
+          <button key={label} className="pkt-preset-btn" onClick={() => applyPreset(preset)}>
+            {label}
+          </button>
+        ))}
+        {(applied.src || applied.dst || applied.proto || applied.flags) && (
+          <button className="pkt-preset-btn pkt-preset-clear" onClick={clearFilter}>✕ 초기화</button>
+        )}
+      </div>
+
       {/* 필터 바 */}
       <div className="pkt-filter-bar">
-        {(['src', 'dst'] as const).map(k => (
-          <input key={k} className="pkt-filter-input" placeholder={k === 'src' ? '출발지 IP' : '목적지 IP'}
-            value={filters[k]} onChange={e => setFilters(f => ({ ...f, [k]: e.target.value }))}
-            onKeyDown={e => e.key === 'Enter' && applyFilter()} />
-        ))}
+        <input className="pkt-filter-input" placeholder="출발지 IP" value={filters.src} style={{ width: 130 }}
+          onChange={e => setFilters(f => ({ ...f, src: e.target.value }))}
+          onKeyDown={e => e.key === 'Enter' && applyFilter()} />
+        <input className="pkt-filter-input" placeholder="목적지 IP" value={filters.dst} style={{ width: 130 }}
+          onChange={e => setFilters(f => ({ ...f, dst: e.target.value }))}
+          onKeyDown={e => e.key === 'Enter' && applyFilter()} />
         <input className="pkt-filter-input" placeholder="프로토콜" value={filters.proto} style={{ width: 90 }}
           onChange={e => setFilters(f => ({ ...f, proto: e.target.value }))}
           onKeyDown={e => e.key === 'Enter' && applyFilter()} />
@@ -180,42 +221,3 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
                     style={{ cursor: 'pointer' }}
                     onClick={() => {
                       setExpanded(isOpen ? null : i)
-                      if (onFlowSelect && !isOpen) onFlowSelect(p.session_id)
-                    }}
-                    title={hasData ? 'クリック: HEX 덤프 / 세션 열기' : '클릭: 세션 열기'}
-                  >
-                    <td className="mono pkt-no">{p.no}</td>
-                    <td className="mono pkt-relts">{p.rel_ts.toFixed(6)}</td>
-                    <td className="mono pkt-addr">{p.src_ip}<span className="port-suffix">:{p.src_port}</span></td>
-                    <td className="mono pkt-addr">{p.dst_ip}<span className="port-suffix">:{p.dst_port}</span></td>
-                    <td><span className="pkt-proto-badge" style={{ color }}>{p.proto}</span></td>
-                    <td><span className={`flag-badge ${flagClass(p.flags)}`}>{p.flags || '—'}</span></td>
-                    <td className="mono">{p.length}</td>
-                    <td className="mono pkt-seq">{p.proto === 'TCP' && p.seq != null ? p.seq.toLocaleString() : '—'}</td>
-                    <td className="pkt-info-cell">{info}{hasData && <span className="hex-expand-hint">{isOpen ? ' ▲' : ' ▼'}</span>}</td>
-                  </tr>
-                  {isOpen && (
-                    <tr key={`e${i}`} className="pkt-expand-row">
-                      <td colSpan={9}><ExpandedRow p={p} /></td>
-                    </tr>
-                  )}
-                </>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 페이지네이션 */}
-      {totalPages > 1 && (
-        <div className="pkt-pagination">
-          <button className="filter-btn" disabled={currentPage === 1 || loading}
-            onClick={() => load(offset - limit, applied)}>◀ 이전</button>
-          <span className="pkt-page-info">{currentPage} / {totalPages} 페이지</span>
-          <button className="filter-btn" disabled={currentPage >= totalPages || loading}
-            onClick={() => load(offset + limit, applied)}>다음 ▶</button>
-        </div>
-      )}
-    </div>
-  )
-}

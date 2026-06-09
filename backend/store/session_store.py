@@ -17,6 +17,7 @@ class ParsedCapture:
     target_ip: str = ""
     attacks: list = field(default_factory=list)
     packet_map: dict = field(default_factory=dict)  # session_id -> list[PacketRecord]
+    icmp_events: list = field(default_factory=list)  # ICMP 에러 이벤트 (type 3/11)
 
 
 class SessionStore:

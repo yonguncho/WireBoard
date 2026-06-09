@@ -35,7 +35,7 @@ async def create_annotation(body: AnnotationCreate, request: Request):
     try:
         session_store.get(body.upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
     annotation = body.model_dump()
     request.app.state.annotations_store[body.upload_id].append(annotation)
@@ -49,5 +49,5 @@ async def get_annotations(upload_id: str, request: Request):
     try:
         request.app.state.session_store.get(upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
     return list(request.app.state.annotations_store.get(upload_id, []))

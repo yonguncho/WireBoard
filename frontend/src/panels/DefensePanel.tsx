@@ -1,4 +1,4 @@
-interface Props {
+﻿interface Props {
   recommendations: string[]
   attackerIps: string[]
   victimIps: string[]

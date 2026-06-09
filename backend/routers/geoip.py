@@ -19,7 +19,7 @@ async def get_geoip(upload_id: str, request: Request):
     try:
         capture = store.get(upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
     analyzer = request.app.state.geoip_analyzer
     results = analyzer.analyze(capture.sessions, capture.attacks)

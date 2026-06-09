@@ -1,4 +1,4 @@
-import type { TlsEntry } from '../api'
+﻿import { TlsEntry } from '../api'
 
 interface Props { data: TlsEntry[] }
 

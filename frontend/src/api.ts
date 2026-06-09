@@ -71,7 +71,7 @@ export interface PanelData {
   panel4_http: { counts: Record<string, number>; groups: Record<string, number>; top_errors: ErrorEntry[] }
   panel5_anomalies: { rst_count: number; malformed_count: number; retransmit_count: number }
   panel6_ip_ranking: IpRankEntry[]
-  panel7_tls: TlsEntry[]
+  panel7_tls: { entries: TlsEntry[]; no_meta_count: number }
   panel8_dns: DnsEntry[]
   panel9_conversations: ConvEntry[]
   panel10_attacks: AttackEntry[]
@@ -139,6 +139,30 @@ export interface FlowData {
   truncated: boolean
 }
 
+export interface StreamSegment {
+  direction: 'fwd' | 'rev'
+  ts: number; rel_ts: number
+  length: number
+  text: string
+  flags: string
+}
+export interface StreamData {
+  session_id: string
+  src_ip: string; dst_ip: string
+  src_port: number; dst_port: number
+  protocol: string
+  encoding: string
+  fwd_bytes: number; rev_bytes: number
+  segments: StreamSegment[]
+  truncated: boolean
+}
+
+export async function getStream(upload_id: string, session_id: string, encoding = 'ascii'): Promise<StreamData> {
+  const r = await fetch(`${BASE}/api/stream/${upload_id}?session_id=${encodeURIComponent(session_id)}&encoding=${encoding}`)
+  if (!r.ok) return handleError(r, '스트림 로드 실패')
+  return r.json()
+}
+
 export async function getFlow(upload_id: string, session_id: string): Promise<FlowData> {
   const r = await fetch(`${BASE}/api/flow/${upload_id}?session_id=${encodeURIComponent(session_id)}`)
   if (!r.ok) return handleError(r, '흐름 로드 실패')
@@ -195,6 +219,17 @@ export async function exportIoc(uploadId: string): Promise<Blob> {
   return r.blob()
 }
 
+export interface CompareSession {
+  session_id: string
+  src_ip: string; dst_ip: string
+  src_port: number; dst_port: number
+  protocol: string
+  start_ts: number; end_ts: number
+  bytes_sent: number; bytes_recv: number
+  packet_count: number
+  rst: boolean
+}
+
 export interface CompareResult {
   new_ips: string[]
   removed_ips: string[]
@@ -203,6 +238,10 @@ export interface CompareResult {
   traffic_delta_pct: number | null
   protocol_diff: Record<string, { a: number; b: number }>
   byte_ratio: { a_total: number; b_total: number }
+  base_sessions: CompareSession[]
+  compare_sessions: CompareSession[]
+  base_session_total: number
+  compare_session_total: number
 }
 
 export async function compareCaptures(base_upload_id: string, current_upload_id: string): Promise<CompareResult> {
@@ -236,6 +275,7 @@ export interface SessionHealth {
   duration_s: number
   packet_count: number
   bytes_sent: number; bytes_recv: number
+  rst?: boolean
   handshake: string       // COMPLETE | REFUSED | TIMEOUT | HALF_OPEN | N/A
   rtt_ms: number | null
   retransmit_count: number
@@ -247,6 +287,9 @@ export interface SessionHealth {
   issues: string[]
   root_cause: string
   recommendations: string[]
+  failure_type: string    // none | connection_refused | no_response | path_issue | slow_response
+  icmp_label?: string     // path_issue 시 ICMP 레이블 (ttl_expired | host_unreachable | ...)
+  icmp_src_ip?: string    // path_issue 시 ICMP 응답을 보낸 라우터 IP
 }
 
 export interface NetworkHealthData {
@@ -256,6 +299,7 @@ export interface NetworkHealthData {
   critical: number
   overall_score: number
   top_issues: { issue: string; count: number }[]
+  failure_summary: Record<string, number>
   sessions: SessionHealth[]
 }
 

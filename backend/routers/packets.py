@@ -35,7 +35,7 @@ async def get_packets(
     try:
         capture = request.app.state.session_store.get(upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
     # session_id → SessionModel 룩업
     session_lookup = {s.session_id: s for s in capture.sessions}

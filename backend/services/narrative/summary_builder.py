@@ -78,6 +78,26 @@ _ATTACK_EXPLAIN: dict[str, str] = {
 
 _SEVERITY_WEIGHT: dict[str, int] = {"high": 3, "medium": 2, "low": 1}
 
+# severity → confidence 변환 (0.0~1.0)
+_SEVERITY_CONFIDENCE: dict[str, float] = {"high": 0.9, "medium": 0.7, "low": 0.4}
+_CONFIDENCE_THRESHOLD = 0.7  # 이 미만이면 "의심 탐지" 표현 사용
+
+
+def _confidence_label(severity: str) -> str:
+    """severity 기반 탐지 강도 레이블 반환."""
+    conf = _SEVERITY_CONFIDENCE.get(severity.lower(), 0.5)
+    if conf >= 0.8:
+        return "탐지"
+    elif conf >= _CONFIDENCE_THRESHOLD:
+        return "의심 탐지"
+    else:
+        return "낮은 확신"
+
+
+def _confidence_pct(severity: str) -> int:
+    """severity 기반 확신도 퍼센트 반환."""
+    return int(_SEVERITY_CONFIDENCE.get(severity.lower(), 0.5) * 100)
+
 
 def _fmt_ts(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S")
@@ -144,8 +164,22 @@ def build_summary(attacks: list, sessions: list) -> NarrativeResult:
                 victim_ips.append(dst)
     victim_ips = victim_ips[:5]
 
-    # ── 공격 유형 집계 ────────────────────────────────────────────────────
+    # ── 공격 유형 집계 (confidence >= 0.7 기준 분류) ──────────────────────
     attack_type_set = sorted({a.get("attack_type", "Unknown") for a in attacks})
+
+    # 공격별 확신도 레이블 계산
+    confirmed_types = [t for a in attacks
+                       if _SEVERITY_CONFIDENCE.get(str(a.get("severity", "low")).lower(), 0.5) >= _CONFIDENCE_THRESHOLD
+                       for t in [a.get("attack_type", "Unknown")]]
+    suspected_types = [a.get("attack_type", "Unknown") for a in attacks
+                       if _SEVERITY_CONFIDENCE.get(str(a.get("severity", "low")).lower(), 0.5) < _CONFIDENCE_THRESHOLD]
+
+    def _attack_label(a: dict) -> str:
+        ko = _ATTACK_KO.get(a.get("attack_type", "Unknown"), a.get("attack_type", "Unknown"))
+        conf = _confidence_pct(str(a.get("severity", "low")))
+        label = _confidence_label(str(a.get("severity", "low")))
+        return f"{ko} {label} (확신도: {conf}%)"
+
     attack_ko = " + ".join(_ATTACK_KO.get(t, t) for t in attack_type_set)
 
     # ── 타임라인 (세션 시작/종료 기준으로 이벤트 시각 배치) ──────────────
@@ -204,9 +238,9 @@ def build_summary(attacks: list, sessions: list) -> NarrativeResult:
         f"총 {len(sessions)}개 세션에서 {_fmt_bytes(total_bytes)} 트래픽이 분석되었습니다."
         if sessions else ""
     )
-    # 탐지 상세 줄 (각 공격별)
+    # 탐지 상세 줄 (각 공격별 — 확신도 포함)
     detail_lines = [
-        f"• {_ATTACK_KO.get(a.get('attack_type', ''), a.get('attack_type', ''))}: {a.get('description', '')}"
+        f"• {_attack_label(a)}: {a.get('description', '')}"
         for a in attacks if a.get("description")
     ]
 
@@ -234,8 +268,11 @@ def build_summary(attacks: list, sessions: list) -> NarrativeResult:
         for t in attack_type_set
     }
 
+    # 헤드라인: 확신도 낮은 공격이 섞여 있으면 "의심 포함" 표시
+    has_suspected = bool(suspected_types)
+    headline_suffix = " (의심 포함)" if has_suspected and confirmed_types else (" 의심" if has_suspected else "")
     return NarrativeResult(
-        headline=f"{attack_ko} 탐지 — {risk} 위험",
+        headline=f"{attack_ko} 탐지{headline_suffix} — {risk} 위험",
         narrative=narrative,
         risk_level=risk,
         attacker_ips=attacker_ips,

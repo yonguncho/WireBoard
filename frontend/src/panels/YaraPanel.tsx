@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 
 interface YaraMatch {
   rule: string
@@ -29,7 +29,7 @@ export function YaraPanel({ uploadId }: Props) {
   useEffect(() => {
     if (!uploadId) return
     fetch(`/api/yara/${uploadId}`)
-      .then(r => { if (!r.ok) throw new Error(`YARA ${r.status}`); return r.json() })
+      .then(r => r.json())
       .then(setData)
       .catch(e => setError(String(e)))
   }, [uploadId])

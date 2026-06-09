@@ -17,7 +17,10 @@ from services.attack_detector.comm_failure_detector import CommFailureDetector
 from services.attack_detector.ddos_detector import DDoSDetector
 from services.attack_detector.exfiltration_detector import ExfiltrationDetector
 from services.attack_detector.bruteforce_detector import BruteForceDetector
+from services.reputation_service import ReputationService
 from utils.constants import UUID_V4_RE, IPv4_RE
+
+_reputation_svc = ReputationService()
 
 router = APIRouter()
 
@@ -50,7 +53,7 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
         capture = store.get(req_body.upload_id)
     except KeyError:
         logger.warning("upload_id 없음: %s", req_body.upload_id)
-        raise HTTPException(status_code=404, detail="upload_id를 찾을 수 없습니다")
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
     start_time = time.perf_counter()
 
@@ -81,6 +84,22 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
             status_code=422,
             detail={"code": "no_matching_sessions", "msg": f"target_ip {effective_target_ip!r}에 해당하는 세션이 없습니다"},
         )
+    if not target_sessions:
+        try:
+            rep = await asyncio.wait_for(_reputation_svc.lookup_all(effective_target_ip), timeout=2.0)
+            rep_dict = rep.model_dump()
+        except Exception:
+            rep_dict = {"ip": effective_target_ip, "is_malicious": False, "sources": []}
+        duration_ms = (time.perf_counter() - start_time) * 1000.0
+        return JSONResponse(content={
+            "flows": [], "sessions": [], "attacks": [],
+            "plotly_xs": [], "plotly_ys": [],
+            "analysis_duration_ms": duration_ms,
+            "target_ip": effective_target_ip,
+            "partial_failure": False,
+            "reputation": rep_dict,
+        }, status_code=200)
+
     extractor = FlowExtractor()
     flows = extractor.extract(target_sessions)
 
@@ -139,6 +158,12 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
     except KeyError:
         logger.warning("분석 결과 저장 실패 (세션 만료): upload_id=%s", req_body.upload_id)
 
+    try:
+        rep = await asyncio.wait_for(_reputation_svc.lookup_all(effective_target_ip), timeout=2.0)
+        rep_dict = rep.model_dump()
+    except Exception:
+        rep_dict = {"ip": effective_target_ip, "is_malicious": False, "sources": []}
+
     del sessions, target_sessions, flows, capture
     await asyncio.get_running_loop().run_in_executor(None, gc.collect)
 
@@ -152,5 +177,6 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
         "analysis_duration_ms": duration_ms,
         "target_ip": effective_target_ip,
         "partial_failure": partial_failure,
+        "reputation": rep_dict,
     }
     return JSONResponse(content=response_body, status_code=207 if partial_failure else 200)

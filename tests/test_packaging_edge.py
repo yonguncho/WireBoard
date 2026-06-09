@@ -1,4 +1,4 @@
-﻿"""패키징(PyInstaller) edge case 테스트 (TDD).
+"""패키징(PyInstaller) edge case 테스트 (TDD).
 
 검증 항목:
 - backend/main.py 가 존재한다 (entry point)
@@ -41,18 +41,18 @@ class TestMainEntry:
 
 class TestPyInstallerSpec:
     def test_spec_file_console_true(self):
-        """WireBoard.spec 파일이 있으면 console=True."""
-        spec_file = PROJECT_ROOT / "WireBoard.spec"
+        """PacketLens.spec 파일이 있으면 console=True."""
+        spec_file = PROJECT_ROOT / "PacketLens.spec"
         if not spec_file.exists():
-            pytest.skip("WireBoard.spec 없음 — 패키징 단계 이전")
+            pytest.skip("PacketLens.spec 없음 — 패키징 단계 이전")
         src = spec_file.read_text(encoding="utf-8")
         assert "console=True" in src, "spec 파일에 console=True 없음 (GUI 빌드 금지)"
 
     def test_spec_no_absolute_paths_in_datas(self):
         """spec 파일 datas 에 절대경로 없음."""
-        spec_file = PROJECT_ROOT / "WireBoard.spec"
+        spec_file = PROJECT_ROOT / "PacketLens.spec"
         if not spec_file.exists():
-            pytest.skip("WireBoard.spec 없음")
+            pytest.skip("PacketLens.spec 없음")
         src = spec_file.read_text(encoding="utf-8")
         # Windows 절대경로 패턴 탐지 (C:\, D:\, /, 등)
         import re

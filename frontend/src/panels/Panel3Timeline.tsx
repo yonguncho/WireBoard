@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+﻿import { useState, useCallback, useEffect } from 'react'
 import { PlotlyChart } from './PlotlyChart'
 import { addAnnotation, getAnnotations } from '../api'
 import type { BucketEntry, Annotation } from '../api'

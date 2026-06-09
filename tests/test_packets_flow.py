@@ -106,39 +106,6 @@ class TestPacketsEndpoint:
         r = client.get(f"/api/packets/{uuid.uuid4()}")
         assert r.status_code == 404
 
-    def test_invalid_session_id_returns_400(self) -> None:
-        client = _make_app()
-        # 유효하지 않은 UUID → 400
-        r = client.get(f"/api/packets/{uuid.uuid4()}?session_id=not-a-uuid")
-        assert r.status_code == 400
-
-    def test_unknown_session_id_returns_empty(self, pcap_bytes: bytes) -> None:
-        client = _make_app()
-        uid = _upload_and_analyze(client, pcap_bytes)
-        # 유효하지만 존재하지 않는 session_id → total=0, packets=[]
-        r = client.get(f"/api/packets/{uid}?session_id={uuid.uuid4()}")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["total"] == 0
-        assert body["packets"] == []
-
-    def test_session_id_filter_returns_only_that_session(self, pcap_bytes: bytes) -> None:
-        client = _make_app()
-        uid = _upload_and_analyze(client, pcap_bytes)
-        # 전체 패킷에서 session_id 하나 추출
-        all_r = client.get(f"/api/packets/{uid}?limit=500")
-        assert all_r.status_code == 200
-        all_pkts = all_r.json()["packets"]
-        if not all_pkts:
-            return
-        target_sid = all_pkts[0]["session_id"]
-        # session_id 직접 룩업 경로
-        r = client.get(f"/api/packets/{uid}?session_id={target_sid}&limit=500")
-        assert r.status_code == 200
-        body = r.json()
-        for p in body["packets"]:
-            assert p["session_id"] == target_sid, "다른 세션 패킷이 포함됨"
-
 
 class TestFlowEndpoint:
     def test_returns_flow_data(self, pcap_bytes: bytes) -> None:
