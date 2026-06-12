@@ -1,0 +1,109 @@
+"""SessionModel — 공유 도메인 모델."""
+import ipaddress
+import logging
+import math
+import re
+from typing import ClassVar, Literal, Optional
+
+from pydantic import BaseModel, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
+
+_UUID_V4_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+# 공개 유틸리티 — 테스트 및 라우터에서 직접 import 가능
+UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+)
+
+
+def _is_valid_ip(addr: str) -> bool:
+    """IPv4/IPv6 주소 유효성 검사. 공백 포함 시 False."""
+    if addr != addr.strip():
+        return False
+    try:
+        ipaddress.ip_address(addr)
+        return True
+    except ValueError:
+        return False
+
+
+class SessionModel(BaseModel):
+    model_config = {"strict": True}
+
+    session_id: str
+    src_ip: str
+    dst_ip: str
+    src_port: int
+    dst_port: int
+    protocol: str
+    start_ts: float
+    end_ts: float
+    bytes_sent: int
+    bytes_recv: int
+    packet_count: int
+    payload_length: int
+    confidence: Literal["low", "normal"] = "normal"
+    rst: bool = False
+    meta: Optional[dict] = None
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_uuid_v4(cls, v: str) -> str:
+        if not _UUID_V4_RE.match(v):
+            raise ValueError(f"session_id must be UUID v4: {v!r}")
+        return v
+
+    @field_validator("src_ip", "dst_ip")
+    @classmethod
+    def validate_ip(cls, v: str) -> str:
+        try:
+            ipaddress.ip_address(v)
+        except ValueError:
+            raise ValueError(f"유효하지 않은 IP 주소: {v!r}")
+        return v
+
+    # Known transport/network protocols; values outside this set are accepted but warned.
+    KNOWN_PROTOCOLS: ClassVar[frozenset[str]] = frozenset({
+        "TCP", "UDP", "ICMP", "ICMP6", "ARP", "GRE", "ESP", "SCTP", "IGMP",
+    })
+
+    @field_validator("protocol")
+    @classmethod
+    def validate_protocol_str(cls, v: str) -> str:
+        upper = v.strip().upper()
+        if not upper:
+            raise ValueError("protocol cannot be empty")
+        if upper not in cls.KNOWN_PROTOCOLS:
+            logger.warning("비표준 프로토콜 값: %r (허용은 되나 알려진 값 아님)", upper)
+        return upper
+
+    @field_validator("src_port", "dst_port")
+    @classmethod
+    def validate_port(cls, v: int) -> int:
+        if not 0 <= v <= 65535:
+            raise ValueError(f"port must be 0-65535, got {v}")
+        return v
+
+    @field_validator("start_ts", "end_ts")
+    @classmethod
+    def validate_finite_ts(cls, v: float) -> float:
+        if not math.isfinite(v) or v < 0:
+            raise ValueError(f"timestamp must be finite and non-negative: {v}")
+        return v
+
+    @field_validator("bytes_sent", "bytes_recv", "packet_count", "payload_length")
+    @classmethod
+    def validate_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError(f"음수 불가: {v}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_temporal_order(self) -> "SessionModel":
+        if self.end_ts < self.start_ts:
+            raise ValueError(f"end_ts({self.end_ts}) < start_ts({self.start_ts})")
+        return self

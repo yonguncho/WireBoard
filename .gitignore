@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# Node
+frontend/node_modules/
+frontend/.vite/
+frontend/node_modules/.tmp/
+
+# 환경 변수 · 인증
+.env
+*.key
+*.pem
+auth.json
+
+# 빌드 산출물 (PyInstaller)
+build/
+dist/
+
+# 런타임 데이터
+*.pcap
+*.pcapng
+uploads/
+
+# 로그 · 임시
+*.log
+logs/
+*.tmp
