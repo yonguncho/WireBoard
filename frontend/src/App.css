@@ -1034,3 +1034,69 @@ body {
 /* 키보드 포커스 링 */
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
 button:focus:not(:focus-visible), input:focus:not(:focus-visible) { outline: none; }
+
+/* ===== v6.2 UI 개선 ===== */
+
+/* 상단 로딩 프로그레스 바 */
+.top-progress {
+  position: fixed; top: 0; left: 0; right: 0; height: 3px;
+  z-index: 300; overflow: hidden; background: transparent;
+}
+.top-progress::before {
+  content: ''; position: absolute; top: 0; left: 0; height: 100%; width: 40%;
+  background: linear-gradient(90deg, transparent, var(--blue), transparent);
+  animation: tp-slide 1.1s ease-in-out infinite;
+}
+@keyframes tp-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+/* 전역 드롭 오버레이 */
+.global-drop-overlay {
+  position: fixed; inset: 0; z-index: 250;
+  background: rgba(8, 15, 30, 0.72);
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  animation: gd-fade 0.12s ease-out;
+}
+[data-theme="light"] .global-drop-overlay { background: rgba(240, 244, 248, 0.78); }
+@keyframes gd-fade { from { opacity: 0; } to { opacity: 1; } }
+.global-drop-box {
+  border: 2px dashed var(--blue); border-radius: var(--radius-lg);
+  padding: 48px 64px; text-align: center; color: var(--blue);
+  background: var(--card);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  font-size: 15px; font-weight: 600;
+}
+
+/* 업로드 페이지 기능 카드 */
+.feature-cards {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  width: 100%; max-width: 640px; margin-top: 18px;
+}
+.feature-card {
+  flex: 1; min-width: 180px;
+  background: var(--card); border: 1px solid var(--card-border);
+  border-radius: var(--radius); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.feature-card:hover { border-color: var(--blue); transform: translateY(-2px); }
+.feature-icon { font-size: 18px; line-height: 1; }
+.feature-title { font-size: 12.5px; font-weight: 700; color: var(--txt-primary); margin-top: 4px; }
+.feature-desc { font-size: 11px; color: var(--txt-secondary); line-height: 1.45; }
+
+/* 클릭 가능한 스탯 카드 */
+button.stat-card {
+  font: inherit; text-align: left; cursor: pointer;
+  transition: border-color 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+button.stat-card:hover {
+  border-color: var(--blue);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+button.stat-card.stat-danger:hover { border-color: var(--red); }
+button.stat-card.stat-warn:hover { border-color: var(--yellow); }
+button.stat-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }

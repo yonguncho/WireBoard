@@ -267,7 +267,10 @@ export default function App() {
   const [showPalette, setShowPalette] = useState(false)
   const [loadStep, setLoadStep] = useState(0)
   const [recent, setRecent] = useState<RecentEntry[]>(loadRecent)
+  const [globalDrag, setGlobalDrag] = useState(false)
   const toastTimer = useRef<number | undefined>(undefined)
+  const dragDepth = useRef(0)
+  const attackRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -337,6 +340,48 @@ export default function App() {
     setMeta(null); setPanels(null); setSummary(null); setError(null)
   }, [])
 
+  // 대시보드 상태에서도 화면 어디든 파일을 드롭하면 새 분석 시작
+  useEffect(() => {
+    if (!meta || loading) return
+    const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes('Files')
+    const onDragEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      dragDepth.current++
+      setGlobalDrag(true)
+    }
+    const onDragLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      dragDepth.current = Math.max(0, dragDepth.current - 1)
+      if (dragDepth.current === 0) setGlobalDrag(false)
+    }
+    const onDragOver = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault() }
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      dragDepth.current = 0
+      setGlobalDrag(false)
+      const f = e.dataTransfer?.files[0]
+      if (f) handleFile(f)
+    }
+    window.addEventListener('dragenter', onDragEnter)
+    window.addEventListener('dragleave', onDragLeave)
+    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter)
+      window.removeEventListener('dragleave', onDragLeave)
+      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('drop', onDrop)
+      dragDepth.current = 0
+      setGlobalDrag(false)
+    }
+  }, [meta, loading, handleFile])
+
+  const goAttackDetail = useCallback(() => {
+    setLayer('overview')
+    setTimeout(() => attackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+  }, [])
+
   // 전역 키보드 단축키 — 입력 필드 포커스 중에는 비활성 (Ctrl+K 제외)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -393,7 +438,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v6.0</span>
+          <span className="header-ver">v6.2</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -420,6 +465,19 @@ export default function App() {
           {theme === 'dark' ? '☀ 라이트' : '◑ 다크'}
         </button>
       </header>
+
+      {/* 상단 로딩 프로그레스 바 */}
+      {loading && <div className="top-progress" />}
+
+      {/* 전역 드롭 오버레이 — 대시보드 상태에서 파일 드롭 시 새 분석 */}
+      {globalDrag && (
+        <div className="global-drop-overlay">
+          <div className="global-drop-box">
+            <IconUpload />
+            <p>여기에 놓으면 새 파일을 분석합니다</p>
+          </div>
+        </div>
+      )}
 
       {/* 전역 토스트 */}
       {toast && <div className="toast">{toast}</div>}
@@ -450,6 +508,23 @@ export default function App() {
               <p className="drop-primary">파일을 드래그하거나 클릭하여 업로드</p>
               <p className="drop-hint">.pcap &nbsp;·&nbsp; .pcapng &nbsp;·&nbsp; .har &nbsp;·&nbsp; .log &nbsp;·&nbsp; 최대 50 MB</p>
             </label>
+          </div>
+          <div className="feature-cards">
+            <div className="feature-card">
+              <span className="feature-icon">🔒</span>
+              <span className="feature-title">100% 오프라인 분석</span>
+              <span className="feature-desc">파일은 로컬에서만 처리되며 외부로 전송되지 않습니다</span>
+            </div>
+            <div className="feature-card">
+              <span className="feature-icon">⚡</span>
+              <span className="feature-title">자동 공격 탐지</span>
+              <span className="feature-desc">포트스캔 · DDoS · 데이터 유출 등을 MITRE ATT&CK에 매핑</span>
+            </div>
+            <div className="feature-card">
+              <span className="feature-icon">📄</span>
+              <span className="feature-title">원클릭 리포트</span>
+              <span className="feature-desc">PDF 리포트 · JSON · IOC CSV로 즉시 내보내기</span>
+            </div>
           </div>
           <div className="target-ip-row">
             <label htmlFor="target-ip" className="ip-label">분석 대상 IP <span className="optional">(선택 — 비우면 자동 감지)</span></label>
@@ -551,26 +626,31 @@ export default function App() {
                 <div className="overview-header-row">
                   <RiskBadge level={summary.risk_level} />
                   <div className="stat-strip">
-                    <div className="stat-card">
+                    <button className="stat-card stat-click" title="세션/패킷 조사로 이동"
+                      onClick={() => { setLayer('investigate'); setInvTab('sessions') }}>
                       <span className="stat-num">{meta.sessionCount.toLocaleString()}</span>
                       <span className="stat-lbl">세션</span>
-                    </div>
-                    <div className={`stat-card${panels.panel10_attacks.length > 0 ? ' stat-danger' : ''}`}>
+                    </button>
+                    <button className={`stat-card stat-click${panels.panel10_attacks.length > 0 ? ' stat-danger' : ''}`}
+                      title="공격 탐지 상세로 이동" onClick={goAttackDetail}>
                       <span className="stat-num">{panels.panel10_attacks.length}</span>
                       <span className="stat-lbl">공격 탐지</span>
-                    </div>
-                    <div className={`stat-card${summary.attacker_ips.length > 0 ? ' stat-danger' : ''}`}>
+                    </button>
+                    <button className={`stat-card stat-click${summary.attacker_ips.length > 0 ? ' stat-danger' : ''}`}
+                      title="GeoIP 지리 분포로 이동" onClick={() => { setLayer('investigate'); setInvTab('geoip') }}>
                       <span className="stat-num">{summary.attacker_ips.length}</span>
                       <span className="stat-lbl">공격 IP</span>
-                    </div>
-                    <div className={`stat-card${panels.panel5_anomalies.rst_count > 0 ? ' stat-warn' : ''}`}>
+                    </button>
+                    <button className={`stat-card stat-click${panels.panel5_anomalies.rst_count > 0 ? ' stat-warn' : ''}`}
+                      title="통신 상태 진단으로 이동" onClick={() => { setLayer('investigate'); setInvTab('health') }}>
                       <span className="stat-num">{panels.panel5_anomalies.rst_count.toLocaleString()}</span>
                       <span className="stat-lbl">RST</span>
-                    </div>
-                    <div className={`stat-card${panels.panel5_anomalies.retransmit_count > 0 ? ' stat-warn' : ''}`}>
+                    </button>
+                    <button className={`stat-card stat-click${panels.panel5_anomalies.retransmit_count > 0 ? ' stat-warn' : ''}`}
+                      title="통신 상태 진단으로 이동" onClick={() => { setLayer('investigate'); setInvTab('health') }}>
                       <span className="stat-num">{panels.panel5_anomalies.retransmit_count.toLocaleString()}</span>
                       <span className="stat-lbl">재전송</span>
-                    </div>
+                    </button>
                   </div>
                 </div>
 
@@ -589,9 +669,12 @@ export default function App() {
                   />
                 </div>
 
-                <PCard title="공격 탐지 상세" wide>
-                  <Panel10Attacks data={panels.panel10_attacks} />
-                </PCard>
+                <div ref={attackRef} className="panel-card wide">
+                  <div className="panel-card-title">공격 탐지 상세</div>
+                  <div className="panel-card-body">
+                    <Panel10Attacks data={panels.panel10_attacks} />
+                  </div>
+                </div>
 
                 <div className="overview-bottom-row">
                   <PCard title="이상 지표">
