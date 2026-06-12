@@ -25,7 +25,7 @@ function fmtTs(ts: number) {
 
 export function AttackTimeline({ events, onSelect }: Props) {
   if (!events.length) {
-    return <div className="no-data">탐지된 공격 없음</div>
+    return <div className="no-data">탐지된 이벤트 없음</div>
   }
 
   return (

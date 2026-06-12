@@ -277,10 +277,10 @@ export function SessionExplorer({ uploadId, panels, sessionCount, onFlowSelect }
           value={panels.panel6_ip_ranking.length.toString()}
         />
         <StatBig
-          label="공격 탐지"
+          label="탐지 이벤트"
           value={attackCount.toString()}
           color={attackCount > 0 ? '#ef4444' : '#22c55e'}
-          sub={attackCount > 0 ? '위협 감지됨' : '정상'}
+          sub={attackCount > 0 ? '이상 패턴 감지' : '정상'}
         />
         <StatBig
           label="RST 패킷"

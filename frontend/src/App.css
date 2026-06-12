@@ -1100,3 +1100,86 @@ button.stat-card:hover {
 button.stat-card.stat-danger:hover { border-color: var(--red); }
 button.stat-card.stat-warn:hover { border-color: var(--yellow); }
 button.stat-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* ── v6.3 현황 레이어 레이아웃 — 빈 공간 제거 ─────────────────── */
+.overview-header-row {
+  grid-column: 1 / -1;
+  display: flex; align-items: stretch; gap: 14px; flex-wrap: wrap;
+}
+.summary-section { grid-column: 1 / -1; }
+.overview-bottom-row {
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+.overview-bottom-row .panel-card { margin: 0; }
+
+/* ── v6.3 래더(Flow Sequence) 다이어그램 ─────────────────────── */
+.ladder-wrap { padding: 4px 0 12px; overflow-x: auto; }
+.ladder-endpoints {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; margin-bottom: 4px;
+  position: sticky; top: 0; z-index: 2;
+  background: var(--card); border-bottom: 1px solid var(--card-border);
+}
+.ladder-endpoint {
+  font-family: var(--mono); font-size: 12.5px; font-weight: 700;
+  padding: 5px 12px; border-radius: 6px;
+  border: 1px solid var(--card-border); background: var(--bg);
+}
+.ladder-endpoint.src { color: #60a5fa; border-color: rgba(96,165,250,0.4); }
+.ladder-endpoint.dst { color: #c084fc; border-color: rgba(192,132,252,0.4); }
+.ladder-endpoint .ep-port { font-size: 10.5px; color: var(--txt-muted); font-weight: 400; margin-left: 4px; }
+.ladder-body { position: relative; padding: 4px 0; }
+.ladder-rail {
+  position: absolute; top: 0; bottom: 0; width: 1.5px;
+  background: var(--card-border); opacity: 0.7;
+}
+.ladder-row {
+  display: grid; grid-template-columns: 78px 1fr 70px;
+  align-items: center; gap: 8px;
+  padding: 1.5px 12px; cursor: pointer; border-radius: 4px;
+}
+.ladder-row:hover { background: rgba(96,165,250,0.07); }
+.ladder-row.selected { background: rgba(96,165,250,0.14); }
+.ladder-time {
+  font-family: var(--mono); font-size: 10px; color: var(--txt-muted);
+  text-align: right; white-space: nowrap;
+}
+.ladder-arrow-track { position: relative; height: 22px; display: flex; align-items: center; }
+.ladder-arrow {
+  position: relative; height: 2px; width: 100%;
+  display: flex; align-items: center;
+}
+.ladder-arrow-line { flex: 1; height: 2px; border-radius: 1px; }
+.ladder-arrow-head {
+  width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+}
+.ladder-arrow.fwd .ladder-arrow-head { border-left: 8px solid currentColor; }
+.ladder-arrow.rev { flex-direction: row-reverse; }
+.ladder-arrow.rev .ladder-arrow-head { border-right: 8px solid currentColor; }
+.ladder-arrow-label {
+  position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  white-space: nowrap; line-height: 1;
+}
+.ladder-bytes { font-family: var(--mono); font-size: 10px; color: var(--txt-secondary); white-space: nowrap; }
+.ladder-gap {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 12px; margin: 2px 0;
+}
+.ladder-gap-line { flex: 1; border-top: 1px dashed var(--card-border); }
+.ladder-gap-label { font-family: var(--mono); font-size: 10px; color: var(--txt-muted); white-space: nowrap; }
+.ladder-hex {
+  grid-column: 1 / -1; margin: 4px 12px 8px;
+  background: var(--bg); border: 1px solid var(--card-border); border-radius: 6px;
+  padding: 10px 12px; font-family: var(--mono); font-size: 11px;
+  white-space: pre; overflow-x: auto; color: var(--txt-secondary);
+}
+.ladder-legend {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  padding: 8px 12px 0; margin-top: 6px;
+  border-top: 1px solid var(--card-border);
+}
+.ladder-legend-item { display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--txt-secondary); }
+.ladder-legend-swatch { width: 16px; height: 3px; border-radius: 2px; }

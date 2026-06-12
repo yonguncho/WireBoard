@@ -30,9 +30,11 @@ class CommFailureDetector:
             if ratio < _MEDIUM_RST_RATIO:
                 return None
 
-        if effective_rst >= 20 or ratio >= _HIGH_RST_RATIO:
+        # 절대 건수 단독 조건 금지 — RST 비율이 높을 때만 통신 장애로 판단
+        # (대형 캡처에서는 정상 트래픽에도 RST 수십 건이 자연 발생)
+        if effective_rst >= 20 and ratio >= _HIGH_RST_RATIO:
             severity = "high"
-        elif effective_rst >= 10 or ratio >= _MEDIUM_RST_RATIO or icmp_unreachable >= 20:
+        elif (effective_rst >= 10 and ratio >= _MEDIUM_RST_RATIO) or icmp_unreachable >= 20:
             severity = "medium"
         else:
             return None

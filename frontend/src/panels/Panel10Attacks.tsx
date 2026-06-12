@@ -9,7 +9,7 @@ const SEV_CLASS: Record<string, string> = {
 
 export function Panel10Attacks({ data }: Props) {
   const attacks = data ?? []
-  if (!attacks.length) return <div className="no-attacks">✅ 탐지된 공격 없음</div>
+  if (!attacks.length) return <div className="no-attacks">✅ 탐지된 이벤트 없음</div>
   return (
     <div className="attacks-list">
       {attacks.map((a, i) => (

@@ -69,7 +69,7 @@ export function GeoIpPanel({ uploadId }: Props) {
             <tr key={name} className={v.attacker ? 'row-error' : ''}>
               <td>{name}</td>
               <td>{v.count}</td>
-              <td>{v.attacker ? '⚠ 공격자' : '외부'}</td>
+              <td>{v.attacker ? '⚠ 이벤트 출발지' : '외부'}</td>
             </tr>
           ))}
         </tbody>

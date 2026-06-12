@@ -300,7 +300,7 @@ export default function App() {
       if (up.parse_warnings?.length) console.warn('Parse warnings:', up.parse_warnings)
 
       setLoadStep(1)
-      setLoadingMsg(`${up.session_count.toLocaleString()}개 세션 공격 탐지 중...`)
+      setLoadingMsg(`${up.session_count.toLocaleString()}개 세션 패턴 분석 중...`)
       await analyzePcap(up.upload_id, targetIp.trim() || undefined)
 
       setLoadStep(2)
@@ -438,7 +438,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v6.2</span>
+          <span className="header-ver">v6.3</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -459,7 +459,7 @@ export default function App() {
             <button className="btn-new-file" title="단축키 N" onClick={resetToUpload}>새 파일</button>
           </div>
         )}
-        {!meta && <span className="header-tagline">PCAP 공격/방어 분석 도구</span>}
+        {!meta && <span className="header-tagline">PCAP 네트워크 분석 도구</span>}
         <button className="theme-toggle" title="단축키 ?" onClick={() => setShowHelp(v => !v)}>⌨ 단축키</button>
         <button className="theme-toggle" title="단축키 T" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
           {theme === 'dark' ? '☀ 라이트' : '◑ 다크'}
@@ -492,8 +492,8 @@ export default function App() {
       {!meta && !loading && (
         <main className="upload-page">
           <div className="upload-hero">
-            <h1 className="upload-hero-title">네트워크 공격을 한눈에 분석하세요</h1>
-            <p className="upload-hero-sub">pcap 파일을 업로드하면 공격 유형, 출발지, 방어 권고를 자동으로 분석합니다</p>
+            <h1 className="upload-hero-title">네트워크 트래픽을 한눈에 분석하세요</h1>
+            <p className="upload-hero-sub">pcap 파일을 업로드하면 세션 · 프로토콜 · 이상 패턴을 자동으로 분석합니다</p>
           </div>
           <div
             className={`drop-zone${dragging ? ' dragging' : ''}`}
@@ -517,7 +517,7 @@ export default function App() {
             </div>
             <div className="feature-card">
               <span className="feature-icon">⚡</span>
-              <span className="feature-title">자동 공격 탐지</span>
+              <span className="feature-title">자동 이상 탐지</span>
               <span className="feature-desc">포트스캔 · DDoS · 데이터 유출 등을 MITRE ATT&CK에 매핑</span>
             </div>
             <div className="feature-card">
@@ -538,7 +538,7 @@ export default function App() {
                   <span className="recent-name mono">{r.filename}</span>
                   <span className="recent-meta">{r.sessionCount.toLocaleString()} 세션</span>
                   <span className={`recent-risk risk-${r.riskLevel.toLowerCase()}`}>
-                    {r.riskLevel}{r.attackCount > 0 ? ` · 공격 ${r.attackCount}` : ''}
+                    {r.riskLevel}{r.attackCount > 0 ? ` · 이벤트 ${r.attackCount}` : ''}
                   </span>
                   <span className="recent-time">{new Date(r.analyzedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
@@ -560,7 +560,7 @@ export default function App() {
           <div className="spinner" />
           <p className="loading-msg">{loadingMsg}</p>
           <div className="load-steps">
-            {['업로드', '공격 탐지', '요약 생성'].map((label, i) => (
+            {['업로드', '패턴 분석', '요약 생성'].map((label, i) => (
               <div key={label} className={`load-step${i < loadStep ? ' done' : i === loadStep ? ' active' : ''}`}>
                 <span className="load-step-dot">{i < loadStep ? '✓' : i + 1}</span>
                 <span className="load-step-label">{label}</span>
@@ -632,14 +632,14 @@ export default function App() {
                       <span className="stat-lbl">세션</span>
                     </button>
                     <button className={`stat-card stat-click${panels.panel10_attacks.length > 0 ? ' stat-danger' : ''}`}
-                      title="공격 탐지 상세로 이동" onClick={goAttackDetail}>
+                      title="탐지 이벤트 상세로 이동" onClick={goAttackDetail}>
                       <span className="stat-num">{panels.panel10_attacks.length}</span>
-                      <span className="stat-lbl">공격 탐지</span>
+                      <span className="stat-lbl">탐지 이벤트</span>
                     </button>
                     <button className={`stat-card stat-click${summary.attacker_ips.length > 0 ? ' stat-danger' : ''}`}
                       title="GeoIP 지리 분포로 이동" onClick={() => { setLayer('investigate'); setInvTab('geoip') }}>
                       <span className="stat-num">{summary.attacker_ips.length}</span>
-                      <span className="stat-lbl">공격 IP</span>
+                      <span className="stat-lbl">이벤트 IP</span>
                     </button>
                     <button className={`stat-card stat-click${panels.panel5_anomalies.rst_count > 0 ? ' stat-warn' : ''}`}
                       title="통신 상태 진단으로 이동" onClick={() => { setLayer('investigate'); setInvTab('health') }}>
@@ -659,7 +659,7 @@ export default function App() {
                 </div>
 
                 <div className="attack-defense-row">
-                  <PCard title="공격 타임라인">
+                  <PCard title="이벤트 타임라인">
                     <AttackTimeline events={summary.attack_timeline} />
                   </PCard>
                   <DefensePanel
@@ -670,7 +670,7 @@ export default function App() {
                 </div>
 
                 <div ref={attackRef} className="panel-card wide">
-                  <div className="panel-card-title">공격 탐지 상세</div>
+                  <div className="panel-card-title">탐지 이벤트 상세</div>
                   <div className="panel-card-body">
                     <Panel10Attacks data={panels.panel10_attacks} />
                   </div>
@@ -753,7 +753,7 @@ export default function App() {
 
             {layer === 'investigate' && invTab === 'geoip' && (
               <div className="panel-card wide">
-                <div className="panel-card-title">공격자 IP 지리 분포</div>
+                <div className="panel-card-title">출발지 IP 지리 분포</div>
                 <div className="panel-card-body">
                   <GeoIpPanel uploadId={meta.uploadId} />
                 </div>

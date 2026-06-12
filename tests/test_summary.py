@@ -16,7 +16,7 @@ class TestBuildSummaryClean:
         from services.narrative.summary_builder import build_summary
         r = build_summary([], [])
         assert r.risk_level == "CLEAN"
-        assert "탐지된 공격 없음" in r.headline
+        assert "이상 이벤트 없음" in r.headline
         assert r.attacker_ips == []
         assert r.victim_ips == []
         assert r.attack_timeline == []
@@ -326,7 +326,7 @@ class TestAttackDetectorSrcIp:
         from services.attack_detector.comm_failure_detector import CommFailureDetector
         sessions = [
             self._session("10.0.0.1", "192.168.1.1", 80, rst=True)
-            for _ in range(8)
+            for _ in range(12)
         ]
         res = CommFailureDetector().detect(sessions)
         assert res is not None

@@ -9,13 +9,13 @@ interface Props {
 export function DefensePanel({ recommendations, attackerIps, victimIps }: Props) {
   return (
     <div className="defense-panel">
-      <h3 className="defense-title">🛡 방어 권고</h3>
+      <h3 className="defense-title">🛠 권장 조치</h3>
 
       {(attackerIps.length > 0 || victimIps.length > 0) && (
         <div className="defense-ips">
           {attackerIps.length > 0 && (
             <div className="defense-ip-group">
-              <span className="defense-ip-label attacker-label">공격 출발지</span>
+              <span className="defense-ip-label attacker-label">이벤트 출발지</span>
               {attackerIps.map(ip => (
                 <span key={ip} className="ip-chip attacker copyable" title="클릭하여 IP 복사" onClick={() => copyText(ip)}>{ip}</span>
               ))}
@@ -23,7 +23,7 @@ export function DefensePanel({ recommendations, attackerIps, victimIps }: Props)
           )}
           {victimIps.length > 0 && (
             <div className="defense-ip-group">
-              <span className="defense-ip-label victim-label">공격 대상</span>
+              <span className="defense-ip-label victim-label">대상 호스트</span>
               {victimIps.map(ip => (
                 <span key={ip} className="ip-chip victim copyable" title="클릭하여 IP 복사" onClick={() => copyText(ip)}>{ip}</span>
               ))}

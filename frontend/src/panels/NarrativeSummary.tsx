@@ -13,9 +13,9 @@ const RISK_COLOR: Record<string, string> = {
 }
 
 const RISK_LABEL: Record<string, string> = {
-  HIGH:   '⚠ HIGH — 즉각 조치 필요',
-  MEDIUM: '△ MEDIUM — 모니터링 강화',
-  LOW:    '▷ LOW — 주의 필요',
+  HIGH:   '⚠ HIGH — 이상 패턴 다수',
+  MEDIUM: '△ MEDIUM — 확인 권장',
+  LOW:    '▷ LOW — 참고',
   CLEAN:  '✓ CLEAN — 정상 트래픽',
 }
 
@@ -42,7 +42,7 @@ export function NarrativeSummary({ data }: Props) {
         <div className="ip-row">
           {data.attacker_ips.length > 0 && (
             <div className="ip-group">
-              <span className="ip-group-label">🔴 공격 출발지</span>
+              <span className="ip-group-label">🔴 이벤트 출발지</span>
               {data.attacker_ips.map(ip => (
                 <span key={ip} className="ip-chip attacker">{ip}</span>
               ))}
@@ -50,7 +50,7 @@ export function NarrativeSummary({ data }: Props) {
           )}
           {data.victim_ips.length > 0 && (
             <div className="ip-group">
-              <span className="ip-group-label">🔵 공격 대상</span>
+              <span className="ip-group-label">🔵 대상 호스트</span>
               {data.victim_ips.map(ip => (
                 <span key={ip} className="ip-chip victim">{ip}</span>
               ))}
@@ -89,7 +89,7 @@ export function NarrativeSummary({ data }: Props) {
             className="rec-toggle"
             onClick={() => setShowRecs(v => !v)}
           >
-            🛡 방어 권고 {data.recommendations.length}개 {showRecs ? '▲' : '▼'}
+            🛠 권장 조치 {data.recommendations.length}개 {showRecs ? '▲' : '▼'}
           </button>
           {showRecs && (
             <ul className="rec-list">
