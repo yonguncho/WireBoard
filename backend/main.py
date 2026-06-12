@@ -8,7 +8,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -194,6 +194,9 @@ if os.path.isdir(_STATIC_DIR):
     @app.get("/{full_path:path}", include_in_schema=False)
     async def _spa_fallback(full_path: str):
         # ADR-EXE-002: React Router SPA fallback — 알 수 없는 경로는 index.html 반환
+        # 단, /api/* 미등록 경로는 HTML 대신 404 JSON 반환
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail={"code": "not_found", "msg": f"/{full_path}"})
         index_path = os.path.join(_STATIC_DIR, "index.html")
         return FileResponse(index_path)
 

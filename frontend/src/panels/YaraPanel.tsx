@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
+import { getCaptureToken } from '../api'
 
 interface YaraMatch {
   rule: string
@@ -28,7 +29,8 @@ export function YaraPanel({ uploadId }: Props) {
 
   useEffect(() => {
     if (!uploadId) return
-    fetch(`/api/yara/${uploadId}`)
+    const token = getCaptureToken(uploadId)
+    fetch(`/api/yara/${uploadId}`, { headers: token ? { 'X-Upload-Token': token } : {} })
       .then(r => r.json())
       .then(setData)
       .catch(e => setError(String(e)))

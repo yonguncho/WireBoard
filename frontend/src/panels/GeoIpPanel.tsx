@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
 import { PlotlyChart } from './PlotlyChart'
+import { getCaptureToken } from '../api'
 
 interface GeoEntry {
   ip: string
@@ -19,7 +20,8 @@ export function GeoIpPanel({ uploadId }: Props) {
 
   useEffect(() => {
     if (!uploadId) return
-    fetch(`/api/geoip/${uploadId}`)
+    const token = getCaptureToken(uploadId)
+    fetch(`/api/geoip/${uploadId}`, { headers: token ? { 'X-Upload-Token': token } : {} })
       .then(r => r.json())
       .then(d => setEntries(d.entries))
       .catch(e => setError(String(e)))
