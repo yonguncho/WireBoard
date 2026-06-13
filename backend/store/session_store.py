@@ -18,6 +18,7 @@ class ParsedCapture:
     attacks: list = field(default_factory=list)
     packet_map: dict = field(default_factory=dict)  # session_id -> list[PacketRecord]
     icmp_events: list = field(default_factory=list)  # ICMP 에러 이벤트 (type 3/11)
+    capture_token: str = ""  # /api/upload 발급 토큰; 빈 문자열이면 검증 생략
 
 
 class SessionStore:
@@ -41,7 +42,6 @@ class SessionStore:
     def put(self, key: str, value: ParsedCapture) -> None:
         evicted_keys: list[str] = []
         with self._lock:
-            self._evict_expired_locked(evicted_keys)
             if key in self._store:
                 self._store.move_to_end(key)
             self._store[key] = (value, time.monotonic())
@@ -62,7 +62,7 @@ class SessionStore:
                 evicted = True
             else:
                 self._store.move_to_end(key)
-                result = copy.deepcopy(value)
+                result = value
         if evicted:
             self._fire_evict(key)
             raise KeyError(key)
@@ -74,7 +74,7 @@ class SessionStore:
             if key not in self._store:
                 raise KeyError(key)
             value, ts = self._store[key]
-            if time.monotonic() - ts >= self._ttl:
+            if time.monotonic() - ts > self._ttl:
                 self._delete_locked(key)
                 evicted = True
             else:
@@ -100,3 +100,12 @@ class SessionStore:
             if out is not None:
                 out.append(k)
         return len(expired)
+
+    def clear(self) -> None:
+        """모든 항목 삭제 (테스트 격리용)."""
+        keys: list[str] = []
+        with self._lock:
+            keys = list(self._store.keys())
+            self._store.clear()
+        for k in keys:
+            self._fire_evict(k)
