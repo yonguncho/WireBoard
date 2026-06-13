@@ -221,3 +221,47 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
                     style={{ cursor: 'pointer' }}
                     onClick={() => {
                       setExpanded(isOpen ? null : i)
+                      if (onFlowSelect && !isOpen) onFlowSelect(p.session_id)
+                    }}
+                    title={hasData ? '클릭: HEX 덤프 / 세션 열기' : '클릭: 세션 열기'}
+                  >
+                    <td className="mono pkt-no">{p.no}</td>
+                    <td className="mono pkt-relts">{p.rel_ts.toFixed(6)}</td>
+                    <td className="mono pkt-addr">{p.src_ip}<span className="port-suffix">:{p.src_port}</span></td>
+                    <td className="mono pkt-addr">{p.dst_ip}<span className="port-suffix">:{p.dst_port}</span></td>
+                    <td><span className="pkt-proto-badge" style={{ color }}>{p.proto}</span></td>
+                    <td><span className={`flag-badge ${flagClass(p.flags)}`}>{p.flags || '—'}</span></td>
+                    <td className="mono">{p.length}</td>
+                    <td className="mono pkt-seq">{p.proto === 'TCP' && p.seq != null ? p.seq.toLocaleString() : '—'}</td>
+                    <td className="pkt-info-cell">
+                      {info}
+                      {hasData && <span className="hex-expand-hint">{isOpen ? ' ▲' : ' ▼'}</span>}
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr className="pkt-expand-row" key={`e${i}`}>
+                      <td colSpan={9}><ExpandedRow p={p} /></td>
+                    </tr>
+                  )}
+                </>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 페이지네이션 */}
+      {totalPages > 1 && (
+        <div className="pkt-pagination">
+          <button className="filter-btn" disabled={currentPage === 1 || loading} onClick={() => load(offset - limit, applied)}>
+            ◀ 이전
+          </button>
+          <span className="pkt-page-info">{currentPage} / {totalPages} 페이지</span>
+          <button className="filter-btn" disabled={currentPage >= totalPages || loading} onClick={() => load(offset + limit, applied)}>
+            다음 ▶
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}

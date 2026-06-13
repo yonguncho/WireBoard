@@ -2,12 +2,13 @@
 import json
 import logging
 import os
+import threading
 import time
 import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -18,6 +19,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 _access_logger = logging.getLogger("packetlens.access")
+
+from utils.log_filter import SensitiveDataFilter
+_sensitive_filter = SensitiveDataFilter()
+_access_logger.addFilter(_sensitive_filter)
+logging.getLogger("routers.upload").addFilter(_sensitive_filter)
+logging.getLogger("routers.analyze").addFilter(_sensitive_filter)
+logging.getLogger("routers.filter").addFilter(_sensitive_filter)
 
 from routers.upload import router as upload_router
 from routers.analyze import router as analyze_router
@@ -39,53 +47,115 @@ from services.analytics.geoip_analyzer import GeoIpAnalyzer
 from services.attack_detector.yara_detector import YaraDetector
 
 
+_SENSITIVE_PREFIXES = (
+    "/api/stream/", "/api/export/", "/api/packets/", "/api/analyze/",
+    "/api/annotations/", "/api/flow/", "/api/drilldown/", "/api/summary/",
+    "/api/panels/",
+)
+
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Content-Security-Policy": "default-src 'none'",
+}
+
+_SPA_CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:;"
+)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """모든 응답에 보안 헤더 추가; 민감 API는 no-store Cache-Control 적용.
+
+    API 경로: default-src 'none' (strict)
+    SPA/정적 경로: self-only CSP (스크립트·스타일 로딩 허용)
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        for key, val in _SECURITY_HEADERS.items():
+            response.headers.setdefault(key, val)
+        path = request.url.path
+        if any(path.startswith(p) for p in _SENSITIVE_PREFIXES):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Pragma"] = "no-cache"
+        # SPA 정적 응답은 self 리소스 로딩이 가능한 완화된 CSP 적용
+        if not path.startswith("/api/"):
+            response.headers["Content-Security-Policy"] = _SPA_CSP
+        return response
+
+
 class StructuredLoggingMiddleware(BaseHTTPMiddleware):
-    """Per-request structured JSON logs: request / response / error events."""
+    """Per-request structured JSON logs: request / response / error events.
+
+    각 이벤트를 print()로 stdout에 출력합니다. 이를 통해 테스트에서
+    contextlib.redirect_stdout 으로 캡처할 수 있습니다.
+    """
 
     async def dispatch(self, request: Request, call_next):
         request_id = str(uuid.uuid4())
         started_at = datetime.now(timezone.utc).isoformat()
         t0 = time.monotonic()
 
-        _access_logger.info(json.dumps({
+        req_event = json.dumps({
             "event": "request",
             "requestId": request_id,
-            "timestamp": started_at,
+            "ts": started_at,
             "method": request.method,
             "path": request.url.path,
-        }))
+        })
+        print(req_event, flush=True)
+        _access_logger.info(req_event)
 
         try:
             response = await call_next(request)
             duration_ms = round((time.monotonic() - t0) * 1000, 2)
-            _access_logger.info(json.dumps({
+            resp_event = json.dumps({
                 "event": "response",
                 "requestId": request_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "statusCode": response.status_code,
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "status": response.status_code,
                 "durationMs": duration_ms,
-            }))
+            })
+            print(resp_event, flush=True)
+            _access_logger.info(resp_event)
             return response
         except Exception as exc:
             duration_ms = round((time.monotonic() - t0) * 1000, 2)
-            _access_logger.error(json.dumps({
+            err_event = json.dumps({
                 "event": "error",
                 "requestId": request_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "ts": datetime.now(timezone.utc).isoformat(),
                 "error": str(exc),
                 "durationMs": duration_ms,
-            }))
+            })
+            print(err_event, flush=True)
+            _access_logger.error(err_event)
             raise
 
 
 app = FastAPI(title="WireBoard", version="5.5.0")
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(StructuredLoggingMiddleware)
 
+_annotations_lock = threading.Lock()
 _annotations_store: defaultdict = defaultdict(list)
+
+
+def _on_evict(key: str) -> None:
+    with _annotations_lock:
+        _annotations_store.pop(key, None)
+
+
 app.state.annotations_store = _annotations_store
+app.state.annotations_lock = _annotations_lock
 app.state.session_store = SessionStore(
     ttl_seconds=900.0,  # 15분 — integration.md §4 TTL_SECONDS=900
-    on_evict=lambda key: _annotations_store.pop(key, None),
+    on_evict=_on_evict,
 )
 app.state.geoip_analyzer = GeoIpAnalyzer()
 app.state.yara_detector = YaraDetector()
@@ -124,6 +194,9 @@ if os.path.isdir(_STATIC_DIR):
     @app.get("/{full_path:path}", include_in_schema=False)
     async def _spa_fallback(full_path: str):
         # ADR-EXE-002: React Router SPA fallback — 알 수 없는 경로는 index.html 반환
+        # 단, /api/* 미등록 경로는 HTML 대신 404 JSON 반환
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail={"code": "not_found", "msg": f"/{full_path}"})
         index_path = os.path.join(_STATIC_DIR, "index.html")
         return FileResponse(index_path)
 

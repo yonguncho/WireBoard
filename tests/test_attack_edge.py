@@ -74,7 +74,7 @@ class TestDoSEdge:
 # ── DDoS edge cases ─────────────────────────────────────────────
 
 class TestDDoSEdge:
-    def _ddos_sessions(self, n=6, pkt=4000, confidence="high"):
+    def _ddos_sessions(self, n=6, pkt=4000, confidence="normal"):
         return [_s(src_ip=f"10.0.{i//256}.{i%256}", dst_ip="192.168.1.1",
                    packet_count=pkt, confidence=confidence) for i in range(n)]
 
@@ -216,7 +216,10 @@ class TestCommFailureEdge:
         assert result.mitre_id == "T1595"
 
     def test_combined_rst_icmp_at_threshold(self):
-        result = CommFailureDetector().detect([], rst_count=5, icmp_unreachable=5)
+        # 소량 절대 건수(5+5)는 비율과 무관하게 미탐지 — 정상 트래픽 오탐 방지
+        assert CommFailureDetector().detect([], rst_count=5, icmp_unreachable=5) is None
+        # 절대량(>=10) + 비율 동시 충족 시 탐지
+        result = CommFailureDetector().detect([], rst_count=12, icmp_unreachable=0)
         assert result is not None
 
     def test_high_icmp_alone_triggers(self):

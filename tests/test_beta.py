@@ -25,17 +25,22 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 # ─────────────── 헬퍼 ────────────────────────────────────────────────
 
-def _upload(api_client, data: bytes, filename: str = "cap.pcap") -> str:
+def _upload(api_client, data: bytes, filename: str = "cap.pcap") -> tuple[str, str]:
     resp = api_client.post(
         "/api/upload",
         files={"file": (filename, io.BytesIO(data), "application/octet-stream")},
     )
     assert resp.status_code == 200, resp.text
-    return resp.json()["upload_id"]
+    return resp.json()["upload_id"], resp.json()["capture_token"]
 
 
-def _analyze(api_client, uid: str) -> dict:
-    resp = api_client.post("/api/analyze", json={"upload_id": uid})
+def _analyze(api_client, uid: str, target_ip: str = "192.168.1.2",
+             capture_token: str = "") -> dict:
+    resp = api_client.post(
+        "/api/analyze",
+        json={"upload_id": uid, "target_ip": target_ip},
+        headers={"X-Upload-Token": capture_token} if capture_token else {},
+    )
     assert resp.status_code in {200, 207}, resp.text
     return resp.json()
 
@@ -47,16 +52,16 @@ class TestMultiFormatConsistency:
 
     def test_pcap_full_flow(self, api_client, pcap_bytes: bytes):
         """pcap → upload → analyze → panels → summary 전 흐름."""
-        uid = _upload(api_client, pcap_bytes, "cap.pcap")
-        body = _analyze(api_client, uid)
+        uid, capture_token = _upload(api_client, pcap_bytes, "cap.pcap")
+        body = _analyze(api_client, uid, capture_token=capture_token)
         assert "sessions" in body
         assert "attacks" in body
         assert "analysis_duration_ms" in body
 
-        panels = api_client.get(f"/api/panels/{uid}")
+        panels = api_client.get(f"/api/panels/{uid}", headers={"X-Upload-Token": capture_token})
         assert panels.status_code == 200
 
-        summary = api_client.get(f"/api/summary/{uid}")
+        summary = api_client.get(f"/api/summary/{uid}", headers={"X-Upload-Token": capture_token})
         assert summary.status_code == 200
         s = summary.json()
         assert "headline" in s
@@ -65,16 +70,16 @@ class TestMultiFormatConsistency:
     def test_har_full_flow(self, api_client, har_json: str):
         """HAR → upload → analyze 전 흐름."""
         data = har_json.encode("utf-8")
-        uid = _upload(api_client, data, "browser.har")
-        body = _analyze(api_client, uid)
+        uid, capture_token = _upload(api_client, data, "browser.har")
+        body = _analyze(api_client, uid, capture_token=capture_token)
         assert isinstance(body["sessions"], list)
         assert len(body["sessions"]) > 0
 
     def test_fortigate_full_flow(self, api_client, fortigate_v3_text: str):
         """FortiGate verbose3 → upload → analyze 전 흐름."""
         data = fortigate_v3_text.encode("utf-8")
-        uid = _upload(api_client, data, "fw.log")
-        body = _analyze(api_client, uid)
+        uid, capture_token = _upload(api_client, data, "fw.log")
+        body = _analyze(api_client, uid, capture_token=capture_token)
         assert "sessions" in body
 
     def test_all_formats_return_upload_id_uuid(self, api_client, pcap_bytes, har_json, fortigate_v3_text):
@@ -105,8 +110,8 @@ class TestTargetIpAutoDetect:
 
     def test_target_ip_in_session_ips(self, api_client, pcap_bytes: bytes):
         """자동 감지된 target_ip가 세션 src/dst 중 하나여야 한다."""
-        uid = _upload(api_client, pcap_bytes)
-        body = _analyze(api_client, uid)
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        body = _analyze(api_client, uid, capture_token=capture_token)
         target = body["target_ip"]
         assert any(
             s["src_ip"] == target or s["dst_ip"] == target
@@ -115,29 +120,29 @@ class TestTargetIpAutoDetect:
 
     def test_explicit_target_ip_respected(self, api_client, pcap_bytes: bytes):
         """명시적 target_ip 제공 시 해당 IP가 사용되어야 한다."""
-        uid = _upload(api_client, pcap_bytes)
+        uid, capture_token = _upload(api_client, pcap_bytes)
         # pcap fixture: 192.168.1.1 → 192.168.1.2
         resp = api_client.post("/api/analyze", json={
             "upload_id": uid,
             "target_ip": "192.168.1.2",
-        })
+        }, headers={"X-Upload-Token": capture_token})
         assert resp.status_code in {200, 207}
         body = resp.json()
         assert body["target_ip"] == "192.168.1.2"
 
     def test_invalid_target_ip_returns_400(self, api_client, pcap_bytes: bytes):
         """잘못된 target_ip → 400."""
-        uid = _upload(api_client, pcap_bytes)
+        uid, capture_token = _upload(api_client, pcap_bytes)
         resp = api_client.post("/api/analyze", json={
             "upload_id": uid,
             "target_ip": "not.an.ip",
-        })
+        }, headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 400
 
     def test_analyze_returns_sessions_covering_target_ip(self, api_client, pcap_bytes: bytes):
         """반환된 sessions 모두 target_ip를 src 또는 dst로 포함해야 한다."""
-        uid = _upload(api_client, pcap_bytes)
-        body = _analyze(api_client, uid)
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        body = _analyze(api_client, uid, capture_token=capture_token)
         target = body["target_ip"]
         for s in body["sessions"]:
             assert s["src_ip"] == target or s["dst_ip"] == target, (
@@ -152,9 +157,9 @@ class TestAttackGeoipYaraCombined:
 
     def test_geoip_after_analyze(self, api_client, pcap_bytes: bytes):
         """analyze 후 /api/geoip 호출 → 200 + entries 리스트."""
-        uid = _upload(api_client, pcap_bytes)
-        _analyze(api_client, uid)
-        resp = api_client.get(f"/api/geoip/{uid}")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        _analyze(api_client, uid, capture_token=capture_token)
+        resp = api_client.get(f"/api/geoip/{uid}", headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         body = resp.json()
         assert "entries" in body
@@ -162,8 +167,8 @@ class TestAttackGeoipYaraCombined:
 
     def test_yara_after_upload(self, api_client, pcap_bytes: bytes):
         """업로드 후 /api/yara 호출 → available + matches."""
-        uid = _upload(api_client, pcap_bytes)
-        resp = api_client.get(f"/api/yara/{uid}")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        resp = api_client.get(f"/api/yara/{uid}", headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         body = resp.json()
         assert "available" in body
@@ -173,9 +178,9 @@ class TestAttackGeoipYaraCombined:
 
     def test_geoip_entries_have_required_fields(self, api_client, pcap_bytes: bytes):
         """GeoIP 항목 각각에 ip/country_name/country_code/role 필드 존재."""
-        uid = _upload(api_client, pcap_bytes)
-        _analyze(api_client, uid)
-        resp = api_client.get(f"/api/geoip/{uid}")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        _analyze(api_client, uid, capture_token=capture_token)
+        resp = api_client.get(f"/api/geoip/{uid}", headers={"X-Upload-Token": capture_token})
         for entry in resp.json()["entries"]:
             assert "ip" in entry
             assert "country_name" in entry
@@ -184,8 +189,8 @@ class TestAttackGeoipYaraCombined:
 
     def test_yara_matches_have_required_fields(self, api_client, pcap_bytes: bytes):
         """YARA 매치 항목 각각에 rule/severity/session_id 필드 존재."""
-        uid = _upload(api_client, pcap_bytes)
-        resp = api_client.get(f"/api/yara/{uid}")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        resp = api_client.get(f"/api/yara/{uid}", headers={"X-Upload-Token": capture_token})
         for match in resp.json()["matches"]:
             assert "rule" in match
             assert "severity" in match
@@ -193,20 +198,20 @@ class TestAttackGeoipYaraCombined:
 
     def test_same_upload_id_consistent_across_endpoints(self, api_client, pcap_bytes: bytes):
         """동일 upload_id로 여러 엔드포인트 호출 시 일관된 데이터."""
-        uid = _upload(api_client, pcap_bytes)
-        analyze_body = _analyze(api_client, uid)
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        analyze_body = _analyze(api_client, uid, capture_token=capture_token)
         target_from_analyze = analyze_body["target_ip"]
 
-        summary_resp = api_client.get(f"/api/summary/{uid}")
+        summary_resp = api_client.get(f"/api/summary/{uid}", headers={"X-Upload-Token": capture_token})
         assert summary_resp.status_code == 200
 
-        panels_resp = api_client.get(f"/api/panels/{uid}")
+        panels_resp = api_client.get(f"/api/panels/{uid}", headers={"X-Upload-Token": capture_token})
         assert panels_resp.status_code == 200
 
-        geoip_resp = api_client.get(f"/api/geoip/{uid}")
+        geoip_resp = api_client.get(f"/api/geoip/{uid}", headers={"X-Upload-Token": capture_token})
         assert geoip_resp.status_code == 200
 
-        yara_resp = api_client.get(f"/api/yara/{uid}")
+        yara_resp = api_client.get(f"/api/yara/{uid}", headers={"X-Upload-Token": capture_token})
         assert yara_resp.status_code == 200
 
 
@@ -217,11 +222,11 @@ class TestFilterCompareCombined:
 
     def test_filter_then_verify_sessions(self, api_client, pcap_bytes: bytes):
         """필터 결과 세션이 쿼리 IP를 포함하는지 검증."""
-        uid = _upload(api_client, pcap_bytes)
+        uid, capture_token = _upload(api_client, pcap_bytes)
         resp = api_client.post("/api/filter", json={
             "upload_id": uid,
             "query": "ip 192.168.1.1",
-        })
+        }, headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         body = resp.json()
         if body["success"] and body["matched_count"] > 0:
@@ -230,12 +235,12 @@ class TestFilterCompareCombined:
 
     def test_compare_same_capture_zero_new_ips(self, api_client, pcap_bytes: bytes):
         """같은 파일을 두 번 업로드해서 비교 → new_ips 없어야 함."""
-        uid1 = _upload(api_client, pcap_bytes, "base.pcap")
-        uid2 = _upload(api_client, pcap_bytes, "curr.pcap")
+        uid1, capture_token1 = _upload(api_client, pcap_bytes, "base.pcap")
+        uid2, capture_token2 = _upload(api_client, pcap_bytes, "curr.pcap")
         resp = api_client.post("/api/compare", json={
             "base_upload_id": uid1,
             "current_upload_id": uid2,
-        })
+        }, headers={"X-Upload-Token-Base": capture_token1, "X-Upload-Token-Current": capture_token2})
         assert resp.status_code == 200
         body = resp.json()
         assert body["new_ips"] == []
@@ -244,11 +249,11 @@ class TestFilterCompareCombined:
 
     def test_filter_translate_returns_expression(self, api_client, pcap_bytes: bytes):
         """translate 엔드포인트가 filter_expr 문자열 반환."""
-        uid = _upload(api_client, pcap_bytes)
+        uid, capture_token = _upload(api_client, pcap_bytes)
         resp = api_client.post("/api/filter/translate", json={
             "upload_id": uid,
             "query": "port 80 tcp",
-        })
+        }, headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         body = resp.json()
         assert "filter_expr" in body
@@ -256,11 +261,11 @@ class TestFilterCompareCombined:
 
     def test_filter_invalid_query_returns_400(self, api_client, pcap_bytes: bytes):
         """빈 쿼리 또는 알 수 없는 쿼리 → 400 또는 success=False."""
-        uid = _upload(api_client, pcap_bytes)
+        uid, capture_token = _upload(api_client, pcap_bytes)
         resp = api_client.post("/api/filter", json={
             "upload_id": uid,
             "query": "",
-        })
+        }, headers={"X-Upload-Token": capture_token})
         # 빈 쿼리는 400 또는 success=False 어느 쪽도 허용
         assert resp.status_code in {200, 400}
         if resp.status_code == 200:
@@ -274,8 +279,8 @@ class TestExportIntegrity:
 
     def test_json_export_contains_sessions(self, api_client, pcap_bytes: bytes):
         """JSON 내보내기에 sessions 배열 포함."""
-        uid = _upload(api_client, pcap_bytes)
-        resp = api_client.get(f"/api/export/{uid}")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        resp = api_client.get(f"/api/export/{uid}", headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         data = resp.json()
         assert "sessions" in data
@@ -285,8 +290,8 @@ class TestExportIntegrity:
         """JSON 내보낸 세션에 session_id UUID 필드 포함."""
         import re
         UUID_RE = re.compile(r"^[0-9a-f-]{36}$", re.IGNORECASE)
-        uid = _upload(api_client, pcap_bytes)
-        resp = api_client.get(f"/api/export/{uid}")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        resp = api_client.get(f"/api/export/{uid}", headers={"X-Upload-Token": capture_token})
         data = resp.json()
         for s in data.get("sessions", [])[:10]:
             assert UUID_RE.match(s.get("session_id", "")), \
@@ -294,9 +299,9 @@ class TestExportIntegrity:
 
     def test_ioc_export_is_csv(self, api_client, pcap_bytes: bytes):
         """IOC 내보내기가 CSV 형식 (첫 줄 헤더: type,value,source)."""
-        uid = _upload(api_client, pcap_bytes)
-        _analyze(api_client, uid)
-        resp = api_client.get(f"/api/export/{uid}/ioc")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        _analyze(api_client, uid, capture_token=capture_token)
+        resp = api_client.get(f"/api/export/{uid}/ioc", headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         content = resp.content.decode("utf-8")
         first_line = content.split("\r\n")[0].split("\n")[0]
@@ -304,16 +309,16 @@ class TestExportIntegrity:
 
     def test_pdf_export_starts_with_pdf_magic(self, api_client, pcap_bytes: bytes):
         """PDF 내보내기 content가 %PDF 매직 바이트로 시작."""
-        uid = _upload(api_client, pcap_bytes)
-        _analyze(api_client, uid)
-        resp = api_client.post(f"/api/export/{uid}/pdf")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        _analyze(api_client, uid, capture_token=capture_token)
+        resp = api_client.post(f"/api/export/{uid}/pdf", headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         assert resp.content[:4] == b"%PDF", "PDF 매직 바이트 없음"
 
     def test_export_without_analyze_still_works(self, api_client, pcap_bytes: bytes):
         """analyze 없이 JSON 내보내기 → 세션만 포함하여 200 반환."""
-        uid = _upload(api_client, pcap_bytes)
-        resp = api_client.get(f"/api/export/{uid}")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        resp = api_client.get(f"/api/export/{uid}", headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
 
 
@@ -324,18 +329,22 @@ class TestPaginationConsistency:
 
     def test_packets_pagination_total_consistent(self, api_client, pcap_bytes: bytes):
         """limit 변경 시 total은 동일, 반환 목록만 달라야 한다."""
-        uid = _upload(api_client, pcap_bytes)
-        resp10 = api_client.get(f"/api/packets/{uid}?limit=10&offset=0")
-        resp50 = api_client.get(f"/api/packets/{uid}?limit=50&offset=0")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        resp10 = api_client.get(f"/api/packets/{uid}?limit=10&offset=0",
+                                headers={"X-Upload-Token": capture_token})
+        resp50 = api_client.get(f"/api/packets/{uid}?limit=50&offset=0",
+                                headers={"X-Upload-Token": capture_token})
         assert resp10.status_code == 200
         assert resp50.status_code == 200
         assert resp10.json()["total"] == resp50.json()["total"]
 
     def test_packets_offset_returns_different_data(self, api_client, pcap_bytes: bytes):
         """offset=0과 offset=2가 다른 패킷을 반환해야 한다."""
-        uid = _upload(api_client, pcap_bytes)
-        resp0 = api_client.get(f"/api/packets/{uid}?limit=2&offset=0")
-        resp2 = api_client.get(f"/api/packets/{uid}?limit=2&offset=2")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        resp0 = api_client.get(f"/api/packets/{uid}?limit=2&offset=0",
+                               headers={"X-Upload-Token": capture_token})
+        resp2 = api_client.get(f"/api/packets/{uid}?limit=2&offset=2",
+                               headers={"X-Upload-Token": capture_token})
         assert resp0.status_code == 200
         assert resp2.status_code == 200
         pkts0 = resp0.json()["packets"]
@@ -345,16 +354,19 @@ class TestPaginationConsistency:
 
     def test_packets_offset_beyond_total_returns_empty(self, api_client, pcap_bytes: bytes):
         """offset이 total을 초과하면 빈 packets 배열."""
-        uid = _upload(api_client, pcap_bytes)
-        resp = api_client.get(f"/api/packets/{uid}?offset=999999&limit=10")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        resp = api_client.get(f"/api/packets/{uid}?offset=999999&limit=10",
+                              headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         assert resp.json()["packets"] == []
 
     def test_packets_proto_filter_subset_of_total(self, api_client, pcap_bytes: bytes):
         """프로토콜 필터 결과의 total ≤ 전체 total."""
-        uid = _upload(api_client, pcap_bytes)
-        total_all = api_client.get(f"/api/packets/{uid}").json()["total"]
-        total_tcp = api_client.get(f"/api/packets/{uid}?proto=TCP").json()["total"]
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        total_all = api_client.get(f"/api/packets/{uid}",
+                                   headers={"X-Upload-Token": capture_token}).json()["total"]
+        total_tcp = api_client.get(f"/api/packets/{uid}?proto=TCP",
+                                   headers={"X-Upload-Token": capture_token}).json()["total"]
         assert total_tcp <= total_all
 
 
@@ -364,11 +376,11 @@ class TestErrorPathResilience:
     """잘못된 입력에 대한 API 응답이 적절한 HTTP 상태코드를 가져야 한다."""
 
     def test_analyze_unknown_upload_id_404(self, api_client):
-        resp = api_client.post("/api/analyze", json={"upload_id": str(uuid.uuid4())})
+        resp = api_client.post("/api/analyze", json={"upload_id": str(uuid.uuid4()), "target_ip": "1.2.3.4"})
         assert resp.status_code == 404
 
     def test_analyze_invalid_uuid_400(self, api_client):
-        resp = api_client.post("/api/analyze", json={"upload_id": "not-a-uuid"})
+        resp = api_client.post("/api/analyze", json={"upload_id": "not-a-uuid", "target_ip": "1.2.3.4"})
         assert resp.status_code == 400
 
     def test_panels_unknown_upload_id_404(self, api_client):
@@ -377,19 +389,20 @@ class TestErrorPathResilience:
 
     def test_flow_unknown_session_404_or_empty(self, api_client, pcap_bytes: bytes):
         """존재하지 않는 session_id → 404 또는 빈 리스트."""
-        uid = _upload(api_client, pcap_bytes)
-        resp = api_client.get(f"/api/flow/{uid}?session_id={uuid.uuid4()}")
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        resp = api_client.get(f"/api/flow/{uid}?session_id={uuid.uuid4()}",
+                              headers={"X-Upload-Token": capture_token})
         assert resp.status_code in {200, 404}
         if resp.status_code == 200:
             body = resp.json()
             assert body.get("packets") == [] or body.get("session") is None
 
     def test_compare_unknown_base_404(self, api_client, pcap_bytes: bytes):
-        uid = _upload(api_client, pcap_bytes)
+        uid, capture_token = _upload(api_client, pcap_bytes)
         resp = api_client.post("/api/compare", json={
             "base_upload_id": str(uuid.uuid4()),
             "current_upload_id": uid,
-        })
+        }, headers={"X-Upload-Token-Current": capture_token})
         assert resp.status_code == 404
 
     def test_geoip_unknown_upload_id_404(self, api_client):
@@ -416,7 +429,7 @@ class TestErrorPathResilience:
 
     def test_multiple_error_types_no_500(self, api_client, pcap_bytes: bytes):
         """다양한 오류 입력에 5xx 응답 없음."""
-        uid = _upload(api_client, pcap_bytes)
+        _upload(api_client, pcap_bytes)
         requests = [
             ("GET", f"/api/packets/invalid-uuid"),
             ("GET", f"/api/geoip/not-a-uuid"),
@@ -438,23 +451,23 @@ class TestAnalysisRerunConsistency:
 
     def test_rerun_analyze_same_target_ip(self, api_client, pcap_bytes: bytes):
         """동일 upload_id 2회 analyze → 동일 target_ip."""
-        uid = _upload(api_client, pcap_bytes)
-        body1 = _analyze(api_client, uid)
-        body2 = _analyze(api_client, uid)
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        body1 = _analyze(api_client, uid, capture_token=capture_token)
+        body2 = _analyze(api_client, uid, capture_token=capture_token)
         assert body1["target_ip"] == body2["target_ip"]
 
     def test_rerun_analyze_same_session_count(self, api_client, pcap_bytes: bytes):
         """동일 upload_id 2회 analyze → 동일 세션 수."""
-        uid = _upload(api_client, pcap_bytes)
-        body1 = _analyze(api_client, uid)
-        body2 = _analyze(api_client, uid)
+        uid, capture_token = _upload(api_client, pcap_bytes)
+        body1 = _analyze(api_client, uid, capture_token=capture_token)
+        body2 = _analyze(api_client, uid, capture_token=capture_token)
         assert len(body1["sessions"]) == len(body2["sessions"])
 
     def test_rerun_analyze_duration_ms_positive(self, api_client, pcap_bytes: bytes):
         """analyze 반복 시 analysis_duration_ms 항상 양수."""
-        uid = _upload(api_client, pcap_bytes)
+        uid, capture_token = _upload(api_client, pcap_bytes)
         for _ in range(2):
-            body = _analyze(api_client, uid)
+            body = _analyze(api_client, uid, capture_token=capture_token)
             assert body["analysis_duration_ms"] > 0
 
 
@@ -494,15 +507,17 @@ class TestIcmpParsing:
     def test_icmp_pcap_analyze_no_crash(self, api_client):
         """ICMP 포함 pcap 분석 → 5xx 없음."""
         data = self._build_icmp_pcap()
-        uid = _upload(api_client, data, "icmp.pcap")
-        resp = api_client.post("/api/analyze", json={"upload_id": uid})
+        uid, capture_token = _upload(api_client, data, "icmp.pcap")
+        resp = api_client.post("/api/analyze", json={"upload_id": uid},
+                               headers={"X-Upload-Token": capture_token})
         assert resp.status_code in {200, 207, 422}
 
     def test_icmp_session_has_proto_icmp(self, api_client):
         """파싱된 세션에 ICMP 프로토콜 항목이 있어야 한다."""
         data = self._build_icmp_pcap()
-        uid = _upload(api_client, data, "icmp.pcap")
-        resp = api_client.post("/api/analyze", json={"upload_id": uid})
+        uid, capture_token = _upload(api_client, data, "icmp.pcap")
+        resp = api_client.post("/api/analyze", json={"upload_id": uid},
+                               headers={"X-Upload-Token": capture_token})
         if resp.status_code in {200, 207}:
             sessions = resp.json()["sessions"]
             icmp_sessions = [s for s in sessions if s["protocol"] == "ICMP"]
@@ -539,8 +554,9 @@ class TestPayloadHexLength:
     def test_payload_hex_captures_up_to_128_bytes(self, api_client):
         """packet payload_hex는 최대 256 hex 문자 (128바이트)."""
         data = self._build_large_payload_pcap()
-        uid = _upload(api_client, data, "payload.pcap")
-        resp = api_client.get(f"/api/packets/{uid}?limit=10")
+        uid, capture_token = _upload(api_client, data, "payload.pcap")
+        resp = api_client.get(f"/api/packets/{uid}?limit=10",
+                              headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         for pkt in resp.json()["packets"]:
             hex_str = pkt.get("payload_hex", "")

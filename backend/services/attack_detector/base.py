@@ -1,5 +1,6 @@
 """공격 탐지 결과 공통 모델."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List
 
 _SEVERITY_ORDER = ["low", "medium", "high"]
 
@@ -10,7 +11,14 @@ class AttackResult:
     severity: str
     mitre_id: str
     description: str = ""
-    src_ip: str = ""   # 공격 출발지 IP (분산 공격이면 빈 문자열)
+    src_ip: str = ""
+    evidence: List[str] = field(default_factory=list)
+    sample_count: int = 0
+    confidence: str = field(default="")
+
+    def __post_init__(self) -> None:
+        if not self.confidence:
+            self.confidence = self.severity
 
     def downgrade(self) -> "AttackResult":
         """severity를 1단계 낮춘다."""
@@ -22,4 +30,7 @@ class AttackResult:
             mitre_id=self.mitre_id,
             description=self.description,
             src_ip=self.src_ip,
+            evidence=list(self.evidence),
+            sample_count=self.sample_count,
+            confidence=new_severity,
         )

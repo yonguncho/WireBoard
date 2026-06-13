@@ -1,6 +1,7 @@
 """POST /api/upload — 파일 수신 + 파싱 + 세션 저장."""
 import json
 import logging
+import secrets
 import uuid
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -18,7 +19,7 @@ from utils.constants import MAX_UPLOAD_BYTES
 
 router = APIRouter()
 
-_ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".har", ".log", ".txt", ".tcpdump"}
+_ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".har", ".log", ".tcpdump", ".txt"}
 _PARSERS = [PcapParser(), HarParser(), FortigateParser(), TcpdumpParser()]
 _CHUNK_SIZE = 65_536  # 64 KB read chunks
 
@@ -61,7 +62,11 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
     raw = await _read_stream_limited(file, MAX_UPLOAD_BYTES)
 
     if len(raw) == 0:
-        raise HTTPException(status_code=400, detail="빈 파일은 허용되지 않습니다")
+        # .pcap/.pcapng 빈 파일: 400 (bad request — 유효한 pcap이 아님)
+        # 나머지 확장자 빈 파일: 422 (파싱 불가)
+        if ext in {".pcap", ".pcapng"}:
+            raise HTTPException(status_code=400, detail="빈 파일은 허용되지 않습니다")
+        raise HTTPException(status_code=422, detail="빈 파일: 파싱할 내용이 없습니다")
 
     parse_warnings: list[str] = []
     sessions = None
@@ -88,23 +93,31 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
                 parse_warnings.append(f"{type(exc).__name__}: {exc}")
 
     if sessions is None:
-        if ext == ".log":
-            detail = {"message": "FortiGate 형식을 인식할 수 없습니다", "errors": parse_warnings} \
-                     if parse_warnings else "FortiGate 형식을 인식할 수 없습니다"
-            raise HTTPException(status_code=400, detail=detail)
+        if ext == ".txt":
+            # .txt는 허용되지만 인식 가능한 포맷이어야 함 — 일반 텍스트는 415
+            detail = {"message": "허용되지 않는 텍스트 파일 형식 (FortiGate/tcpdump 형식만 허용)", "errors": parse_warnings} \
+                     if parse_warnings else "허용되지 않는 텍스트 파일 형식 (FortiGate/tcpdump 형식만 허용)"
+            raise HTTPException(status_code=415, detail=detail)
         detail = {"message": "지원하지 않는 파일 형식 또는 손상된 파일", "errors": parse_warnings} \
                  if parse_warnings else "지원하지 않는 파일 형식 또는 손상된 파일"
         raise HTTPException(status_code=400, detail=detail)
 
     sessions, pkt_map = SessionNormalizer().normalize(sessions, pkt_map)
 
+    if len(sessions) == 0:
+        detail = {"message": "파싱된 세션이 없습니다 (빈 파일이거나 인식 불가한 형식)", "errors": parse_warnings} \
+                 if parse_warnings else "파싱된 세션이 없습니다 (빈 파일이거나 인식 불가한 형식)"
+        raise HTTPException(status_code=422, detail=detail)
+
     upload_id = str(uuid.uuid4())
+    capture_token = secrets.token_hex(16)
     capture = ParsedCapture(
         sessions=sessions,
         source_type=source_type,
         parse_warnings=parse_warnings,
         packet_map=pkt_map,
         icmp_events=icmp_events,
+        capture_token=capture_token,
     )
     request.app.state.session_store.put(upload_id, capture)
 
@@ -112,6 +125,7 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
                 upload_id, source_type, len(sessions))
     return JSONResponse({
         "upload_id": upload_id,
+        "capture_token": capture_token,
         "source_type": source_type,
         "session_count": len(sessions),
         "parse_warnings": parse_warnings,

@@ -7,6 +7,15 @@ from typing import List
 from models.attack import AttackDetectionResult
 from models.session import SessionModel
 
+_FORMULA_STARTERS = frozenset("=+-@\t\r|%")
+
+
+def _sc(value: str) -> str:
+    """스프레드시트 수식 인젝션 방지: 수식 시작 문자 앞에 탭 접두사 추가."""
+    if value and value[0] in _FORMULA_STARTERS:
+        return "\t" + value
+    return value
+
 
 class ExportService:
     def export(
@@ -41,12 +50,12 @@ class ExportService:
         writer.writeheader()
         for s in sessions:
             writer.writerow({
-                "session_id": s.session_id,
-                "src_ip": s.src_ip,
-                "dst_ip": s.dst_ip,
+                "session_id": _sc(s.session_id),
+                "src_ip": _sc(s.src_ip),
+                "dst_ip": _sc(s.dst_ip),
                 "src_port": s.src_port,
                 "dst_port": s.dst_port,
-                "protocol": s.protocol,
+                "protocol": _sc(s.protocol),
                 "bytes_sent": s.bytes_sent,
                 "bytes_recv": s.bytes_recv,
                 "bytes_total": s.bytes_sent + s.bytes_recv,
@@ -79,8 +88,9 @@ class ExportService:
         ])
         for s in sessions:
             ws_s.append([
-                s.session_id, s.src_ip, s.dst_ip, s.src_port, s.dst_port,
-                s.protocol, s.bytes_sent, s.bytes_recv, s.packet_count,
+                _sc(s.session_id), _sc(s.src_ip), _sc(s.dst_ip),
+                s.src_port, s.dst_port, _sc(s.protocol),
+                s.bytes_sent, s.bytes_recv, s.packet_count,
             ])
         ws_a = wb.create_sheet("Attacks")
         ws_a.append(["attack_type", "severity", "mitre_id", "confidence"])

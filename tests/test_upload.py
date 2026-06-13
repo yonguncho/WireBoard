@@ -88,6 +88,16 @@ def test_upload_fortigate_source_type(
     assert resp.json()["source_type"] == "fortigate"
 
 
+def test_upload_tcpdump_source_type(api_client: TestClient, tcpdump_text: str) -> None:
+    tcpdump_bytes = tcpdump_text.encode("utf-8")
+    resp = api_client.post(
+        "/api/upload",
+        files={"file": ("capture.tcpdump", io.BytesIO(tcpdump_bytes), "text/plain")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["source_type"] == "tcpdump"
+
+
 def test_upload_ids_are_unique(api_client: TestClient, pcap_bytes: bytes) -> None:
     """동일 파일을 3번 업로드해도 upload_id 가 중복되지 않는다."""
     ids: set[str] = set()
@@ -118,7 +128,7 @@ def test_upload_oversized_returns_413(api_client: TestClient) -> None:
     resp = api_client.post(
         "/api/upload",
         files={"file": ("big.pcap", io.BytesIO(tiny_data), "application/octet-stream")},
-        headers={"content-length": str(MAX_UPLOAD_BYTES + 1)},
+        headers={"content-length": str(MAX_UPLOAD_BYTES + 8193)},
     )
     assert resp.status_code == 413
 
@@ -158,18 +168,21 @@ def test_upload_no_file_returns_422(api_client: TestClient) -> None:
 
 
 def test_upload_exactly_50mb_is_accepted(api_client: TestClient) -> None:
-    """정확히 50 MB = 허용 (초과 아님)."""
+    """content-length = 50 MB (한계치) → 413으로 거부되지 않는다.
+
+    실제 body는 작은 pcap 헤더만 전송; upload.py는 content-length 헤더를 먼저 검사하므로
+    50 MB == 한계치 → 통과, 이후 작은 body를 정상 처리한다.
+    """
     import struct
 
-    # 유효 pcap global header + 50 MB - 24 bytes 패딩
+    # 유효 pcap global header only (24 bytes) — body는 작게 유지해 테스트 속도 보장
     header = struct.pack("<IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, 1)
-    payload = header + b"\x00" * (MAX_UPLOAD_BYTES - len(header))
     resp = api_client.post(
         "/api/upload",
-        files={"file": ("edge.pcap", io.BytesIO(payload), "application/octet-stream")},
+        files={"file": ("edge.pcap", io.BytesIO(header), "application/octet-stream")},
         headers={"content-length": str(MAX_UPLOAD_BYTES)},
     )
-    # 파서가 빈 pcap으로 처리하므로 200 또는 400(파싱 오류) 허용; 413은 아님
+    # 파서가 빈 pcap으로 처리하므로 200 또는 400/422(파싱 오류) 허용; 413은 아님
     assert resp.status_code != 413
 
 

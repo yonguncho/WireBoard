@@ -39,6 +39,11 @@ class ExfiltrationDetector:
             bytes_total = sum(s.bytes_sent + s.bytes_recv for s in grp)
             outbound_ratio = bytes_out / bytes_total if bytes_total > 0 else 0.0
 
+            # 실제 아웃바운드 전송량이 없으면 연결 수와 무관하게 유출 아님
+            # (일반 브라우징도 외부 연결 수백 개를 만들 수 있음)
+            if bytes_out < _PRD_BYTES_MIN:
+                continue
+
             if connections > _CONN_HIGH or bytes_out > _BYTES_HIGH:
                 severity = "high"
             elif connections > _CONN_MEDIUM or bytes_out > _BYTES_MEDIUM:

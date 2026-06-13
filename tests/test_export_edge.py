@@ -31,6 +31,7 @@ def _s(src_ip="1.2.3.4", dst_ip="5.6.7.8", bytes_total=1000, protocol="TCP", por
 def _a(attack_type="DoS", confidence="high"):
     return AttackDetectionResult(
         attack_type=attack_type,
+        severity=confidence,
         confidence=confidence,
         evidence=["test evidence"],
         mitre_id="T1498.001",
@@ -172,6 +173,7 @@ class TestSuricataExport:
     def test_injection_attempt_sanitized(self):
         attack = AttackDetectionResult(
             attack_type="DoS",
+            severity="high",
             confidence="high",
             evidence=["test"],
             mitre_id="T1498",

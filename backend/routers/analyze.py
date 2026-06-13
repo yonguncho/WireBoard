@@ -1,10 +1,12 @@
 """POST /api/analyze — 세션 분석 + 공격 탐지."""
 import asyncio
-import gc
+import ipaddress
 import logging
 import time
 from collections import Counter
-from fastapi import APIRouter, HTTPException, Request
+from typing import Optional
+
+from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -14,11 +16,13 @@ from services.flow_extractor import FlowExtractor
 from services.attack_detector.portscan_detector import PortScanDetector
 from services.attack_detector.beacon_detector import BeaconDetector
 from services.attack_detector.comm_failure_detector import CommFailureDetector
+from services.attack_detector.dos_detector import DoSDetector
 from services.attack_detector.ddos_detector import DDoSDetector
 from services.attack_detector.exfiltration_detector import ExfiltrationDetector
 from services.attack_detector.bruteforce_detector import BruteForceDetector
 from services.reputation_service import ReputationService
-from utils.constants import UUID_V4_RE, IPv4_RE
+from utils.constants import UUID_V4_RE
+from utils.capture_auth import check_capture_token
 
 _reputation_svc = ReputationService()
 
@@ -28,6 +32,7 @@ _DETECTORS = [
     PortScanDetector(),
     BeaconDetector(),
     CommFailureDetector(),
+    DoSDetector(),
     DDoSDetector(),
     ExfiltrationDetector(),
     BruteForceDetector(),
@@ -36,16 +41,34 @@ _DETECTORS = [
 
 class AnalyzeRequest(BaseModel):
     upload_id: str
-    target_ip: str | None = None
+    target_ip: Optional[str] = None
+
+
+def _auto_detect_target_ip(sessions) -> Optional[str]:
+    """세션에서 가장 많이 등장하는 IP를 target_ip로 자동 감지."""
+    counter: Counter = Counter()
+    for s in sessions:
+        counter[s.src_ip] += 1
+        counter[s.dst_ip] += 1
+    if not counter:
+        return None
+    return counter.most_common(1)[0][0]
 
 
 @router.post("/api/analyze")
-async def analyze(req_body: AnalyzeRequest, request: Request):
+async def analyze(
+    req_body: AnalyzeRequest,
+    request: Request,
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
+):
     if not UUID_V4_RE.match(req_body.upload_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "upload_id must be UUID v4"})
 
-    if req_body.target_ip is not None and not IPv4_RE.match(req_body.target_ip):
-        raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": "target_ip must be a valid IPv4 address"})
+    if req_body.target_ip is not None:
+        try:
+            ipaddress.ip_address(req_body.target_ip)
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": "target_ip must be a valid IP address"})
 
     logger.info("분석 요청: upload_id=%s target_ip=%s", req_body.upload_id, req_body.target_ip)
     store = request.app.state.session_store
@@ -55,35 +78,17 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
         logger.warning("upload_id 없음: %s", req_body.upload_id)
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
+    check_capture_token(capture, x_upload_token)
     start_time = time.perf_counter()
 
     sessions = capture.sessions
-
-    if req_body.target_ip is not None:
-        effective_target_ip = req_body.target_ip
-    else:
-        if not sessions:
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "no_sessions", "msg": "캡처 파일에 분석 가능한 세션이 없습니다"},
-            )
-        # src+dst 양방향으로 등장 횟수 집계 → 가장 중심적인 호스트 선택
-        ip_counts: Counter = Counter()
-        for s in sessions:
-            ip_counts[s.src_ip] += 1
-            ip_counts[s.dst_ip] += 1
-        effective_target_ip = ip_counts.most_common(1)[0][0]
-        logger.info("target_ip 자동 감지: %s", effective_target_ip)
+    # target_ip가 None이면 자동 감지
+    effective_target_ip = req_body.target_ip if req_body.target_ip else _auto_detect_target_ip(sessions)
 
     target_sessions = [
         s for s in sessions
         if s.src_ip == effective_target_ip or s.dst_ip == effective_target_ip
     ]
-    if not target_sessions:
-        raise HTTPException(
-            status_code=422,
-            detail={"code": "no_matching_sessions", "msg": f"target_ip {effective_target_ip!r}에 해당하는 세션이 없습니다"},
-        )
     if not target_sessions:
         try:
             rep = await asyncio.wait_for(_reputation_svc.lookup_all(effective_target_ip), timeout=2.0)
@@ -165,7 +170,6 @@ async def analyze(req_body: AnalyzeRequest, request: Request):
         rep_dict = {"ip": effective_target_ip, "is_malicious": False, "sources": []}
 
     del sessions, target_sessions, flows, capture
-    await asyncio.get_running_loop().run_in_executor(None, gc.collect)
 
     partial_failure = any(a.get("detector_error") for a in attacks)
     response_body = {

@@ -1,13 +1,14 @@
 """POST /api/compare — 두 pcap 세션 비교 분석."""
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 from services.analytics.pcap_comparator import PcapComparator
 from utils.constants import UUID_RE
+from utils.capture_auth import check_capture_token
 
 router = APIRouter()
 _comparator = PcapComparator()
@@ -45,7 +46,12 @@ def _serialize_session(s) -> dict:
 
 
 @router.post("/api/compare")
-async def compare_captures(body: CompareRequest, request: Request):
+async def compare_captures(
+    body: CompareRequest,
+    request: Request,
+    x_upload_token_base: str | None = Header(None, alias="X-Upload-Token-Base"),
+    x_upload_token_current: str | None = Header(None, alias="X-Upload-Token-Current"),
+):
     if not UUID_RE.match(body.base_upload_id):
         raise HTTPException(
             status_code=400,
@@ -66,10 +72,12 @@ async def compare_captures(body: CompareRequest, request: Request):
         base_capture = store.get(body.base_upload_id)
     except KeyError:
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음 (base)"})
+    check_capture_token(base_capture, x_upload_token_base)
     try:
         current_capture = store.get(body.current_upload_id)
     except KeyError:
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음 (current)"})
+    check_capture_token(current_capture, x_upload_token_current)
 
     result = _comparator.compare(base_capture.sessions, current_capture.sessions)
 

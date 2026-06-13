@@ -119,8 +119,8 @@ class GeoIpAnalyzer:
             dst = getattr(s, "dst_ip", "")
             if dst and dst not in ips_seen and len(results) < 100:
                 try:
-                    addr = ipaddress.IPv4Address(dst)
-                    if not _is_private(dst):
+                    addr = ipaddress.ip_address(dst)
+                    if not (addr.is_private or addr.is_loopback or addr.is_link_local):
                         ips_seen.add(dst)
                         info = self.lookup(dst)
                         info["role"] = "external"

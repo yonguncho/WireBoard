@@ -6,6 +6,9 @@
 - 공격 없는 capture → 200 + 헤더만 있는 CSV
 - 잘못된 UUID → 400
 - 없는 upload_id → 404
+- capture_token 없이 요청 → 403
+- 잘못된 capture_token → 403
+- 올바른 capture_token → 200
 """
 import io
 import csv
@@ -25,7 +28,12 @@ def _parse_csv(content: bytes) -> list[dict]:
     return list(reader)
 
 
-def _make_upload_and_analyze(client: TestClient, attacks: list, sessions_meta: list) -> str:
+def _make_upload_and_analyze(
+    client: TestClient,
+    attacks: list,
+    sessions_meta: list,
+    capture_token: str | None = None,
+) -> str:
     """세션을 업로드 후 store에 공격 데이터를 직접 주입해 upload_id 반환.
 
     실제 파이프라인을 통하지 않고, session_store에 ParsedCapture를 직접 넣어
@@ -63,6 +71,7 @@ def _make_upload_and_analyze(client: TestClient, attacks: list, sessions_meta: l
         source_type="pcap",
         attacks=attacks,
         target_ip="10.0.0.1",
+        capture_token=capture_token,
     )
 
     upload_id = str(uuid.uuid4())
@@ -143,3 +152,48 @@ def test_ioc_export_not_found(api_client: TestClient) -> None:
     non_existent = str(uuid.uuid4())
     resp = api_client.get(f"/api/export/{non_existent}/ioc")
     assert resp.status_code == 404
+
+
+def test_ioc_export_token_guard_no_token(api_client: TestClient) -> None:
+    """capture_token이 설정된 캡처에 토큰 없이 요청 → 403."""
+    secret = "abc123secret"
+    upload_id = _make_upload_and_analyze(
+        api_client, attacks=[], sessions_meta=[{}], capture_token=secret
+    )
+    resp = api_client.get(f"/api/export/{upload_id}/ioc")
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "forbidden"
+
+
+def test_ioc_export_token_guard_wrong_token(api_client: TestClient) -> None:
+    """잘못된 X-Upload-Token → 403."""
+    secret = "abc123secret"
+    upload_id = _make_upload_and_analyze(
+        api_client, attacks=[], sessions_meta=[{}], capture_token=secret
+    )
+    resp = api_client.get(
+        f"/api/export/{upload_id}/ioc",
+        headers={"X-Upload-Token": "wrong_token"},
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "forbidden"
+
+
+def test_ioc_export_token_guard_correct_token(api_client: TestClient) -> None:
+    """올바른 X-Upload-Token → 200."""
+    secret = "abc123secret"
+    attacks = [
+        {"attack_type": "PortScan", "severity": "high", "mitre_id": "T1046",
+         "description": "포트스캔", "src_ip": "9.9.9.9"},
+    ]
+    upload_id = _make_upload_and_analyze(
+        api_client, attacks=attacks, sessions_meta=[{}], capture_token=secret
+    )
+    resp = api_client.get(
+        f"/api/export/{upload_id}/ioc",
+        headers={"X-Upload-Token": secret},
+    )
+    assert resp.status_code == 200
+    rows = _parse_csv(resp.content)
+    types_values = {(r["type"], r["value"]) for r in rows}
+    assert ("ip", "9.9.9.9") in types_values

@@ -12,52 +12,90 @@ async function handleError(r: Response, label: string): Promise<never> {
   throw new Error(msg)
 }
 
-export async function uploadPcap(file: File): Promise<{ upload_id: string; session_count: number; source_type: string; parse_warnings: string[] }> {
+const TOKEN_STORE_KEY = 'wb_capture_tokens'
+
+function loadTokens(): Map<string, string> {
+  try {
+    const raw = sessionStorage.getItem(TOKEN_STORE_KEY)
+    if (raw) return new Map(Object.entries(JSON.parse(raw) as Record<string, string>))
+  } catch { /* ignore */ }
+  return new Map()
+}
+
+const _tokens = loadTokens()
+
+function persistTokens() {
+  try {
+    sessionStorage.setItem(TOKEN_STORE_KEY, JSON.stringify(Object.fromEntries(_tokens)))
+  } catch { /* ignore */ }
+}
+
+export function setCaptureToken(upload_id: string, token: string) {
+  _tokens.set(upload_id, token)
+  persistTokens()
+}
+
+export function getCaptureToken(upload_id: string): string | undefined {
+  return _tokens.get(upload_id)
+}
+
+function tokenHeader(upload_id?: string, override?: string): Record<string, string> {
+  const token = override ?? (upload_id ? _tokens.get(upload_id) : undefined)
+  return token ? { 'X-Upload-Token': token } : {}
+}
+
+export async function uploadPcap(file: File): Promise<{ upload_id: string; capture_token: string; session_count: number; source_type: string; parse_warnings: string[] }> {
   const fd = new FormData()
   fd.append('file', file)
   const r = await fetch(`${BASE}/api/upload`, { method: 'POST', body: fd })
   if (!r.ok) return handleError(r, '파일 형식을 인식할 수 없습니다')
-  return r.json()
+  const data = await r.json()
+  if (data.upload_id && data.capture_token) setCaptureToken(data.upload_id, data.capture_token)
+  return data
 }
 
-export async function analyzePcap(upload_id: string, target_ip?: string): Promise<Record<string, unknown>> {
+export async function analyzePcap(upload_id: string, target_ip?: string, capture_token?: string): Promise<Record<string, unknown>> {
   const body: Record<string, string> = { upload_id }
   if (target_ip) body.target_ip = target_ip
   const r = await fetch(`${BASE}/api/analyze`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...tokenHeader(upload_id, capture_token) },
     body: JSON.stringify(body),
   })
   if (!r.ok) return handleError(r, '분석 실패')
   return r.json()
 }
 
-export async function getPanels(upload_id: string): Promise<PanelData> {
-  const r = await fetch(`${BASE}/api/panels/${upload_id}`)
+export async function getPanels(upload_id: string, capture_token?: string): Promise<PanelData> {
+  const r = await fetch(`${BASE}/api/panels/${upload_id}`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
   if (!r.ok) return handleError(r, '패널 로드 실패')
   return r.json()
 }
 
-export async function addAnnotation(upload_id: string, start_ts: number, end_ts: number, comment: string) {
+export async function addAnnotation(upload_id: string, start_ts: number, end_ts: number, comment: string, capture_token?: string) {
   const r = await fetch(`${BASE}/api/annotations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...tokenHeader(upload_id, capture_token) },
     body: JSON.stringify({ upload_id, start_ts, end_ts, comment }),
   })
   if (!r.ok) return handleError(r, '마커 저장 실패')
   return r.json()
 }
 
-export async function getDrilldown(upload_id: string, ip: string): Promise<DrilldownResult> {
-  const r = await fetch(`${BASE}/api/drilldown/${upload_id}?ip=${encodeURIComponent(ip)}`)
+export async function getDrilldown(upload_id: string, ip: string, capture_token?: string): Promise<DrilldownResult> {
+  const r = await fetch(`${BASE}/api/drilldown/${upload_id}?ip=${encodeURIComponent(ip)}`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
   if (!r.ok) return handleError(r, '드릴다운 실패')
   return r.json()
 }
 
-export async function filterSessions(upload_id: string, query: string) {
+export async function filterSessions(upload_id: string, query: string, capture_token?: string) {
   const r = await fetch(`${BASE}/api/filter`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...tokenHeader(upload_id, capture_token) },
     body: JSON.stringify({ upload_id, query }),
   })
   if (!r.ok) return handleError(r, '필터 실패')
@@ -87,8 +125,10 @@ export interface DnsEntry { domain: string; type: string; response?: string; nxd
 export interface ConvEntry { src: string; dst: string; packets: number; bytes: number; duration_s: number }
 export interface AttackEntry { attack_type: string; severity: string; mitre_id: string; description: string; src_ip?: string }
 
-export async function getSummary(upload_id: string): Promise<SummaryData> {
-  const r = await fetch(`${BASE}/api/summary/${upload_id}`)
+export async function getSummary(upload_id: string, capture_token?: string): Promise<SummaryData> {
+  const r = await fetch(`${BASE}/api/summary/${upload_id}`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
   if (!r.ok) return handleError(r, '요약 로드 실패')
   return r.json()
 }
@@ -157,14 +197,18 @@ export interface StreamData {
   truncated: boolean
 }
 
-export async function getStream(upload_id: string, session_id: string, encoding = 'ascii'): Promise<StreamData> {
-  const r = await fetch(`${BASE}/api/stream/${upload_id}?session_id=${encodeURIComponent(session_id)}&encoding=${encoding}`)
+export async function getStream(upload_id: string, session_id: string, encoding = 'ascii', capture_token?: string): Promise<StreamData> {
+  const r = await fetch(`${BASE}/api/stream/${upload_id}?session_id=${encodeURIComponent(session_id)}&encoding=${encoding}`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
   if (!r.ok) return handleError(r, '스트림 로드 실패')
   return r.json()
 }
 
-export async function getFlow(upload_id: string, session_id: string): Promise<FlowData> {
-  const r = await fetch(`${BASE}/api/flow/${upload_id}?session_id=${encodeURIComponent(session_id)}`)
+export async function getFlow(upload_id: string, session_id: string, capture_token?: string): Promise<FlowData> {
+  const r = await fetch(`${BASE}/api/flow/${upload_id}?session_id=${encodeURIComponent(session_id)}`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
   if (!r.ok) return handleError(r, '흐름 로드 실패')
   return r.json()
 }
@@ -183,14 +227,18 @@ export interface PacketListData {
   packets: PacketEntry[]
 }
 
-export async function getPackets(upload_id: string, queryString: string): Promise<PacketListData> {
-  const r = await fetch(`${BASE}/api/packets/${upload_id}?${queryString}`)
+export async function getPackets(upload_id: string, queryString: string, capture_token?: string): Promise<PacketListData> {
+  const r = await fetch(`${BASE}/api/packets/${upload_id}?${queryString}`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
   if (!r.ok) return handleError(r, '패킷 목록 로드 실패')
   return r.json()
 }
 
-export async function exportJson(upload_id: string): Promise<void> {
-  const r = await fetch(`${BASE}/api/export/${upload_id}`)
+export async function exportJson(upload_id: string, capture_token?: string): Promise<void> {
+  const r = await fetch(`${BASE}/api/export/${upload_id}`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
   if (!r.ok) return handleError(r, 'JSON 내보내기 실패')
   const blob = await r.blob()
   const url = URL.createObjectURL(blob)
@@ -201,8 +249,11 @@ export async function exportJson(upload_id: string): Promise<void> {
   URL.revokeObjectURL(url)
 }
 
-export async function exportPdf(upload_id: string): Promise<void> {
-  const r = await fetch(`${BASE}/api/export/${upload_id}/pdf`, { method: 'POST' })
+export async function exportPdf(upload_id: string, capture_token?: string): Promise<void> {
+  const r = await fetch(`${BASE}/api/export/${upload_id}/pdf`, {
+    method: 'POST',
+    headers: tokenHeader(upload_id, capture_token),
+  })
   if (!r.ok) return handleError(r, 'PDF 내보내기 실패')
   const blob = await r.blob()
   const url = URL.createObjectURL(blob)
@@ -213,8 +264,10 @@ export async function exportPdf(upload_id: string): Promise<void> {
   URL.revokeObjectURL(url)
 }
 
-export async function exportIoc(uploadId: string): Promise<Blob> {
-  const r = await fetch(`${BASE}/api/export/${uploadId}/ioc`)
+export async function exportIoc(uploadId: string, capture_token?: string): Promise<Blob> {
+  const r = await fetch(`${BASE}/api/export/${uploadId}/ioc`, {
+    headers: tokenHeader(uploadId, capture_token),
+  })
   if (!r.ok) return handleError(r, 'IOC 내보내기 실패')
   return r.blob()
 }
@@ -244,10 +297,20 @@ export interface CompareResult {
   compare_session_total: number
 }
 
-export async function compareCaptures(base_upload_id: string, current_upload_id: string): Promise<CompareResult> {
+export async function compareCaptures(
+  base_upload_id: string,
+  current_upload_id: string,
+  base_token?: string,
+  current_token?: string,
+): Promise<CompareResult> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const bt = base_token ?? _tokens.get(base_upload_id)
+  const ct = current_token ?? _tokens.get(current_upload_id)
+  if (bt) headers['X-Upload-Token-Base'] = bt
+  if (ct) headers['X-Upload-Token-Current'] = ct
   const r = await fetch(`${BASE}/api/compare`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ base_upload_id, current_upload_id }),
   })
   if (!r.ok) return handleError(r, '비교 분석 실패')
@@ -261,8 +324,10 @@ export interface Annotation {
   comment: string
 }
 
-export async function getAnnotations(upload_id: string): Promise<Annotation[]> {
-  const r = await fetch(`${BASE}/api/annotations/${upload_id}`)
+export async function getAnnotations(upload_id: string, capture_token?: string): Promise<Annotation[]> {
+  const r = await fetch(`${BASE}/api/annotations/${upload_id}`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
   if (!r.ok) return handleError(r, '어노테이션 로드 실패')
   return r.json()
 }
@@ -303,8 +368,10 @@ export interface NetworkHealthData {
   sessions: SessionHealth[]
 }
 
-export async function getNetworkHealth(upload_id: string): Promise<NetworkHealthData> {
-  const r = await fetch(`${BASE}/api/health/${upload_id}`)
+export async function getNetworkHealth(upload_id: string, capture_token?: string): Promise<NetworkHealthData> {
+  const r = await fetch(`${BASE}/api/health/${upload_id}`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
   if (!r.ok) return handleError(r, '통신 상태 진단 실패')
   return r.json()
 }

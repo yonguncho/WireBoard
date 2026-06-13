@@ -16,7 +16,7 @@ class TestBuildSummaryClean:
         from services.narrative.summary_builder import build_summary
         r = build_summary([], [])
         assert r.risk_level == "CLEAN"
-        assert "탐지된 공격 없음" in r.headline
+        assert "이상 이벤트 없음" in r.headline
         assert r.attacker_ips == []
         assert r.victim_ips == []
         assert r.attack_timeline == []
@@ -326,7 +326,7 @@ class TestAttackDetectorSrcIp:
         from services.attack_detector.comm_failure_detector import CommFailureDetector
         sessions = [
             self._session("10.0.0.1", "192.168.1.1", 80, rst=True)
-            for _ in range(8)
+            for _ in range(12)
         ]
         res = CommFailureDetector().detect(sessions)
         assert res is not None
@@ -359,7 +359,9 @@ class TestAnalyzeEndpointSrcIp:
         )
         assert up.status_code == 200
         uid = up.json()["upload_id"]
-        r = api_client.post("/api/analyze", json={"upload_id": uid})
+        capture_token = up.json()["capture_token"]
+        r = api_client.post("/api/analyze", json={"upload_id": uid, "target_ip": "192.168.1.1"},
+                            headers={"X-Upload-Token": capture_token})
         assert r.status_code in (200, 207)
         attacks = r.json().get("attacks", [])
         for a in attacks:
@@ -373,7 +375,9 @@ class TestAnalyzeEndpointSrcIp:
             files={"file": ("scan.pcap", pcap, "application/octet-stream")},
         )
         uid = up.json()["upload_id"]
-        r = api_client.post("/api/analyze", json={"upload_id": uid})
+        capture_token = up.json()["capture_token"]
+        r = api_client.post("/api/analyze", json={"upload_id": uid, "target_ip": "192.168.1.1"},
+                            headers={"X-Upload-Token": capture_token})
         attacks = r.json().get("attacks", [])
         portscan = next((a for a in attacks if a["attack_type"] == "PortScan"), None)
         if portscan:
@@ -403,8 +407,10 @@ class TestSummaryEndpoint:
             files={"file": ("t.pcap", pcap, "application/octet-stream")},
         )
         uid = up.json()["upload_id"]
-        api_client.post("/api/analyze", json={"upload_id": uid})
-        r = api_client.get(f"/api/summary/{uid}")
+        capture_token = up.json()["capture_token"]
+        api_client.post("/api/analyze", json={"upload_id": uid},
+                        headers={"X-Upload-Token": capture_token})
+        r = api_client.get(f"/api/summary/{uid}", headers={"X-Upload-Token": capture_token})
         assert r.status_code == 200
         body = r.json()
         for key in ("headline", "narrative", "risk_level",
@@ -426,8 +432,9 @@ class TestSummaryEndpoint:
             files={"file": ("t.pcap", pcap, "application/octet-stream")},
         )
         uid = up.json()["upload_id"]
+        capture_token = up.json()["capture_token"]
         # analyze 없이 바로 summary 요청
-        r = api_client.get(f"/api/summary/{uid}")
+        r = api_client.get(f"/api/summary/{uid}", headers={"X-Upload-Token": capture_token})
         assert r.status_code == 200
         assert r.json()["risk_level"] == "CLEAN"
 
@@ -440,8 +447,10 @@ class TestSummaryEndpoint:
             files={"file": ("scan.pcap", pcap, "application/octet-stream")},
         )
         uid = up.json()["upload_id"]
-        api_client.post("/api/analyze", json={"upload_id": uid})
-        r = api_client.get(f"/api/summary/{uid}")
+        capture_token = up.json()["capture_token"]
+        api_client.post("/api/analyze", json={"upload_id": uid},
+                        headers={"X-Upload-Token": capture_token})
+        r = api_client.get(f"/api/summary/{uid}", headers={"X-Upload-Token": capture_token})
         body = r.json()
         if body["risk_level"] in ("HIGH", "MEDIUM", "LOW"):
             assert len(body["attacker_ips"]) > 0, "공격 탐지됐는데 attacker_ips 비어있음 (B1 bug)"
@@ -455,8 +464,10 @@ class TestSummaryEndpoint:
             files={"file": ("scan.pcap", pcap, "application/octet-stream")},
         )
         uid = up.json()["upload_id"]
-        api_client.post("/api/analyze", json={"upload_id": uid})
-        r = api_client.get(f"/api/summary/{uid}")
+        capture_token = up.json()["capture_token"]
+        api_client.post("/api/analyze", json={"upload_id": uid},
+                        headers={"X-Upload-Token": capture_token})
+        r = api_client.get(f"/api/summary/{uid}", headers={"X-Upload-Token": capture_token})
         body = r.json()
         assert len(body["recommendations"]) > 0
 
@@ -469,8 +480,10 @@ class TestSummaryEndpoint:
             files={"file": ("scan.pcap", pcap, "application/octet-stream")},
         )
         uid = up.json()["upload_id"]
-        api_client.post("/api/analyze", json={"upload_id": uid})
-        r = api_client.get(f"/api/summary/{uid}")
+        capture_token = up.json()["capture_token"]
+        api_client.post("/api/analyze", json={"upload_id": uid},
+                        headers={"X-Upload-Token": capture_token})
+        r = api_client.get(f"/api/summary/{uid}", headers={"X-Upload-Token": capture_token})
         body = r.json()
         if body["risk_level"] != "CLEAN":
             assert "\n" in body["narrative"], "narrative에 줄바꿈 없음 (B4 bug)"

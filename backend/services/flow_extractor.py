@@ -18,7 +18,7 @@ class Flow:
 
 
 class FlowExtractor:
-    def extract(self, sessions: list[SessionModel]) -> list[Flow]:
+    def extract(self, sessions: list[SessionModel], target_ip: str | None = None) -> list[Flow]:
         return [
             Flow(
                 flow_id=s.session_id,

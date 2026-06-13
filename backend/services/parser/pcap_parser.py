@@ -17,9 +17,12 @@ _MAGIC_NS_LE = 0xA1B23C4D
 _MAGIC_NS_BE = 0x4D3CB2A1
 _MAGIC_PCAPNG = 0x0A0D0D0A
 
-# 공개 상수 — 테스트에서 import 가능
-PCAP_MAGIC   = _MAGIC_LE
-PCAPNG_MAGIC = _MAGIC_PCAPNG
+# 공개 상수 — 테스트에서 import 가능 (bytes 형식으로 노출)
+PCAP_MAGIC   = struct.pack("<I", _MAGIC_LE)    # b'\xd4\xc3\xb2\xa1' LE
+PCAPNG_MAGIC = struct.pack("<I", _MAGIC_PCAPNG)  # b'\x0a\x0d\x0d\x0a'
+
+# MAX_BYTES 별칭 — 일부 테스트에서 import
+MAX_BYTES = MAX_UPLOAD_BYTES
 
 _VALID_MAGICS_LE = {_MAGIC_LE, _MAGIC_BE, _MAGIC_NS_LE, _MAGIC_NS_BE, _MAGIC_PCAPNG}
 _STRUCT_MAGICS   = {_MAGIC_LE, _MAGIC_BE, _MAGIC_NS_LE, _MAGIC_NS_BE}
@@ -30,6 +33,10 @@ _VLAN_ETHERTYPES = {0x8100, 0x88A8}
 _MAX_PKTS_PER_FLOW = 200
 # 패킷당 저장 payload 바이트 수 (YARA 탐지 + 세션 재생 품질 향상)
 _PAYLOAD_CAPTURE_BYTES = 128
+# 단일 캡처에서 허용할 최대 고유 플로우(세션) 수
+_MAX_FLOW_COUNT = 50_000
+# parse_warnings 목록의 최대 항목 수
+_MAX_PARSE_WARNINGS = 500
 
 # ICMP 에러 타입 → 레이블 매핑
 _ICMP_LABELS: dict[tuple[int, int], str] = {
@@ -202,9 +209,12 @@ class PcapParser:
                 pkt_len = len(buf)
                 fts     = float(ts)
 
-                canonical, direction = self._update_flow(
+                flow_result = self._update_flow(
                     flow_map, fts, src_ip, dst_ip, sport, dport, proto, pkt_len, rst
                 )
+                if flow_result is None:
+                    continue
+                canonical, direction = flow_result
                 self._record_packet(
                     pkt_map, canonical,
                     PacketRecord(
@@ -215,7 +225,7 @@ class PcapParser:
                     ),
                 )
             except Exception as exc:
-                if parse_warnings is not None:
+                if parse_warnings is not None and len(parse_warnings) < _MAX_PARSE_WARNINGS:
                     parse_warnings.append(f"dpkt packet error: {type(exc).__name__}: {exc}")
 
         return self._to_sessions(flow_map, pkt_map)
@@ -289,9 +299,12 @@ class PcapParser:
                 fts     = float(pkt.time)
                 pkt_len = len(pkt)
 
-                canonical, direction = self._update_flow(
+                flow_result = self._update_flow(
                     flow_map, fts, ip.src, ip.dst, sport, dport, proto, pkt_len, rst
                 )
+                if flow_result is None:
+                    continue
+                canonical, direction = flow_result
                 self._record_packet(
                     pkt_map, canonical,
                     PacketRecord(
@@ -302,7 +315,7 @@ class PcapParser:
                     ),
                 )
             except Exception as exc:
-                if parse_warnings is not None:
+                if parse_warnings is not None and len(parse_warnings) < _MAX_PARSE_WARNINGS:
                     parse_warnings.append(f"scapy packet error: {type(exc).__name__}: {exc}")
 
         return self._to_sessions(flow_map, pkt_map)
@@ -418,9 +431,12 @@ class PcapParser:
                         except Exception:
                             pass
 
-                canonical, direction = self._update_flow(
+                flow_result = self._update_flow(
                     flow_map, pkt_ts, src_ip, dst_ip, sport, dport, proto, pkt_len, rst
                 )
+                if flow_result is None:
+                    continue
+                canonical, direction = flow_result
                 self._record_packet(
                     pkt_map, canonical,
                     PacketRecord(
@@ -433,7 +449,7 @@ class PcapParser:
             except (struct.error, IndexError) as exc:
                 msg = f"struct packet error (offset={offset}): {type(exc).__name__}: {exc}"
                 logger.warning(msg)
-                if parse_warnings is not None:
+                if parse_warnings is not None and len(parse_warnings) < _MAX_PARSE_WARNINGS:
                     parse_warnings.append(msg)
 
         return self._to_sessions(flow_map, pkt_map)
@@ -453,8 +469,9 @@ class PcapParser:
         proto: str,
         pkt_len: int,
         rst: bool,
-    ) -> tuple[tuple, str]:
-        """flow_map 갱신 후 (canonical_key, direction) 반환."""
+    ) -> tuple[tuple, str] | None:
+        """flow_map 갱신 후 (canonical_key, direction) 반환.
+        신규 플로우가 상한(_MAX_FLOW_COUNT)을 초과하면 None 반환."""
         key = (src_ip, dst_ip, sport, dport, proto)
         rev = (dst_ip, src_ip, dport, sport, proto)
 
@@ -472,6 +489,8 @@ class PcapParser:
             e["packet_count"] += 1
             if rst: e["rst"] = True
             return rev, "rev"
+        elif len(flow_map) >= _MAX_FLOW_COUNT:
+            return None
         else:
             flow_map[key] = {
                 "start_ts": ts, "end_ts": ts,

@@ -41,7 +41,12 @@ class SessionNormalizer:
             payload_length = sum(s.payload_length for s in group)
             rst = any(s.rst for s in group)
             confidence = "low" if any(s.confidence == "low" for s in group) else "normal"
-            meta = {k: v for d in group for k, v in (d.meta or {}).items()} or None
+            merged_meta: dict = {}
+            for d in group:
+                for k, v in (d.meta or {}).items():
+                    if k not in merged_meta:
+                        merged_meta[k] = v
+            meta = merged_meta or None
 
             new_sid = str(uuid.uuid4())
             result.append(SessionModel(

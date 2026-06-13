@@ -34,14 +34,15 @@ UUID_RE: re.Pattern[str] = re.compile(
 
 # ─────────────────────── 헬퍼: upload 먼저 ──────────────────────────
 
-def _upload_pcap(client: TestClient, pcap_data: bytes) -> str:
-    """pcap 업로드 후 upload_id 반환."""
+def _upload_pcap(client: TestClient, pcap_data: bytes) -> tuple[str, str]:
+    """pcap 업로드 후 (upload_id, capture_token) 반환."""
     resp = client.post(
         "/api/upload",
         files={"file": ("capture.pcap", io.BytesIO(pcap_data), "application/octet-stream")},
     )
     assert resp.status_code == 200, f"업로드 실패: {resp.text}"
-    return resp.json()["upload_id"]
+    body = resp.json()
+    return body["upload_id"], body["capture_token"]
 
 
 # ───────────────────── POST /api/analyze: 에러 케이스 ────────────────
@@ -81,16 +82,18 @@ class TestAnalyzeErrors:
         resp = api_client.post("/api/analyze", json={"target_ip": "192.168.1.1"})
         assert resp.status_code == 422
 
-    def test_missing_target_ip_returns_422(self, api_client: TestClient) -> None:
+    def test_missing_target_ip_auto_detects(self, api_client: TestClient) -> None:
+        # target_ip is Optional — missing it triggers auto-detection; unknown upload_id → 404
         resp = api_client.post("/api/analyze", json={"upload_id": str(uuid.uuid4())})
-        assert resp.status_code == 422
+        assert resp.status_code == 404
 
     def test_invalid_ip_format_returns_400(self, api_client: TestClient, pcap_bytes: bytes) -> None:
         """IP 형식 검증 실패 → 400."""
-        upload_id = _upload_pcap(api_client, pcap_bytes)
+        upload_id, capture_token = _upload_pcap(api_client, pcap_bytes)
         resp = api_client.post(
             "/api/analyze",
             json={"upload_id": upload_id, "target_ip": "not.an.ip.address"},
+            headers={"X-Upload-Token": capture_token},
         )
         assert resp.status_code in {400, 422}
 
@@ -99,18 +102,20 @@ class TestAnalyzeErrors:
 
 class TestAnalyzeSuccess:
     def test_analyze_returns_200(self, api_client: TestClient, pcap_bytes: bytes) -> None:
-        upload_id = _upload_pcap(api_client, pcap_bytes)
+        upload_id, capture_token = _upload_pcap(api_client, pcap_bytes)
         resp = api_client.post(
             "/api/analyze",
             json={"upload_id": upload_id, "target_ip": "192.168.1.2"},
+            headers={"X-Upload-Token": capture_token},
         )
         assert resp.status_code == 200
 
     def test_analyze_response_schema(self, api_client: TestClient, pcap_bytes: bytes) -> None:
-        upload_id = _upload_pcap(api_client, pcap_bytes)
+        upload_id, capture_token = _upload_pcap(api_client, pcap_bytes)
         resp = api_client.post(
             "/api/analyze",
             json={"upload_id": upload_id, "target_ip": "192.168.1.2"},
+            headers={"X-Upload-Token": capture_token},
         )
         body: dict[str, Any] = resp.json()
         assert "flows" in body
@@ -123,27 +128,30 @@ class TestAnalyzeSuccess:
         assert isinstance(body["analysis_duration_ms"], (int, float))
 
     def test_analyze_duration_ms_positive(self, api_client: TestClient, pcap_bytes: bytes) -> None:
-        upload_id = _upload_pcap(api_client, pcap_bytes)
+        upload_id, capture_token = _upload_pcap(api_client, pcap_bytes)
         resp = api_client.post(
             "/api/analyze",
             json={"upload_id": upload_id, "target_ip": "192.168.1.2"},
+            headers={"X-Upload-Token": capture_token},
         )
         assert resp.json()["analysis_duration_ms"] > 0
 
     def test_analyze_duration_under_5000ms(self, api_client: TestClient, pcap_bytes: bytes) -> None:
         """5-packet pcap 분석은 5,000 ms 미만 (성능 기준)."""
-        upload_id = _upload_pcap(api_client, pcap_bytes)
+        upload_id, capture_token = _upload_pcap(api_client, pcap_bytes)
         resp = api_client.post(
             "/api/analyze",
             json={"upload_id": upload_id, "target_ip": "192.168.1.2"},
+            headers={"X-Upload-Token": capture_token},
         )
         assert resp.json()["analysis_duration_ms"] < 5_000
 
     def test_analyze_target_ip_in_response(self, api_client: TestClient, pcap_bytes: bytes) -> None:
-        upload_id = _upload_pcap(api_client, pcap_bytes)
+        upload_id, capture_token = _upload_pcap(api_client, pcap_bytes)
         resp = api_client.post(
             "/api/analyze",
             json={"upload_id": upload_id, "target_ip": "192.168.1.2"},
+            headers={"X-Upload-Token": capture_token},
         )
         assert resp.json().get("target_ip") == "192.168.1.2"
 
@@ -390,14 +398,14 @@ class TestSessionStore:
 # ─────────────────────── 보안 grep 확인 ─────────────────────────────
 
 class TestSecurityGrep:
-    def test_analyze_router_has_gc_collect(self) -> None:
-        """analyze.py 에 del + gc.collect() 가 있어야 한다 (메모리 보안)."""
+    def test_analyze_router_has_del_sessions(self) -> None:
+        """analyze.py 에 del sessions 구문이 있어야 한다 (메모리 관리 — gc.collect()는 async 컨텍스트 블로킹 위험으로 제거됨)."""
         from pathlib import Path
         analyze_path = Path(__file__).parent.parent / "backend" / "routers" / "analyze.py"
         if not analyze_path.exists():
             pytest.skip("analyze.py 미구현 — 구현 후 통과 예상")
         source = analyze_path.read_text(encoding="utf-8")
-        assert "gc.collect()" in source, "analyze.py 에 gc.collect() 누락"
+        assert "del sessions" in source, "analyze.py 에 del sessions 누락"
 
     def test_no_any_type_in_models(self) -> None:
         """models/ 디렉터리에 ': any' 또는 'Any' 타입이 없어야 한다."""

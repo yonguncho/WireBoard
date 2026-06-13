@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { getFlow, getStream } from '../api'
 import type { FlowData, FlowPacket, StreamData } from '../api'
 
@@ -170,6 +171,97 @@ function PacketRow({ pkt, idx, base }: { pkt: FlowPacket; idx: number; base: str
         </tr>
       )}
     </>
+  )
+}
+
+// ── 래더(Flow Sequence) 다이어그램 ───────────────────────────────────────────
+
+function ladderColor(pkt: FlowPacket): string {
+  const flags = pkt.flags || ''
+  if (flags.includes('RST')) return '#ef4444'
+  if (flags.includes('SYN') && flags.includes('ACK')) return '#c084fc'
+  if (flags.includes('SYN')) return '#60a5fa'
+  if (flags.includes('FIN')) return '#f59e0b'
+  if (pkt.payload_len > 0) return '#22c55e'
+  return '#718096'
+}
+
+const LADDER_LEGEND: [string, string][] = [
+  ['#60a5fa', 'SYN'], ['#c084fc', 'SYN+ACK'], ['#22c55e', '데이터'],
+  ['#718096', 'ACK'], ['#f59e0b', 'FIN'], ['#ef4444', 'RST'],
+]
+
+function LadderView({ packets, session }: { packets: FlowPacket[]; session: FlowData['session'] | null }) {
+  const [selected, setSelected] = useState<number | null>(null)
+  if (!session) return null
+  if (!packets.length) return <div className="flow-no-packets">패킷 없음 (PCAP 포맷이 아닌 경우 미지원)</div>
+
+  const rows: ReactNode[] = []
+  packets.forEach((p, i) => {
+    const prev = packets[i - 1]
+    const gap = prev ? p.rel_ts - prev.rel_ts : 0
+    if (gap >= 1) {
+      rows.push(
+        <div key={`gap-${i}`} className="ladder-gap">
+          <span className="ladder-gap-line" />
+          <span className="ladder-gap-label">⏱ {gap.toFixed(1)}s 공백</span>
+          <span className="ladder-gap-line" />
+        </div>
+      )
+    }
+    const color = ladderColor(p)
+    const isFwd = p.direction === 'fwd'
+    const hasHex = !!p.payload_hex && p.payload_len > 0
+    const isSel = selected === i
+    rows.push(
+      <div
+        key={i}
+        className={`ladder-row${isSel ? ' selected' : ''}`}
+        onClick={() => hasHex && setSelected(isSel ? null : i)}
+        style={{ cursor: hasHex ? 'pointer' : 'default' }}
+        title={hasHex ? '클릭 → HEX 덤프' : ''}
+      >
+        <span className="ladder-time">{i === 0 ? '0.000 s' : fmtRelTs(p.rel_ts)}</span>
+        <div className="ladder-arrow-track">
+          <div className={`ladder-arrow ${isFwd ? 'fwd' : 'rev'}`} style={{ color }}>
+            <span className="ladder-arrow-line" style={{ background: color }} />
+            <span className="ladder-arrow-head" />
+            <span className="ladder-arrow-label" style={{ color }}>{decodeInfo(p)}</span>
+          </div>
+        </div>
+        <span className="ladder-bytes">{p.payload_len > 0 ? fmtBytes(p.payload_len) : (p.flags || '—')}</span>
+        {isSel && p.payload_hex && (
+          <pre className="ladder-hex">{formatHexDump(p.payload_hex)}</pre>
+        )}
+      </div>
+    )
+  })
+
+  return (
+    <div className="ladder-wrap">
+      <div className="ladder-endpoints">
+        <span className="ladder-endpoint src">
+          {session.src_ip}<span className="ep-port">:{session.src_port}</span>
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--txt-muted)' }}>{session.protocol} 흐름 · {packets.length}패킷</span>
+        <span className="ladder-endpoint dst">
+          {session.dst_ip}<span className="ep-port">:{session.dst_port}</span>
+        </span>
+      </div>
+      <div className="ladder-body">
+        <span className="ladder-rail" style={{ left: 98 }} />
+        <span className="ladder-rail" style={{ right: 90 }} />
+        {rows}
+      </div>
+      <div className="ladder-legend">
+        {LADDER_LEGEND.map(([c, label]) => (
+          <span key={label} className="ladder-legend-item">
+            <span className="ladder-legend-swatch" style={{ background: c }} />{label}
+          </span>
+        ))}
+        <span className="ladder-legend-item" style={{ marginLeft: 'auto' }}>→ 송신 · ← 수신 · 행 클릭 시 HEX</span>
+      </div>
+    </div>
   )
 }
 
@@ -367,12 +459,12 @@ function FollowStreamView({ uploadId, sessionId, session }: {
 // ── 메인 ─────────────────────────────────────────────────────────────────────
 
 interface Props { uploadId: string; sessionId: string; onClose: () => void }
-type ViewTab = 'packets' | 'replay' | 'stream' | 'analysis'
+type ViewTab = 'ladder' | 'packets' | 'replay' | 'stream' | 'analysis'
 
 export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
   const [data, setData]   = useState<FlowData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [view, setView]   = useState<ViewTab>('packets')
+  const [view, setView]   = useState<ViewTab>('ladder')
 
   useEffect(() => {
     setData(null); setError(null)
@@ -419,6 +511,7 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
               <span style={{ color: (analysis.rttMs > 150 ? '#f59e0b' : '#22c55e') }}>RTT {analysis.rttMs.toFixed(1)} ms</span>
             )}
             <div className="flow-view-tabs">
+              <button className={`flow-tab${view === 'ladder'   ? ' active' : ''}`} onClick={() => setView('ladder')}>래더</button>
               <button className={`flow-tab${view === 'packets'  ? ' active' : ''}`} onClick={() => setView('packets')}>패킷</button>
               <button className={`flow-tab${view === 'stream'   ? ' active' : ''}`} onClick={() => setView('stream')}>Follow Stream</button>
               <button className={`flow-tab${view === 'replay'   ? ' active' : ''}`} onClick={() => setView('replay')}>재생</button>
@@ -445,6 +538,7 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
           ) : <div className="flow-no-packets">패킷 없음 (PCAP 포맷이 아닌 경우 패킷 뷰어 미지원)</div>
         )}
 
+        {data && view === 'ladder'   && <LadderView packets={data.packets} session={s ?? null} />}
         {data && view === 'stream'   && <FollowStreamView uploadId={uploadId} sessionId={sessionId} session={s ?? null} />}
         {data && view === 'replay'   && <ReplayView packets={data.packets} />}
         {data && view === 'analysis' && <ConnAnalysisView packets={data.packets} session={s ?? null} />}

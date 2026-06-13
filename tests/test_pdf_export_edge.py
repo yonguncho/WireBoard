@@ -85,7 +85,8 @@ class TestPdfFileCreation:
         exporter = _load_exporter()
         output = tmp_path / "report.pdf"
         result = exporter.generate(_make_analysis_result(), output_path=output)
-        assert result.exists(), "PDF 파일 생성 실패"
+        path = result[0] if isinstance(result, tuple) else result
+        assert path.exists(), "PDF 파일 생성 실패"
 
     def test_pdf_file_not_empty(self, tmp_path: Path):
         exporter = _load_exporter()
@@ -129,7 +130,8 @@ class TestPdfEdge:
         exporter = _load_exporter()
         output = tmp_path / "empty.pdf"
         result = exporter.generate(_make_analysis_result(session_count=0), output_path=output)
-        assert result.exists()
+        path = result[0] if isinstance(result, tuple) else result
+        assert path.exists()
 
     def test_overwrite_existing_file(self, tmp_path: Path):
         """기존 PDF 경로에 재호출 → 덮어쓰기 (에러 없음)."""
@@ -144,5 +146,6 @@ class TestPdfEdge:
         exporter = _load_exporter()
         result = exporter.generate(_make_analysis_result())
         assert result is not None
-        assert result.exists()
-        result.unlink(missing_ok=True)
+        path = result[0] if isinstance(result, tuple) else result
+        assert path.exists()
+        path.unlink(missing_ok=True)

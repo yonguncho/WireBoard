@@ -190,8 +190,14 @@ class PdfExporter:
 
         if output_path is None:
             tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-            output_path = Path(tmp.name)
+            tmp_path = Path(tmp.name)
             tmp.close()
+            try:
+                tmp_path.write_bytes(pdf_bytes)
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                raise
+            return tmp_path, truncated
 
         output_path = Path(output_path)
         output_path.write_bytes(pdf_bytes)

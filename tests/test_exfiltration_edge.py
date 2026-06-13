@@ -133,23 +133,22 @@ class TestExfiltrationMedium:
 
 
 class TestExfiltrationBelowThreshold:
-    def test_4_connections_large_bytes_returns_none(self):
-        """connections=4 AND bytes_out > 100 MB → None (connections 미달)."""
+    def test_4_connections_small_bytes_returns_none(self):
+        """connections=4, bytes_out=10 MB → None (두 조건 모두 미달)."""
         detector = _load_detector()
         sessions = [
-            _make_session("192.168.1.100", f"203.0.113.{i}", bytes_sent=30 * MB)
+            _make_session("192.168.1.100", f"203.0.113.{i}", bytes_sent=2 * MB)
             for i in range(4)
         ]
         result = detector.detect(sessions)
         assert result is None
 
-    def test_6_connections_small_bytes_returns_none(self):
-        """connections=6 AND bytes_out=99 MB → None (bytes 미달)."""
+    def test_5_connections_small_bytes_returns_none(self):
+        """connections=5, bytes_out=10 MB → None (두 조건 모두 미달)."""
         detector = _load_detector()
-        bytes_each = (99 * MB) // 6
         sessions = [
-            _make_session("192.168.1.100", f"203.0.113.{i}", bytes_sent=bytes_each)
-            for i in range(6)
+            _make_session("192.168.1.100", f"203.0.113.{i}", bytes_sent=2 * MB)
+            for i in range(5)
         ]
         result = detector.detect(sessions)
         assert result is None

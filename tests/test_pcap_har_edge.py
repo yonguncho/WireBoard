@@ -48,9 +48,13 @@ class TestPcapParse:
     def test_corrupt_body_after_magic_raises_or_empty(self):
         data = PCAP_MAGIC + b"\xFF" * 200
         try:
-            packets = pcap.parse(data)
-            # May return empty list (all packets failed) or raise ValueError
-            assert isinstance(packets, list)
+            result = pcap.parse(data)
+            # parse() returns (sessions, pkt_map) tuple or raises ValueError
+            if isinstance(result, tuple):
+                sessions, _ = result
+                assert isinstance(sessions, list)
+            else:
+                assert isinstance(result, list)
         except ValueError:
             pass  # acceptable
 

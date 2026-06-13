@@ -41,6 +41,8 @@ class PortScanDetector:
                 mitre_id="T1046",
                 description=f"{src_ip} → {dst_ip}: {count}개 포트 스캔",
                 src_ip=src_ip,
+                evidence=[f"{count}개 고유 포트 스캔 감지 ({src_ip} → {dst_ip})"],
+                sample_count=count,
             )
 
             if low_confidence.get((src_ip, dst_ip)):

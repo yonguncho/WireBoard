@@ -1,4 +1,5 @@
 """ReputationService — 외부 위협 인텔리전스 조회 (ip-api, Feodo, URLhaus, AbuseIPDB)."""
+import asyncio
 import logging
 import os
 import time
@@ -17,6 +18,14 @@ from models.reputation import ReputationResult, ReputationSourceResult
 _FEODO_CACHE: set = set()
 _FEODO_CACHE_TS: float = 0.0
 _FEODO_CACHE_TTL: float = 3600.0
+_FEODO_LOCK: asyncio.Lock | None = None
+
+
+def _get_feodo_lock() -> asyncio.Lock:
+    global _FEODO_LOCK
+    if _FEODO_LOCK is None:
+        _FEODO_LOCK = asyncio.Lock()
+    return _FEODO_LOCK
 
 _IPAPI_URL = "http://ip-api.com/json/{ip}?fields=countryCode,as,org,status"
 _FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.json"
@@ -25,9 +34,18 @@ _ABUSEIPDB_URL = "https://api.abuseipdb.com/api/v2/check"
 
 _ABUSE_THRESHOLD = 70
 
+# ENABLE_EXTERNAL_REPUTATION=0 으로 설정하면 per-IP 외부 조회(ip-api, urlhaus)를 비활성화.
+# Feodo는 bulk blocklist 다운로드라 IP를 외부에 노출하지 않으므로 이 플래그와 무관하다.
+_EXTERNAL_REPUTATION_ENABLED: bool = (
+    os.environ.get("ENABLE_EXTERNAL_REPUTATION", "1").strip().lower()
+    not in ("0", "false", "no", "off")
+)
+
 
 class ReputationService:
     async def _lookup_ipapi(self, ip: str) -> ReputationSourceResult:
+        if not _EXTERNAL_REPUTATION_ENABLED:
+            return ReputationSourceResult(source="ip-api", is_reliable=False, note="외부 조회 비활성화 (ENABLE_EXTERNAL_REPUTATION=0)")
         if not _HTTPX_AVAILABLE:
             return ReputationSourceResult(source="ip-api", is_reliable=False)
         try:
@@ -63,27 +81,39 @@ class ReputationService:
             )
         if not _HTTPX_AVAILABLE:
             return ReputationSourceResult(source="feodo", is_reliable=False)
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(_FEODO_URL)
-                if resp.status_code != 200:
-                    return ReputationSourceResult(source="feodo", is_reliable=False)
-                data = resp.json()
-                ips = {entry["ip_address"] for entry in data if isinstance(entry, dict) and "ip_address" in entry}
-                _FEODO_CACHE = ips
-                _FEODO_CACHE_TS = time.monotonic()
+        async with _get_feodo_lock():
+            if time.monotonic() - _FEODO_CACHE_TS < _FEODO_CACHE_TTL:
                 return ReputationSourceResult(
                     source="feodo",
-                    is_malicious=(ip in ips),
+                    is_malicious=(ip in _FEODO_CACHE),
                     is_reliable=True,
                 )
-        except httpx.TimeoutException:
-            return ReputationSourceResult(source="feodo", is_reliable=False)
-        except Exception as exc:
-            logger.debug("feodo 조회 실패: %s", exc)
-            return ReputationSourceResult(source="feodo", is_reliable=False)
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(_FEODO_URL)
+                    if resp.status_code != 200:
+                        _FEODO_CACHE_TS = time.monotonic()
+                        return ReputationSourceResult(source="feodo", is_reliable=False)
+                    data = resp.json()
+                    ips = {entry["ip_address"] for entry in data if isinstance(entry, dict) and "ip_address" in entry}
+                    _FEODO_CACHE = ips
+                    _FEODO_CACHE_TS = time.monotonic()
+                    return ReputationSourceResult(
+                        source="feodo",
+                        is_malicious=(ip in ips),
+                        is_reliable=True,
+                    )
+            except httpx.TimeoutException:
+                _FEODO_CACHE_TS = time.monotonic()
+                return ReputationSourceResult(source="feodo", is_reliable=False)
+            except Exception as exc:
+                logger.debug("feodo 조회 실패: %s", exc)
+                _FEODO_CACHE_TS = time.monotonic()
+                return ReputationSourceResult(source="feodo", is_reliable=False)
 
     async def _lookup_urlhaus(self, ip: str) -> ReputationSourceResult:
+        if not _EXTERNAL_REPUTATION_ENABLED:
+            return ReputationSourceResult(source="urlhaus", is_reliable=False, note="외부 조회 비활성화 (ENABLE_EXTERNAL_REPUTATION=0)")
         if not _HTTPX_AVAILABLE:
             return ReputationSourceResult(source="urlhaus", is_reliable=False)
         try:
@@ -141,7 +171,6 @@ class ReputationService:
             return ReputationSourceResult(source="abuseipdb", is_reliable=False)
 
     async def lookup_all(self, ip: str) -> ReputationResult:
-        import asyncio
         sources = []
         lookups = [
             self._lookup_ipapi(ip),

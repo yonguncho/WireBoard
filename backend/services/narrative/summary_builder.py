@@ -78,6 +78,14 @@ _ATTACK_EXPLAIN: dict[str, str] = {
 
 _SEVERITY_WEIGHT: dict[str, int] = {"high": 3, "medium": 2, "low": 1}
 
+# 공용 DNS 리졸버 — 누구나 통신하는 정상 목적지이므로 공격 대상 목록에서 제외
+_PUBLIC_RESOLVERS: set[str] = {
+    "8.8.8.8", "8.8.4.4",            # Google
+    "1.1.1.1", "1.0.0.1",            # Cloudflare
+    "9.9.9.9", "149.112.112.112",    # Quad9
+    "208.67.222.222", "208.67.220.220",  # OpenDNS
+}
+
 # severity → confidence 변환 (0.0~1.0)
 _SEVERITY_CONFIDENCE: dict[str, float] = {"high": 0.9, "medium": 0.7, "low": 0.4}
 _CONFIDENCE_THRESHOLD = 0.7  # 이 미만이면 "의심 탐지" 표현 사용
@@ -128,9 +136,9 @@ def build_summary(attacks: list, sessions: list) -> NarrativeResult:
 
     if not attacks:
         return NarrativeResult(
-            headline="정상 트래픽 — 탐지된 공격 없음",
+            headline="정상 트래픽 — 이상 이벤트 없음",
             narrative=(
-                "분석된 캡처 파일에서 알려진 공격 패턴이 탐지되지 않았습니다. "
+                "분석된 캡처 파일에서 알려진 이상 패턴이 탐지되지 않았습니다. "
                 "일반적인 네트워크 트래픽으로 판단됩니다."
             ),
             risk_level="CLEAN",
@@ -160,6 +168,8 @@ def build_summary(attacks: list, sessions: list) -> NarrativeResult:
                 src, dst = s.get("src_ip", ""), s.get("dst_ip", "")
             else:
                 src, dst = getattr(s, "src_ip", ""), getattr(s, "dst_ip", "")
+            if dst in _PUBLIC_RESOLVERS:
+                continue
             if src in attacker_ips and dst and dst not in victim_ips and dst not in attacker_ips:
                 victim_ips.append(dst)
     victim_ips = victim_ips[:5]

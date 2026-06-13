@@ -15,10 +15,10 @@ def _make_app():
     return TestClient(app)
 
 
-def _upload(client, pcap_bytes: bytes) -> str:
+def _upload(client, pcap_bytes: bytes) -> tuple[str, str]:
     r = client.post("/api/upload", files={"file": ("t.pcap", io.BytesIO(pcap_bytes), "application/octet-stream")})
     assert r.status_code == 200
-    return r.json()["upload_id"]
+    return r.json()["upload_id"], r.json()["capture_token"]
 
 
 def _annotation_payload(upload_id: str, comment: str = "Test note") -> dict:
@@ -33,20 +33,23 @@ def _annotation_payload(upload_id: str, comment: str = "Test note") -> dict:
 class TestAnnotationsPost:
     def test_create_returns_201(self, pcap_bytes):
         client = _make_app()
-        uid = _upload(client, pcap_bytes)
-        r = client.post("/api/annotations", json=_annotation_payload(uid))
+        uid, capture_token = _upload(client, pcap_bytes)
+        r = client.post("/api/annotations", json=_annotation_payload(uid),
+                        headers={"X-Upload-Token": capture_token})
         assert r.status_code == 201
 
     def test_create_returns_status_created(self, pcap_bytes):
         client = _make_app()
-        uid = _upload(client, pcap_bytes)
-        body = client.post("/api/annotations", json=_annotation_payload(uid)).json()
+        uid, capture_token = _upload(client, pcap_bytes)
+        body = client.post("/api/annotations", json=_annotation_payload(uid),
+                           headers={"X-Upload-Token": capture_token}).json()
         assert body["status"] == "created"
 
     def test_create_annotation_body_in_response(self, pcap_bytes):
         client = _make_app()
-        uid = _upload(client, pcap_bytes)
-        body = client.post("/api/annotations", json=_annotation_payload(uid, "My comment")).json()
+        uid, capture_token = _upload(client, pcap_bytes)
+        body = client.post("/api/annotations", json=_annotation_payload(uid, "My comment"),
+                           headers={"X-Upload-Token": capture_token}).json()
         ann = body["annotation"]
         assert ann["upload_id"] == uid
         assert ann["comment"] == "My comment"
@@ -77,22 +80,23 @@ class TestAnnotationsPost:
 class TestAnnotationsGet:
     def test_get_returns_list(self, pcap_bytes):
         client = _make_app()
-        uid = _upload(client, pcap_bytes)
-        r = client.get(f"/api/annotations/{uid}")
+        uid, capture_token = _upload(client, pcap_bytes)
+        r = client.get(f"/api/annotations/{uid}", headers={"X-Upload-Token": capture_token})
         assert r.status_code == 200
         assert isinstance(r.json(), list)
 
     def test_get_empty_before_post(self, pcap_bytes):
         client = _make_app()
-        uid = _upload(client, pcap_bytes)
-        r = client.get(f"/api/annotations/{uid}")
+        uid, capture_token = _upload(client, pcap_bytes)
+        r = client.get(f"/api/annotations/{uid}", headers={"X-Upload-Token": capture_token})
         assert r.json() == []
 
     def test_get_after_post_returns_annotation(self, pcap_bytes):
         client = _make_app()
-        uid = _upload(client, pcap_bytes)
-        client.post("/api/annotations", json=_annotation_payload(uid, "First"))
-        r = client.get(f"/api/annotations/{uid}")
+        uid, capture_token = _upload(client, pcap_bytes)
+        client.post("/api/annotations", json=_annotation_payload(uid, "First"),
+                    headers={"X-Upload-Token": capture_token})
+        r = client.get(f"/api/annotations/{uid}", headers={"X-Upload-Token": capture_token})
         assert r.status_code == 200
         items = r.json()
         assert len(items) == 1
@@ -100,19 +104,25 @@ class TestAnnotationsGet:
 
     def test_multiple_annotations_all_returned(self, pcap_bytes):
         client = _make_app()
-        uid = _upload(client, pcap_bytes)
-        client.post("/api/annotations", json=_annotation_payload(uid, "A"))
-        client.post("/api/annotations", json=_annotation_payload(uid, "B"))
-        client.post("/api/annotations", json=_annotation_payload(uid, "C"))
-        items = client.get(f"/api/annotations/{uid}").json()
+        uid, capture_token = _upload(client, pcap_bytes)
+        client.post("/api/annotations", json=_annotation_payload(uid, "A"),
+                    headers={"X-Upload-Token": capture_token})
+        client.post("/api/annotations", json=_annotation_payload(uid, "B"),
+                    headers={"X-Upload-Token": capture_token})
+        client.post("/api/annotations", json=_annotation_payload(uid, "C"),
+                    headers={"X-Upload-Token": capture_token})
+        items = client.get(f"/api/annotations/{uid}",
+                           headers={"X-Upload-Token": capture_token}).json()
         comments = [x["comment"] for x in items]
         assert set(comments) == {"A", "B", "C"}
 
     def test_annotation_fields_preserved(self, pcap_bytes):
         client = _make_app()
-        uid = _upload(client, pcap_bytes)
-        client.post("/api/annotations", json=_annotation_payload(uid, "detail"))
-        item = client.get(f"/api/annotations/{uid}").json()[0]
+        uid, capture_token = _upload(client, pcap_bytes)
+        client.post("/api/annotations", json=_annotation_payload(uid, "detail"),
+                    headers={"X-Upload-Token": capture_token})
+        item = client.get(f"/api/annotations/{uid}",
+                          headers={"X-Upload-Token": capture_token}).json()[0]
         assert item["start_ts"] == 1_748_000_005.0
         assert item["end_ts"] == 1_748_000_065.0
         assert item["upload_id"] == uid
@@ -129,8 +139,10 @@ class TestAnnotationsGet:
 
     def test_annotations_isolated_per_upload(self, pcap_bytes):
         client = _make_app()
-        uid_a = _upload(client, pcap_bytes)
-        uid_b = _upload(client, pcap_bytes)
-        client.post("/api/annotations", json=_annotation_payload(uid_a, "Only A"))
-        items_b = client.get(f"/api/annotations/{uid_b}").json()
+        uid_a, capture_token_a = _upload(client, pcap_bytes)
+        uid_b, capture_token_b = _upload(client, pcap_bytes)
+        client.post("/api/annotations", json=_annotation_payload(uid_a, "Only A"),
+                    headers={"X-Upload-Token": capture_token_a})
+        items_b = client.get(f"/api/annotations/{uid_b}",
+                             headers={"X-Upload-Token": capture_token_b}).json()
         assert items_b == []

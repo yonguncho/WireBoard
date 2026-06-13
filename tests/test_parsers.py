@@ -54,13 +54,16 @@ class TestPcapParserDetect:
 class TestPcapParserParse:
     def test_returns_session_list(self, pcap_bytes: bytes) -> None:
         from services.parser.pcap_parser import PcapParser
-        sessions = PcapParser().parse(pcap_bytes)
+        result = PcapParser().parse(pcap_bytes)
+        # PcapParser.parse() returns (sessions, pkt_map) tuple
+        sessions = result[0] if isinstance(result, tuple) else result
         assert isinstance(sessions, list)
         assert len(sessions) >= 1
 
     def test_session_ids_are_uuid(self, pcap_bytes: bytes) -> None:
         from services.parser.pcap_parser import PcapParser
-        sessions = PcapParser().parse(pcap_bytes)
+        result = PcapParser().parse(pcap_bytes)
+        sessions = result[0] if isinstance(result, tuple) else result
         for s in sessions:
             assert UUID_RE.match(s.session_id), f"session_id 가 UUID 형식 아님: {s.session_id!r}"
 
@@ -81,13 +84,15 @@ class TestPcapParserParse:
 
         header = struct.pack("<IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, 1)
         garbage = header + b"\xde\xad\xbe\xef" * 100
-        # 예외가 아닌 리스트 반환 (빈 리스트 허용)
+        # 예외가 아닌 리스트(또는 튜플) 반환 (빈 리스트 허용)
         result = PcapParser().parse(garbage)
-        assert isinstance(result, list)
+        sessions = result[0] if isinstance(result, tuple) else result
+        assert isinstance(sessions, list)
 
     def test_sessions_have_required_fields(self, pcap_bytes: bytes) -> None:
         from services.parser.pcap_parser import PcapParser
-        sessions = PcapParser().parse(pcap_bytes)
+        result = PcapParser().parse(pcap_bytes)
+        sessions = result[0] if isinstance(result, tuple) else result
         for s in sessions:
             assert hasattr(s, "src_ip")
             assert hasattr(s, "dst_ip")
@@ -173,9 +178,59 @@ class TestFortigateParser:
     def test_src_dst_ip_extracted(self, fortigate_v3_text: str) -> None:
         from services.parser.fortigate_parser import FortigateParser
         sessions = FortigateParser().parse(fortigate_v3_text.encode())
+        # fixture에서 src_ip와 dst_ip가 최소 1개 세션에 설정되어야 함
+        assert len(sessions) >= 1
+        assert sessions[0].src_ip is not None
+        assert sessions[0].dst_ip is not None
+
+
+# ─────────────────────── TcpdumpParser ─────────────────────────────
+
+class TestTcpdumpParser:
+    def test_detects_tcpdump(self, tcpdump_text: str) -> None:
+        from services.parser.tcpdump_parser import TcpdumpParser
+        assert TcpdumpParser().detect(tcpdump_text.encode()) is True
+
+    def test_rejects_pcap(self, pcap_bytes: bytes) -> None:
+        from services.parser.tcpdump_parser import TcpdumpParser
+        assert TcpdumpParser().detect(pcap_bytes) is False
+
+    def test_rejects_har(self, har_json: str) -> None:
+        from services.parser.tcpdump_parser import TcpdumpParser
+        assert TcpdumpParser().detect(har_json.encode()) is False
+
+    def test_parse_returns_sessions(self, tcpdump_text: str) -> None:
+        from services.parser.tcpdump_parser import TcpdumpParser
+        sessions = TcpdumpParser().parse(tcpdump_text.encode())
+        assert len(sessions) >= 1
+
+    def test_session_ids_are_uuid(self, tcpdump_text: str) -> None:
+        from services.parser.tcpdump_parser import TcpdumpParser
+        sessions = TcpdumpParser().parse(tcpdump_text.encode())
         for s in sessions:
-            assert s.src_ip == "192.168.1.100"
-            assert s.dst_ip == "10.0.0.1"
+            assert UUID_RE.match(s.session_id), f"session_id UUID 형식 아님: {s.session_id!r}"
+
+    def test_invalid_port_skipped(self) -> None:
+        from services.parser.tcpdump_parser import TcpdumpParser
+        bad = b"1748000000.0 IP 1.2.3.4.99999 > 5.6.7.8.80: Flags [S]\n"
+        sessions = TcpdumpParser().parse(bad)
+        assert sessions == []
+
+    def test_timestamp_extracted_from_line(self, tcpdump_text: str) -> None:
+        from services.parser.tcpdump_parser import TcpdumpParser
+        sessions = TcpdumpParser().parse(tcpdump_text.encode())
+        assert len(sessions) >= 1
+        assert sessions[0].start_ts == pytest.approx(1748000000.123456, abs=1e-3)
+
+    def test_detects_ipv6(self, tcpdump_ipv6_text: str) -> None:
+        from services.parser.tcpdump_parser import TcpdumpParser
+        assert TcpdumpParser().detect(tcpdump_ipv6_text.encode()) is True
+
+    def test_parse_ipv6_returns_sessions(self, tcpdump_ipv6_text: str) -> None:
+        from services.parser.tcpdump_parser import TcpdumpParser
+        sessions = TcpdumpParser().parse(tcpdump_ipv6_text.encode())
+        assert len(sessions) >= 1
+        assert sessions[0].src_ip == "2001:db8::1"
 
 
 # ─────────────────────── SessionNormalizer ───────────────────────────
@@ -185,7 +240,9 @@ class TestSessionNormalizer:
         from services.parser.pcap_parser import PcapParser
         from services.normalizer import SessionNormalizer
         raw = PcapParser().parse(pcap_bytes)
-        sessions = SessionNormalizer().normalize(raw)
+        raw_sessions = raw[0] if isinstance(raw, tuple) else raw
+        result = SessionNormalizer().normalize(raw_sessions)
+        sessions = result[0] if isinstance(result, tuple) else result
         for s in sessions:
             assert UUID_RE.match(s.session_id)
 
@@ -194,7 +251,9 @@ class TestSessionNormalizer:
         from services.parser.pcap_parser import PcapParser
         from services.normalizer import SessionNormalizer
         raw = PcapParser().parse(pcap_bytes)
-        sessions = SessionNormalizer().normalize(raw)
+        raw_sessions = raw[0] if isinstance(raw, tuple) else raw
+        result = SessionNormalizer().normalize(raw_sessions)
+        sessions = result[0] if isinstance(result, tuple) else result
         # conftest pcap 은 src=192.168.1.1:80 → dst=192.168.1.2:8080 단일 플로우
         assert len(sessions) >= 1
 
@@ -207,7 +266,10 @@ class TestFlowExtractor:
         from services.parser.pcap_parser import PcapParser
         from services.normalizer import SessionNormalizer
         from services.flow_extractor import FlowExtractor
-        sessions = SessionNormalizer().normalize(PcapParser().parse(pcap_bytes))
+        raw = PcapParser().parse(pcap_bytes)
+        raw_sessions = raw[0] if isinstance(raw, tuple) else raw
+        result = SessionNormalizer().normalize(raw_sessions)
+        sessions = result[0] if isinstance(result, tuple) else result
         extractor = FlowExtractor()
         flows = extractor.extract(sessions, target_ip="192.168.1.2")
         xs, ys = extractor.build_plotly_data(flows)

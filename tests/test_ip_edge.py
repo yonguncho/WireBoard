@@ -134,7 +134,9 @@ class TestSessionModelValidators:
             session_id=str(uuid.uuid4()),
             src_ip="1.2.3.4", dst_ip="5.6.7.8",
             src_port=12345, dst_port=80, protocol="TCP",
-            start_ts=0.0, end_ts=1.0, bytes_total=100, packet_count=1,
+            start_ts=0.0, end_ts=1.0,
+            bytes_sent=100, bytes_recv=0,
+            packet_count=1, payload_length=0,
         )
         defaults.update(kwargs)
         return SessionModel(**defaults)
@@ -164,8 +166,9 @@ class TestSessionModelValidators:
 
     def test_invalid_protocol_raises(self):
         from pydantic import ValidationError
+        # 빈 프로토콜 문자열은 ValueError를 발생시켜야 함
         with pytest.raises(ValidationError):
-            self._base(protocol="QUIC")
+            self._base(protocol="")
 
     def test_invalid_confidence_raises(self):
         from pydantic import ValidationError

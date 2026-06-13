@@ -93,7 +93,9 @@ class TestPacketsFilterNullSafe:
         )
         assert upload_resp.status_code == 200
         uid = upload_resp.json()["upload_id"]
-        resp = api_client.get(f"/api/packets/{uid}?proto=TCP")
+        capture_token = upload_resp.json()["capture_token"]
+        resp = api_client.get(f"/api/packets/{uid}?proto=TCP",
+                              headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         body = resp.json()
         assert "packets" in body
@@ -106,7 +108,9 @@ class TestPacketsFilterNullSafe:
         )
         assert upload_resp.status_code == 200
         uid = upload_resp.json()["upload_id"]
-        resp = api_client.get(f"/api/packets/{uid}?flags=SYN")
+        capture_token = upload_resp.json()["capture_token"]
+        resp = api_client.get(f"/api/packets/{uid}?flags=SYN",
+                              headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
 
     def test_packets_proto_filter_returns_matching_only(self, api_client, pcap_bytes: bytes):
@@ -116,7 +120,9 @@ class TestPacketsFilterNullSafe:
             files={"file": ("t.pcap", io.BytesIO(pcap_bytes), "application/octet-stream")},
         )
         uid = upload_resp.json()["upload_id"]
-        resp = api_client.get(f"/api/packets/{uid}?proto=TCP")
+        capture_token = upload_resp.json()["capture_token"]
+        resp = api_client.get(f"/api/packets/{uid}?proto=TCP",
+                              headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         for pkt in resp.json()["packets"]:
             assert pkt["proto"].upper() == "TCP"
@@ -128,7 +134,9 @@ class TestPacketsFilterNullSafe:
             files={"file": ("t.pcap", io.BytesIO(pcap_bytes), "application/octet-stream")},
         )
         uid = upload_resp.json()["upload_id"]
-        resp = api_client.get(f"/api/packets/{uid}?flags=URG")
+        capture_token = upload_resp.json()["capture_token"]
+        resp = api_client.get(f"/api/packets/{uid}?flags=URG",
+                              headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         # URG 플래그가 없는 pcap이므로 0건
         assert resp.json()["total"] == 0
@@ -140,10 +148,13 @@ class TestPacketsFilterNullSafe:
             files={"file": ("t.pcap", io.BytesIO(pcap_bytes), "application/octet-stream")},
         )
         uid = upload_resp.json()["upload_id"]
-        resp_all = api_client.get(f"/api/packets/{uid}?limit=500")
+        capture_token = upload_resp.json()["capture_token"]
+        resp_all = api_client.get(f"/api/packets/{uid}?limit=500",
+                                  headers={"X-Upload-Token": capture_token})
         assert resp_all.status_code == 200
         total_all = resp_all.json()["total"]
-        resp_tcp = api_client.get(f"/api/packets/{uid}?proto=TCP&limit=500")
+        resp_tcp = api_client.get(f"/api/packets/{uid}?proto=TCP&limit=500",
+                                  headers={"X-Upload-Token": capture_token})
         total_tcp = resp_tcp.json()["total"]
         # 이 pcap은 모두 TCP이므로 동일해야 함
         assert total_all == total_tcp
@@ -201,8 +212,10 @@ class TestFilterIpTokenRegex:
             files={"file": ("t.pcap", io.BytesIO(pcap_bytes), "application/octet-stream")},
         )
         uid = upload_resp.json()["upload_id"]
+        capture_token = upload_resp.json()["capture_token"]
         # pcap은 192.168.1.1 → 192.168.1.2 세션 포함
-        resp = api_client.post("/api/filter", json={"upload_id": uid, "query": "ip 192.168.1.1"})
+        resp = api_client.post("/api/filter", json={"upload_id": uid, "query": "ip 192.168.1.1"},
+                               headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
@@ -217,7 +230,9 @@ class TestFilterIpTokenRegex:
             files={"file": ("t.pcap", io.BytesIO(pcap_bytes), "application/octet-stream")},
         )
         uid = upload_resp.json()["upload_id"]
-        resp = api_client.post("/api/filter", json={"upload_id": uid, "query": "ip 9.9.9.9"})
+        capture_token = upload_resp.json()["capture_token"]
+        resp = api_client.post("/api/filter", json={"upload_id": uid, "query": "ip 9.9.9.9"},
+                               headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         assert resp.json()["matched_count"] == 0
 
@@ -235,8 +250,11 @@ class TestExportPdfTempfileCleanup:
             files={"file": ("t.pcap", io.BytesIO(pcap_bytes), "application/octet-stream")},
         )
         uid = upload_resp.json()["upload_id"]
-        api_client.post("/api/analyze", json={"upload_id": uid})
-        resp = api_client.post(f"/api/export/{uid}/pdf")
+        capture_token = upload_resp.json()["capture_token"]
+        api_client.post("/api/analyze", json={"upload_id": uid},
+                        headers={"X-Upload-Token": capture_token})
+        resp = api_client.post(f"/api/export/{uid}/pdf",
+                               headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "application/pdf"
         assert len(resp.content) > 100
@@ -265,7 +283,8 @@ class TestYaraMatchedStringsSafe:
             files={"file": ("t.pcap", io.BytesIO(pcap_bytes), "application/octet-stream")},
         )
         uid = upload_resp.json()["upload_id"]
-        resp = api_client.get(f"/api/yara/{uid}")
+        capture_token = upload_resp.json()["capture_token"]
+        resp = api_client.get(f"/api/yara/{uid}", headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         data = resp.json()
         for match in data.get("matches", []):
@@ -286,8 +305,10 @@ class TestSummaryAttacksHandling:
             files={"file": ("t.pcap", io.BytesIO(pcap_bytes), "application/octet-stream")},
         )
         uid = upload_resp.json()["upload_id"]
-        api_client.post("/api/analyze", json={"upload_id": uid})
-        resp = api_client.get(f"/api/summary/{uid}")
+        capture_token = upload_resp.json()["capture_token"]
+        api_client.post("/api/analyze", json={"upload_id": uid},
+                        headers={"X-Upload-Token": capture_token})
+        resp = api_client.get(f"/api/summary/{uid}", headers={"X-Upload-Token": capture_token})
         assert resp.status_code == 200
         body = resp.json()
         assert "headline" in body

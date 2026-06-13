@@ -2,13 +2,14 @@
 import re
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 from services.filter_translator import FilterTranslator
 from utils.constants import UUID_RE
+from utils.capture_auth import check_capture_token
 
 router = APIRouter()
 _translator = FilterTranslator()
@@ -60,16 +61,16 @@ def _session_matches(session, filter_expr: str, translator_tokens: list[str]) ->
     for token in translator_tokens:
         if token == "frame":
             continue
-        if token.startswith("ip.src =="):
+        if token.startswith("ip.src ==") or token.startswith("ip6.src =="):
             ip = token.split("==", 1)[1].strip()
             if session.src_ip != ip:
                 return False
-        elif token.startswith("ip.dst =="):
+        elif token.startswith("ip.dst ==") or token.startswith("ip6.dst =="):
             ip = token.split("==", 1)[1].strip()
             if session.dst_ip != ip:
                 return False
-        elif token.startswith("(ip.src =="):
-            m = re.search(r"ip\.src == ([\d.]+)", token)
+        elif token.startswith("(ip.src ==") or token.startswith("(ip6.src =="):
+            m = re.search(r"ip6?\.src == ([0-9a-fA-F:.]+)", token)
             if m:
                 ip = m.group(1)
                 if session.src_ip != ip and session.dst_ip != ip:
@@ -86,7 +87,7 @@ def _session_matches(session, filter_expr: str, translator_tokens: list[str]) ->
     return True
 
 
-async def _do_filter(body: FilterRequest, request: Request) -> dict:
+async def _do_filter(body: FilterRequest, request: Request, x_upload_token: str | None) -> dict:
     if not UUID_RE.match(body.upload_id):
         raise HTTPException(
             status_code=400,
@@ -98,6 +99,8 @@ async def _do_filter(body: FilterRequest, request: Request) -> dict:
         capture = store.get(body.upload_id)
     except KeyError:
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+
+    check_capture_token(capture, x_upload_token)
 
     try:
         result = _translator.translate(body.query)
@@ -132,10 +135,18 @@ async def _do_filter(body: FilterRequest, request: Request) -> dict:
 
 
 @router.post("/api/filter/translate")
-async def filter_sessions_translate(body: FilterRequest, request: Request):
-    return await _do_filter(body, request)
+async def filter_sessions_translate(
+    body: FilterRequest,
+    request: Request,
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
+):
+    return await _do_filter(body, request, x_upload_token)
 
 
 @router.post("/api/filter")
-async def filter_sessions(body: FilterRequest, request: Request):
-    return await _do_filter(body, request)
+async def filter_sessions(
+    body: FilterRequest,
+    request: Request,
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
+):
+    return await _do_filter(body, request, x_upload_token)

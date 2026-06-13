@@ -20,12 +20,14 @@ class FlowTimeline:
             return TimelineResult()
 
         bucket_bytes: dict[float, int] = defaultdict(int)
+        bucket_count: dict[float, int] = defaultdict(int)
         for s in sessions:
             bucket_ts = math.floor(s.start_ts / self._window) * self._window
             bucket_bytes[float(bucket_ts)] += s.bytes_sent + s.bytes_recv
+            bucket_count[float(bucket_ts)] += 1
 
         buckets = [
-            {"ts": ts, "bytes": b}
-            for ts, b in sorted(bucket_bytes.items())
+            {"ts": ts, "bytes": bucket_bytes[ts], "count": bucket_count[ts]}
+            for ts in sorted(bucket_bytes.keys())
         ]
         return TimelineResult(buckets=buckets)

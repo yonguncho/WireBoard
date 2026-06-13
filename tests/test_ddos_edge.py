@@ -81,14 +81,14 @@ def _load_detector():
 
 class TestDDoSHigh:
     def test_1000pps_returns_high(self):
-        """30 초 윈도우 1000 pps → severity='high'."""
+        """6 src × 5000 pkts/30s → 1000 pps 합산 → severity='high'."""
         detector = _load_detector()
-        # 30 초 구간에 1000 packets/sec × 30 = 30 000 패킷
         sessions = [
-            _make_session("10.0.0.1", "192.168.1.100", packets=30_000, ts_end=1_748_000_030.0)
+            _make_session(f"10.0.0.{i}", "192.168.1.100", packets=5_000, ts_end=1_748_000_030.0)
+            for i in range(1, 7)
         ]
         result = detector.detect(sessions)
-        assert result is not None, "1000 pps → 탐지 실패"
+        assert result is not None, "1000 pps (6 src) → 탐지 실패"
         assert result.severity == "high"
 
     def test_50_unique_src_returns_high(self):
@@ -103,9 +103,12 @@ class TestDDoSHigh:
         assert result.severity == "high"
 
     def test_mitre_id_T1498(self):
-        """MITRE ATT&CK ID = T1498."""
+        """MITRE ATT&CK ID = T1498 (6 src 기준)."""
         detector = _load_detector()
-        sessions = [_make_session("10.0.0.1", "192.168.1.100", packets=30_000, ts_end=1_748_000_030.0)]
+        sessions = [
+            _make_session(f"10.0.0.{i}", "192.168.1.100", packets=5_000, ts_end=1_748_000_030.0)
+            for i in range(1, 7)
+        ]
         result = detector.detect(sessions)
         assert result is not None
         assert result.mitre_id in {"T1498", "T1499"}
@@ -116,10 +119,11 @@ class TestDDoSHigh:
 
 class TestDDoSMedium:
     def test_300pps_returns_medium(self):
-        """300 pps (30 초 × 9 000 패킷) → severity='medium'."""
+        """6 src × 1500 pkts/30s → 300 pps 합산 → severity='medium'."""
         detector = _load_detector()
         sessions = [
-            _make_session("10.0.0.1", "192.168.1.100", packets=9_000, ts_end=1_748_000_030.0)
+            _make_session(f"10.0.0.{i}", "192.168.1.100", packets=1_500, ts_end=1_748_000_030.0)
+            for i in range(1, 7)
         ]
         result = detector.detect(sessions)
         assert result is not None
@@ -170,11 +174,12 @@ class TestDDoSBelowThreshold:
 
 class TestDDoSDowngrade:
     def test_fortigate_high_downgraded_to_medium(self):
-        """confidence='low' → high → medium 강등."""
+        """confidence='low' + 6 src + 1000 pps → high → medium 강등."""
         detector = _load_detector()
         sessions = [
-            _make_session("10.0.0.1", "192.168.1.100", packets=30_000,
+            _make_session(f"10.0.0.{i}", "192.168.1.100", packets=5_000,
                           ts_end=1_748_000_030.0, confidence="low")
+            for i in range(1, 7)
         ]
         result = detector.detect(sessions)
         assert result is not None
@@ -197,12 +202,15 @@ class TestDDoSDowngrade:
 
 class TestDDoSPerDst:
     def test_different_dst_independent(self):
-        """A→C, B→C 별도 집계 — C만 임계 초과 시 C만 탐지."""
+        """dst C: 6 src × 5000 pkts = 1000 pps → high; dst D: below threshold → best=high."""
         detector = _load_detector()
-        # dst C: 1000 pps
-        sessions_c = [_make_session("10.0.0.1", "192.168.1.1", packets=30_000, ts_end=1_748_000_030.0)]
-        # dst D: 50 pps (below threshold)
-        sessions_d = [_make_session("10.0.0.2", "192.168.1.2", packets=1_500, ts_end=1_748_000_030.0)]
+        # dst C: 6 sources → 30000 pkts / 30s = 1000 pps → high
+        sessions_c = [
+            _make_session(f"10.0.0.{i}", "192.168.1.1", packets=5_000, ts_end=1_748_000_030.0)
+            for i in range(1, 7)
+        ]
+        # dst D: 1 source → below _PRD_SRC_MIN → skipped
+        sessions_d = [_make_session("10.0.1.1", "192.168.1.2", packets=1_500, ts_end=1_748_000_030.0)]
         result = detector.detect(sessions_c + sessions_d)
         assert result is not None
         assert result.severity == "high"

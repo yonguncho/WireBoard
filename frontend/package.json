@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "wireboard-frontend",
   "private": true,
   "version": "0.0.0",
@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@types/node": "^25.9.3",
     "@types/plotly.js": "^2.12.30",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
@@ -24,9 +25,9 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
+    "path": "^0.12.7",
     "typescript": "~5.6.2",
     "typescript-eslint": "^8.11.0",
-    "vite": "^5.4.10",
-    "path": "^0.12.7"
+    "vite": "^5.4.10"
   }
 }

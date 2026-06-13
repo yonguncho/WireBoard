@@ -48,19 +48,23 @@ def _seed(upload_id: str, src_ip: str, dst_ip: str = "10.0.0.1") -> None:
 class TestUploadThenAnalyze:
     def test_upload_then_analyze_returns_200(self):
         upload_resp = client.post("/api/upload",
-                                  files={"file": ("capture.txt", FORTIGATE_DATA, "text/plain")})
+                                  files={"file": ("capture.log", FORTIGATE_DATA, "text/plain")})
         assert upload_resp.status_code == 200
         upload_id = upload_resp.json()["upload_id"]
+        capture_token = upload_resp.json()["capture_token"]
         analyze_resp = client.post("/api/analyze",
-                                   json={"upload_id": upload_id, "target_ip": TARGET_IP})
+                                   json={"upload_id": upload_id, "target_ip": TARGET_IP},
+                                   headers={"X-Upload-Token": capture_token})
         assert analyze_resp.status_code == 200
 
     def test_analyze_response_has_all_keys(self):
         upload_resp = client.post("/api/upload",
-                                  files={"file": ("capture.txt", FORTIGATE_DATA, "text/plain")})
+                                  files={"file": ("capture.log", FORTIGATE_DATA, "text/plain")})
         upload_id = upload_resp.json()["upload_id"]
+        capture_token = upload_resp.json()["capture_token"]
         resp = client.post("/api/analyze",
-                           json={"upload_id": upload_id, "target_ip": TARGET_IP})
+                           json={"upload_id": upload_id, "target_ip": TARGET_IP},
+                           headers={"X-Upload-Token": capture_token})
         body = resp.json()
         for key in ("target_ip", "flows", "sessions", "reputation", "attacks", "analysis_duration_ms"):
             assert key in body, f"Missing key: {key}"

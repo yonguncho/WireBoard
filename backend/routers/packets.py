@@ -1,7 +1,10 @@
 """GET /api/packets/{upload_id} — 전체 패킷 목록 (페이지네이션 + 필터)."""
-from fastapi import APIRouter, HTTPException, Query, Request
+import ipaddress
 
-from utils.constants import UUID_RE, IPv4_RE
+from fastapi import APIRouter, Header, HTTPException, Query, Request
+
+from utils.constants import UUID_RE
+from utils.capture_auth import check_capture_token
 
 router = APIRouter()
 
@@ -19,16 +22,23 @@ async def get_packets(
     proto: str = Query(None),
     flags: str = Query(None),
     session_id: str = Query(None),
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
 ):
     if not UUID_RE.match(upload_id):
         raise HTTPException(
             status_code=400,
             detail={"code": "invalid_uuid", "msg": "upload_id must be a valid UUID"},
         )
-    if src_ip is not None and not IPv4_RE.match(src_ip):
-        raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": "src_ip must be a valid IPv4 address"})
-    if dst_ip is not None and not IPv4_RE.match(dst_ip):
-        raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": "dst_ip must be a valid IPv4 address"})
+    if src_ip is not None:
+        try:
+            ipaddress.ip_address(src_ip)
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": "src_ip must be a valid IP address"})
+    if dst_ip is not None:
+        try:
+            ipaddress.ip_address(dst_ip)
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": "dst_ip must be a valid IP address"})
     if session_id is not None and not UUID_RE.match(session_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "session_id must be a valid UUID"})
 
@@ -36,6 +46,8 @@ async def get_packets(
         capture = request.app.state.session_store.get(upload_id)
     except KeyError:
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+
+    check_capture_token(capture, x_upload_token)
 
     # session_id → SessionModel 룩업
     session_lookup = {s.session_id: s for s in capture.sessions}

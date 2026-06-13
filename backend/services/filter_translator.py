@@ -1,4 +1,5 @@
 """FilterTranslator — 자연어 쿼리를 wireshark 스타일 필터 표현식으로 변환."""
+import ipaddress
 import re
 from dataclasses import dataclass, field
 
@@ -69,6 +70,19 @@ _PROTOCOL_RE: dict[str, re.Pattern] = {
 _IPv4_PATTERN = re.compile(
     r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b"
 )
+# IPv6 패턴 — RFC 5952 압축 표기 포함
+_IPv6_PATTERN = re.compile(
+    r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,7}:"
+    r"|::(?:[0-9a-fA-F]{1,4}:){0,6}[0-9a-fA-F]{1,4}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}"
+    r"|(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}"
+    r"|[0-9a-fA-F]{1,4}:(?::[0-9a-fA-F]{1,4}){1,6}"
+    r"|:(?::[0-9a-fA-F]{1,4}){1,7}|::",
+)
 _PORT_PATTERN = re.compile(r"\b(?:port|포트)\s*[=:\s]?\s*(\d{1,5})\b", re.IGNORECASE)
 _PORT_BARE = re.compile(r"\b(\d{1,5})\s*(?:번?\s*포트|번?\s*port)\b", re.IGNORECASE)
 _SRC_KEYWORDS = re.compile(r"(?:from|src|source|출발|에서|보낸)", re.IGNORECASE)
@@ -82,13 +96,22 @@ class FilterResult:
 
 
 def _extract_ips(query: str) -> list[str]:
-    return _IPv4_PATTERN.findall(query)
+    ips: list[str] = _IPv4_PATTERN.findall(query)
+    for m in _IPv6_PATTERN.finditer(query):
+        try:
+            ipaddress.ip_address(m.group(0))
+            ips.append(m.group(0))
+        except ValueError:
+            pass
+    return ips
 
 
 def _extract_ports(query: str) -> list[str]:
     ports: list[str] = []
-    ports += _PORT_PATTERN.findall(query)
-    ports += _PORT_BARE.findall(query)
+    for p in _PORT_PATTERN.findall(query) + _PORT_BARE.findall(query):
+        if not (0 <= int(p) <= 65535):
+            raise ValueError(f"포트 범위 초과: {p} (유효 범위 0-65535)")
+        ports.append(p)
     return list(dict.fromkeys(ports))
 
 
@@ -102,11 +125,15 @@ def _extract_protocols(query: str) -> list[str]:
 
 def _classify_ip_direction(query: str, ip: str) -> str:
     before = query[: query.find(ip)]
-    if _SRC_KEYWORDS.search(before):
-        return f"ip.src == {ip}"
-    if _DST_KEYWORDS.search(before):
-        return f"ip.dst == {ip}"
-    return f"(ip.src == {ip} or ip.dst == {ip})"
+    # IP 바로 앞에 오는 가장 마지막 방향 키워드로 src/dst 결정 (from A to B 오분류 방지)
+    last_src = max((m.start() for m in _SRC_KEYWORDS.finditer(before)), default=-1)
+    last_dst = max((m.start() for m in _DST_KEYWORDS.finditer(before)), default=-1)
+    prefix = "ip6" if ":" in ip else "ip"
+    if last_src >= 0 and last_src > last_dst:
+        return f"{prefix}.src == {ip}"
+    if last_dst >= 0 and last_dst > last_src:
+        return f"{prefix}.dst == {ip}"
+    return f"({prefix}.src == {ip} or {prefix}.dst == {ip})"
 
 
 class FilterTranslator:

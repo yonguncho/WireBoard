@@ -1,7 +1,8 @@
 """GET /api/flow/{upload_id}?session_id=<sid> — 패킷 단위 흐름 조회."""
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 
 from utils.constants import UUID_RE
+from utils.capture_auth import check_capture_token
 
 router = APIRouter()
 
@@ -13,6 +14,7 @@ async def get_flow(
     request: Request,
     upload_id: str,
     session_id: str = Query(..., description="세션 UUID"),
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
 ):
     if not UUID_RE.match(upload_id):
         raise HTTPException(
@@ -30,11 +32,15 @@ async def get_flow(
     except KeyError:
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
+    check_capture_token(capture, x_upload_token)
+
     session = next((s for s in capture.sessions if s.session_id == session_id), None)
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "session_not_found", "message": "세션을 찾을 수 없습니다"})
 
-    raw_pkts = capture.packet_map.get(session_id, [])
+    raw_pkts_all = capture.packet_map.get(session_id, [])
+    truncated = len(raw_pkts_all) > _PARSER_MAX
+    raw_pkts = raw_pkts_all[:_PARSER_MAX]
     base_ts  = raw_pkts[0].ts if raw_pkts else 0.0
 
     packets_out = []
@@ -69,6 +75,6 @@ async def get_flow(
             "rst":        session.rst,
         },
         "packets":       packets_out,
-        "packet_count":  len(raw_pkts),
-        "truncated":     len(raw_pkts) >= _PARSER_MAX,
+        "packet_count":  len(raw_pkts_all),
+        "truncated":     truncated,
     }

@@ -254,12 +254,15 @@ class TestPortScanPRDXfail:
     def test_60s_window_boundary(self):
         """60초 윈도우 경계 밖 세션은 별도 윈도우로 집계해야 한다 (PRD)."""
         detector = _load_detector()
-        # base_ts=0, 두 번째 배치는 +65초 → 다른 윈도우
-        first  = _make_scan_sessions(10, base_ts=1_748_000_000.0)
-        second = _make_scan_sessions(10, base_ts=1_748_000_065.0,
-                                     src_ip="10.0.0.5", dst_ip="192.168.1.50")
-        # 윈도우 분리 시 각 배치 10포트 → None
-        # 현재 구현은 합산하여 medium 반환 — PRD 불일치
+        # 첫 번째 배치: 동일 src/dst, 포트 1-10 (ts=1_748_000_000)
+        first = _make_scan_sessions(10, base_ts=1_748_000_000.0)
+        # 두 번째 배치: 동일 src/dst, 포트 11-20 (ts=+65초 → 다른 60초 윈도우)
+        # PRD: 윈도우 분리 시 각 10포트 → None
+        # 현재 구현: 합산 20포트 → medium (PRD 불일치 → xfail 기대 동작)
+        second = [
+            _make_session("10.0.0.5", "192.168.1.50", port, base_ts=1_748_000_065.0)
+            for port in range(11, 21)
+        ]
         result = detector.detect(first + second)
         assert result is None  # PRD 기대값: 각 윈도우 미달
 

@@ -1,11 +1,12 @@
 """GET /api/export/{upload_id} + POST /api/export/{upload_id}/pdf + GET /api/export/{upload_id}/ioc — 데이터 내보내기."""
 import csv
 import io
+import ipaddress
 import logging
 import re
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
@@ -17,6 +18,7 @@ from services.report.pdf_exporter import PdfExporter
 from models.attack import AttackDetectionResult
 from models.session import SessionModel
 from utils.constants import UUID_RE
+from utils.capture_auth import check_capture_token
 
 router = APIRouter()
 
@@ -34,22 +36,43 @@ _FORMAT_CONTENT_TYPE = {
 }
 
 
+_ALLOWED_FORMATS = set(_FORMAT_CONTENT_TYPE.keys())
+
+
 class ExportRequest(BaseModel):
     upload_id: str
     target_ip: Optional[str] = None
-    format: str = "json"
+    format: str  # required — 기본값 없음
 
 
 @router.post("/api/export")
-async def export_flexible(body: ExportRequest, request: Request):
+async def export_flexible(
+    body: ExportRequest,
+    request: Request,
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
+):
     if not UUID_RE.match(body.upload_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "upload_id must be a valid UUID"})
+
+    # format 검증을 store 조회 전에 수행 (422 우선)
+    fmt = body.format.lower()
+    if fmt not in _ALLOWED_FORMATS:
+        raise HTTPException(status_code=422, detail={"code": "invalid_format", "msg": f"지원하지 않는 형식: {body.format!r}"})
+
+    # target_ip 검증
+    if body.target_ip:
+        try:
+            ipaddress.ip_address(body.target_ip)
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": f"유효하지 않은 target_ip: {body.target_ip!r}"})
 
     store = request.app.state.session_store
     try:
         capture = store.get(body.upload_id)
     except KeyError:
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+
+    check_capture_token(capture, x_upload_token)
 
     sessions: List[SessionModel] = capture.sessions
     if body.target_ip:
@@ -60,12 +83,11 @@ async def export_flexible(body: ExportRequest, request: Request):
         if isinstance(a, dict):
             try:
                 attacks.append(AttackDetectionResult(**a))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("공격 결과 변환 실패 (silent drop): data=%r error=%s", a, exc)
         elif isinstance(a, AttackDetectionResult):
             attacks.append(a)
 
-    fmt = body.format.lower()
     try:
         data = _export_svc.export(sessions, attacks, fmt)
     except ValueError as exc:
@@ -84,7 +106,11 @@ def _validate_upload_id(upload_id: str) -> None:
 
 
 @router.get("/api/export/{upload_id}")
-async def export_json(upload_id: str, request: Request):
+async def export_json(
+    upload_id: str,
+    request: Request,
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
+):
     _validate_upload_id(upload_id)
     logger.info("JSON 내보내기 요청: upload_id=%s", upload_id)
     store = request.app.state.session_store
@@ -94,13 +120,18 @@ async def export_json(upload_id: str, request: Request):
         logger.warning("upload_id 없음: %s", upload_id)
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
+    check_capture_token(capture, x_upload_token)
     annotations = list(request.app.state.annotations_store.get(upload_id, []))
     data = _exporter.export(capture.sessions, annotations=annotations)
     return JSONResponse(data)
 
 
 @router.post("/api/export/{upload_id}/pdf")
-async def export_pdf(upload_id: str, request: Request):
+async def export_pdf(
+    upload_id: str,
+    request: Request,
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
+):
     _validate_upload_id(upload_id)
     logger.info("PDF 내보내기 요청: upload_id=%s", upload_id)
     store = request.app.state.session_store
@@ -109,6 +140,8 @@ async def export_pdf(upload_id: str, request: Request):
     except KeyError:
         logger.warning("upload_id 없음: %s", upload_id)
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+
+    check_capture_token(capture, x_upload_token)
 
     annotations = list(request.app.state.annotations_store.get(upload_id, []))
     analysis_result = {
@@ -139,8 +172,19 @@ async def export_pdf(upload_id: str, request: Request):
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
+def _sanitize_csv_cell(value: str) -> str:
+    """스프레드시트 수식 인젝션 방지: 수식 시작 문자로 시작하는 값 앞에 탭 접두사 추가."""
+    if value and value[0] in ("=", "+", "-", "@", "\t", "\r", "|", "%"):
+        return "\t" + value
+    return value
+
+
 @router.get("/api/export/{upload_id}/ioc")
-async def export_ioc(upload_id: str, request: Request):
+async def export_ioc(
+    upload_id: str,
+    request: Request,
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
+):
     _validate_upload_id(upload_id)
     logger.info("IOC 내보내기 요청: upload_id=%s", upload_id)
     store = request.app.state.session_store
@@ -150,12 +194,19 @@ async def export_ioc(upload_id: str, request: Request):
         logger.warning("upload_id 없음: %s", upload_id)
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
-    # attacker_ips 수집: 각 attack dict의 src_ip 필드 (비어 있지 않은 것만)
+    check_capture_token(capture, x_upload_token)
+
+    # attacker_ips 수집: 각 attack dict/AttackDetectionResult의 src_ip 필드
     seen_ips: dict[str, str] = {}  # ip -> attack_type
     for attack in capture.attacks:
-        src_ip = attack.get("src_ip", "")
+        if isinstance(attack, dict):
+            src_ip = attack.get("src_ip", "") or ""
+            attack_type = attack.get("attack_type", "Unknown")
+        else:
+            src_ip = getattr(attack, "src_ip", "") or ""
+            attack_type = getattr(attack, "attack_type", "Unknown")
         if src_ip and src_ip not in seen_ips:
-            seen_ips[src_ip] = attack.get("attack_type", "Unknown")
+            seen_ips[src_ip] = attack_type
 
     # 도메인 수집: session.meta의 sni / dns_query / host 필드
     seen_domains: dict[str, str] = {}  # domain -> attack_type (출처 표시용)
@@ -170,9 +221,9 @@ async def export_ioc(upload_id: str, request: Request):
     writer = csv.writer(buf)
     writer.writerow(["type", "value", "source"])
     for ip, attack_type in seen_ips.items():
-        writer.writerow(["ip", ip, attack_type])
+        writer.writerow(["ip", _sanitize_csv_cell(ip), _sanitize_csv_cell(attack_type)])
     for domain, source in seen_domains.items():
-        writer.writerow(["domain", domain, source])
+        writer.writerow(["domain", _sanitize_csv_cell(domain), _sanitize_csv_cell(source)])
 
     csv_bytes = buf.getvalue().encode("utf-8")
     safe_suffix = re.sub(r"[^a-f0-9]", "", upload_id.lower())[:8]

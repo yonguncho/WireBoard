@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useMemo } from 'react'
 import { getNetworkHealth } from '../api'
 import type { NetworkHealthData, SessionHealth, PanelData } from '../api'
+import { copyText, showToast } from '../toast'
 
 interface Props {
   uploadId: string
@@ -19,6 +20,47 @@ function fmtBytes(b: number) {
   if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB'
   if (b >= 1e3) return (b / 1e3).toFixed(1) + ' KB'
   return b + ' B'
+}
+
+type SortKey = 'score' | 'bytes' | 'duration' | 'packets' | 'rtt'
+
+const SORT_OPTIONS: [SortKey, string][] = [
+  ['score', '점수 낮은 순 (문제 우선)'],
+  ['bytes', '트래픽 많은 순'],
+  ['duration', '지속 시간 긴 순'],
+  ['packets', '패킷 많은 순'],
+  ['rtt', 'RTT 느린 순'],
+]
+
+function sortSessions(list: SessionHealth[], key: SortKey): SessionHealth[] {
+  const sorted = [...list]
+  switch (key) {
+    case 'bytes':    sorted.sort((a, b) => (b.bytes_sent + b.bytes_recv) - (a.bytes_sent + a.bytes_recv)); break
+    case 'duration': sorted.sort((a, b) => b.duration_s - a.duration_s); break
+    case 'packets':  sorted.sort((a, b) => b.packet_count - a.packet_count); break
+    case 'rtt':      sorted.sort((a, b) => (b.rtt_ms ?? -1) - (a.rtt_ms ?? -1)); break
+    default:         sorted.sort((a, b) => a.score - b.score)
+  }
+  return sorted
+}
+
+function exportSessionsCsv(sessions: SessionHealth[]) {
+  if (!sessions.length) { showToast('내보낼 세션 없음'); return }
+  const header = 'src_ip,src_port,dst_ip,dst_port,protocol,status,score,rtt_ms,retransmit_count,bytes_sent,bytes_recv,packet_count,duration_s,root_cause'
+  const esc = (v: string) => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+  const rows = sessions.map(s => [
+    s.src_ip, s.src_port, s.dst_ip, s.dst_port, s.protocol, s.status, s.score,
+    s.rtt_ms ?? '', s.retransmit_count, s.bytes_sent, s.bytes_recv,
+    s.packet_count, s.duration_s.toFixed(3), esc(s.root_cause ?? ''),
+  ].join(','))
+  const blob = new Blob(['﻿' + [header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `wireboard_sessions_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+  showToast(`${sessions.length}개 세션 CSV 저장됨`)
 }
 
 // ── 통계 카드 ────────────────────────────────────────────────────────────────
@@ -103,9 +145,9 @@ function SessionDetail({ s, onFlowOpen }: { s: SessionHealth; onFlowOpen: () => 
         </div>
         <div className="se-detail-id">
           <div className="se-detail-tuple">
-            <span className="mono">{s.src_ip}:{s.src_port}</span>
+            <span className="mono copyable" title="클릭하여 IP 복사" onClick={() => copyText(s.src_ip)}>{s.src_ip}:{s.src_port}</span>
             <span className="se-detail-arrow"> → </span>
-            <span className="mono">{s.dst_ip}:{s.dst_port}</span>
+            <span className="mono copyable" title="클릭하여 IP 복사" onClick={() => copyText(s.dst_ip)}>{s.dst_ip}:{s.dst_port}</span>
           </div>
           <div className="se-detail-proto">{s.protocol} · {s.duration_s.toFixed(3)}s · {s.packet_count}패킷</div>
         </div>
@@ -186,6 +228,7 @@ export function SessionExplorer({ uploadId, panels, sessionCount, onFlowSelect }
   const [ipFilter, setIpFilter] = useState('')
   const [selected, setSelected] = useState<SessionHealth | null>(null)
   const [showCriticalOnly, setShowCriticalOnly] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('score')
 
   useEffect(() => {
     getNetworkHealth(uploadId)
@@ -214,8 +257,8 @@ export function SessionExplorer({ uploadId, panels, sessionCount, onFlowSelect }
     if (showCriticalOnly) {
       list = list.filter(s => s.status !== '정상')
     }
-    return [...list].sort((a, b) => a.score - b.score)
-  }, [health, ipFilter, showCriticalOnly])
+    return sortSessions(list, sortKey)
+  }, [health, ipFilter, showCriticalOnly, sortKey])
 
   const attackCount  = panels.panel10_attacks.length
   const rstCount     = panels.panel5_anomalies.rst_count
@@ -234,10 +277,10 @@ export function SessionExplorer({ uploadId, panels, sessionCount, onFlowSelect }
           value={panels.panel6_ip_ranking.length.toString()}
         />
         <StatBig
-          label="공격 탐지"
+          label="탐지 이벤트"
           value={attackCount.toString()}
           color={attackCount > 0 ? '#ef4444' : '#22c55e'}
-          sub={attackCount > 0 ? '위협 감지됨' : '정상'}
+          sub={attackCount > 0 ? '이상 패턴 감지' : '정상'}
         />
         <StatBig
           label="RST 패킷"
@@ -299,6 +342,23 @@ export function SessionExplorer({ uploadId, panels, sessionCount, onFlowSelect }
           />
           비정상만 표시
         </label>
+        <select
+          className="se-sort-select"
+          value={sortKey}
+          onChange={e => setSortKey(e.target.value as SortKey)}
+          title="세션 정렬 기준"
+        >
+          {SORT_OPTIONS.map(([key, label]) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </select>
+        <button
+          className="se-csv-btn"
+          title="현재 필터된 세션을 CSV로 저장"
+          onClick={() => exportSessionsCsv(filteredSessions)}
+        >
+          ↓ CSV
+        </button>
         {health && (
           <span className="pkt-total">
             <strong>{filteredSessions.length}</strong> / {health.sessions.length} 세션

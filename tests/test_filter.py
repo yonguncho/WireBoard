@@ -15,12 +15,13 @@ def _make_app():
     return TestClient(app)
 
 
-def _upload_and_analyze(client, pcap_bytes: bytes) -> str:
+def _upload_and_analyze(client, pcap_bytes: bytes) -> tuple[str, str]:
     r = client.post("/api/upload", files={"file": ("t.pcap", io.BytesIO(pcap_bytes), "application/octet-stream")})
     assert r.status_code == 200
     uid = r.json()["upload_id"]
-    client.post("/api/analyze", json={"upload_id": uid})
-    return uid
+    capture_token = r.json()["capture_token"]
+    client.post("/api/analyze", json={"upload_id": uid}, headers={"X-Upload-Token": capture_token})
+    return uid, capture_token
 
 
 # ──────────────────── FilterTranslator 단위 테스트 ─────────────────────
@@ -126,14 +127,16 @@ class TestFilterTranslatorPort:
 class TestFilterEndpoint:
     def test_filter_returns_200(self, pcap_bytes):
         client = _make_app()
-        uid = _upload_and_analyze(client, pcap_bytes)
-        r = client.post("/api/filter", json={"upload_id": uid, "query": "192.168.1.1"})
+        uid, capture_token = _upload_and_analyze(client, pcap_bytes)
+        r = client.post("/api/filter", json={"upload_id": uid, "query": "192.168.1.1"},
+                        headers={"X-Upload-Token": capture_token})
         assert r.status_code == 200
 
     def test_filter_response_has_required_keys(self, pcap_bytes):
         client = _make_app()
-        uid = _upload_and_analyze(client, pcap_bytes)
-        r = client.post("/api/filter", json={"upload_id": uid, "query": "tcp"})
+        uid, capture_token = _upload_and_analyze(client, pcap_bytes)
+        r = client.post("/api/filter", json={"upload_id": uid, "query": "tcp"},
+                        headers={"X-Upload-Token": capture_token})
         body = r.json()
         assert "success" in body
         assert "filter_expr" in body
@@ -142,20 +145,23 @@ class TestFilterEndpoint:
 
     def test_filter_matched_count_is_int(self, pcap_bytes):
         client = _make_app()
-        uid = _upload_and_analyze(client, pcap_bytes)
-        r = client.post("/api/filter", json={"upload_id": uid, "query": "tcp"})
+        uid, capture_token = _upload_and_analyze(client, pcap_bytes)
+        r = client.post("/api/filter", json={"upload_id": uid, "query": "tcp"},
+                        headers={"X-Upload-Token": capture_token})
         assert isinstance(r.json()["matched_count"], int)
 
     def test_filter_sessions_is_list(self, pcap_bytes):
         client = _make_app()
-        uid = _upload_and_analyze(client, pcap_bytes)
-        r = client.post("/api/filter", json={"upload_id": uid, "query": "tcp"})
+        uid, capture_token = _upload_and_analyze(client, pcap_bytes)
+        r = client.post("/api/filter", json={"upload_id": uid, "query": "tcp"},
+                        headers={"X-Upload-Token": capture_token})
         assert isinstance(r.json()["sessions"], list)
 
     def test_filter_by_ip_matches_session(self, pcap_bytes):
         client = _make_app()
-        uid = _upload_and_analyze(client, pcap_bytes)
-        r = client.post("/api/filter", json={"upload_id": uid, "query": "192.168.1.1"})
+        uid, capture_token = _upload_and_analyze(client, pcap_bytes)
+        r = client.post("/api/filter", json={"upload_id": uid, "query": "192.168.1.1"},
+                        headers={"X-Upload-Token": capture_token})
         body = r.json()
         if body["matched_count"] > 0:
             for s in body["sessions"]:
@@ -163,8 +169,9 @@ class TestFilterEndpoint:
 
     def test_filter_empty_query_success_false(self, pcap_bytes):
         client = _make_app()
-        uid = _upload_and_analyze(client, pcap_bytes)
-        r = client.post("/api/filter", json={"upload_id": uid, "query": "randomgarbage"})
+        uid, capture_token = _upload_and_analyze(client, pcap_bytes)
+        r = client.post("/api/filter", json={"upload_id": uid, "query": "randomgarbage"},
+                        headers={"X-Upload-Token": capture_token})
         assert r.status_code == 200
         assert r.json()["success"] is False
 
@@ -180,16 +187,19 @@ class TestFilterEndpoint:
 
     def test_filter_translate_same_behavior(self, pcap_bytes):
         client = _make_app()
-        uid = _upload_and_analyze(client, pcap_bytes)
-        r1 = client.post("/api/filter", json={"upload_id": uid, "query": "tcp"})
-        r2 = client.post("/api/filter/translate", json={"upload_id": uid, "query": "tcp"})
+        uid, capture_token = _upload_and_analyze(client, pcap_bytes)
+        r1 = client.post("/api/filter", json={"upload_id": uid, "query": "tcp"},
+                         headers={"X-Upload-Token": capture_token})
+        r2 = client.post("/api/filter/translate", json={"upload_id": uid, "query": "tcp"},
+                         headers={"X-Upload-Token": capture_token})
         assert r1.status_code == r2.status_code == 200
         assert r1.json()["filter_expr"] == r2.json()["filter_expr"]
 
     def test_filter_session_fields_present(self, pcap_bytes):
         client = _make_app()
-        uid = _upload_and_analyze(client, pcap_bytes)
-        r = client.post("/api/filter", json={"upload_id": uid, "query": "192.168.1.1"})
+        uid, capture_token = _upload_and_analyze(client, pcap_bytes)
+        r = client.post("/api/filter", json={"upload_id": uid, "query": "192.168.1.1"},
+                        headers={"X-Upload-Token": capture_token})
         for s in r.json()["sessions"]:
             for field in ("session_id", "src_ip", "dst_ip", "src_port", "dst_port", "protocol"):
                 assert field in s, f"필드 누락: {field}"

@@ -12,3 +12,4 @@ class AttackDetectionResult(BaseModel):
     sample_count: int = 0
     description: str = ""
     src_ip: str = ""
+    detector_error: bool = False

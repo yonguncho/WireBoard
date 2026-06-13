@@ -31,7 +31,9 @@ class HarParser:
 
         obj = json.loads(text)
         log = obj.get("log") or {}
-        entries = log.get("entries", [])
+        if "entries" not in log:
+            raise KeyError("HAR log에 'entries' 키가 없습니다")
+        entries = log["entries"]
 
         sessions: list[SessionModel] = []
         for i, entry in enumerate(entries):

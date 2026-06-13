@@ -1,6 +1,9 @@
 """GET /api/stream/{upload_id}?session_id=X&encoding=ascii|hex — Follow Stream."""
-from fastapi import APIRouter, HTTPException, Query, Request
+from typing import Literal
 
+from fastapi import APIRouter, Header, HTTPException, Query, Request
+
+from utils.capture_auth import check_capture_token
 from utils.constants import UUID_RE
 
 router = APIRouter()
@@ -36,7 +39,8 @@ async def get_stream(
     request: Request,
     upload_id: str,
     session_id: str = Query(..., description="세션 UUID"),
-    encoding: str = Query("ascii", description="ascii | hex"),
+    encoding: Literal["ascii", "hex"] = Query("ascii", description="ascii | hex"),
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
 ):
     if not UUID_RE.match(upload_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "upload_id must be a valid UUID"})
@@ -48,11 +52,15 @@ async def get_stream(
     except KeyError:
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
+    check_capture_token(capture, x_upload_token)
+
     session = next((s for s in capture.sessions if s.session_id == session_id), None)
     if session is None:
         raise HTTPException(status_code=404, detail={"code": "session_not_found", "message": "세션을 찾을 수 없습니다"})
 
-    raw_pkts = capture.packet_map.get(session_id, [])
+    raw_pkts_all = capture.packet_map.get(session_id, [])
+    truncated = len(raw_pkts_all) > _PARSER_MAX
+    raw_pkts = raw_pkts_all[:_PARSER_MAX]
     base_ts = raw_pkts[0].ts if raw_pkts else 0.0
 
     data_pkts = sorted(
@@ -89,5 +97,5 @@ async def get_stream(
         "fwd_bytes": fwd_bytes,
         "rev_bytes": rev_bytes,
         "segments": segments,
-        "truncated": len(raw_pkts) >= _PARSER_MAX,
+        "truncated": truncated,
     }

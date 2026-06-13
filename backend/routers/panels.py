@@ -2,7 +2,7 @@
 import logging
 from collections import defaultdict
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +14,7 @@ from services.analytics.rst_analyzer import RstAnalyzer
 from services.analytics.tls_analyzer import TlsAnalyzer
 from services.analytics.dns_analyzer import DnsAnalyzer
 from utils.constants import UUID_RE
+from utils.capture_auth import check_capture_token
 from utils.net_utils import is_private as _is_private
 
 router = APIRouter()
@@ -28,7 +29,11 @@ _dns_analyzer = DnsAnalyzer()
 
 
 @router.get("/api/panels/{upload_id}")
-async def get_panels(upload_id: str, request: Request):
+async def get_panels(
+    upload_id: str,
+    request: Request,
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
+):
     if not UUID_RE.match(upload_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "upload_id must be a valid UUID"})
     logger.info("패널 요청: upload_id=%s", upload_id)
@@ -39,6 +44,7 @@ async def get_panels(upload_id: str, request: Request):
         logger.warning("upload_id 없음: %s", upload_id)
         raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
 
+    check_capture_token(capture, x_upload_token)
     sessions = capture.sessions
 
     ip_result = _ip_analyzer.analyze(sessions)
