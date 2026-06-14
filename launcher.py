@@ -1,4 +1,4 @@
-"""WireBoard v6.0.0 — PyInstaller entry point."""
+"""WireBoard v7.0.0 — PyInstaller entry point."""
 import logging
 import os
 import socket
@@ -9,7 +9,7 @@ import traceback
 import webbrowser
 from pathlib import Path
 
-_VERSION = "6.0.0"
+_VERSION = "7.0.0"
 _DEFAULT_PORT = 8764
 
 _BANNER = """
