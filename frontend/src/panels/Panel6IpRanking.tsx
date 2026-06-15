@@ -7,7 +7,7 @@ interface Props {
   onFlowSelect?: (sessionId: string) => void
 }
 
-interface DrillState { ip: string; sessions: DrilldownSession[]; count: number }
+interface DrillState { ip: string; sessions: DrilldownSession[]; count: number; truncated: boolean }
 
 function fmt(b: number) {
   if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB'
@@ -29,7 +29,7 @@ export function Panel6IpRanking({ data, uploadId, onFlowSelect }: Props) {
     setLoading(true)
     try {
       const r = await getDrilldown(uploadId, ip)
-      setDrill({ ip: r.ip, sessions: r.sessions, count: r.session_count })
+      setDrill({ ip: r.ip, sessions: r.sessions, count: r.session_count, truncated: r.truncated })
     } catch { /* 드릴다운 실패 시 무시 */ } finally {
       setLoading(false)
     }
@@ -66,7 +66,10 @@ export function Panel6IpRanking({ data, uploadId, onFlowSelect }: Props) {
       {drill && (
         <div className="drilldown-modal">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <strong style={{ color: '#63b3ed' }}>{drill.ip} — {drill.count}개 세션</strong>
+            <strong style={{ color: '#63b3ed' }}>
+              {drill.ip} — {drill.count}개 세션
+              {drill.truncated && <span style={{ color: '#a0aec0', fontWeight: 400, fontSize: 11, marginLeft: 6 }}>(바이트 상위 50건 표시)</span>}
+            </strong>
             <button className="filter-btn" style={{ background: '#4a5568', padding: '2px 8px' }} onClick={() => setDrill(null)}>✕</button>
           </div>
           <table className="mini-table full-width">

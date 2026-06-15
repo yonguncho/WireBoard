@@ -84,8 +84,10 @@ export async function addAnnotation(upload_id: string, start_ts: number, end_ts:
   return r.json()
 }
 
-export async function getDrilldown(upload_id: string, ip: string, capture_token?: string): Promise<DrilldownResult> {
-  const r = await fetch(`${BASE}/api/drilldown/${upload_id}?ip=${encodeURIComponent(ip)}`, {
+export async function getDrilldown(upload_id: string, ip: string, capture_token?: string, peer?: string): Promise<DrilldownResult> {
+  const q = new URLSearchParams({ ip })
+  if (peer) q.set('peer', peer)
+  const r = await fetch(`${BASE}/api/drilldown/${upload_id}?${q.toString()}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
   if (!r.ok) return handleError(r, '드릴다운 실패')
@@ -159,7 +161,7 @@ export interface DrilldownSession {
   bytes_sent: number; bytes_recv: number; packet_count: number
   start_ts: number; end_ts: number; duration_s: number; rst: boolean
 }
-export interface DrilldownResult { ip: string; session_count: number; sessions: DrilldownSession[] }
+export interface DrilldownResult { ip: string; session_count: number; sessions: DrilldownSession[]; truncated: boolean }
 
 export interface FlowPacket {
   ts: number; rel_ts: number; direction: 'fwd' | 'rev'

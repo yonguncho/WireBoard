@@ -16,7 +16,9 @@ except ImportError:
 from models.reputation import ReputationResult, ReputationSourceResult
 
 _FEODO_CACHE: set = set()
-_FEODO_CACHE_TS: float = 0.0
+# -inf 로 초기화해 첫 조회는 항상 다운로드를 강제한다.
+# (0.0 이면 monotonic 에포크 후 1시간 내 기동 시 빈 캐시를 '신선'으로 오인해 블록리스트를 안 받음)
+_FEODO_CACHE_TS: float = float("-inf")
 _FEODO_CACHE_TTL: float = 3600.0
 _FEODO_LOCK: asyncio.Lock | None = None
 

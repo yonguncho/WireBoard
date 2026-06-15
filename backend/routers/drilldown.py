@@ -14,6 +14,7 @@ async def drilldown(
     request: Request,
     upload_id: str,
     ip: str = Query(..., description="드릴다운할 IP 주소"),
+    peer: str | None = Query(None, description="상대 IP — 지정 시 ip↔peer 쌍 세션만 반환"),
     x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
 ):
     if not UUID_RE.match(upload_id):
@@ -22,6 +23,11 @@ async def drilldown(
         ipaddress.ip_address(ip)
     except ValueError:
         raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": "ip must be a valid IP address"})
+    if peer is not None:
+        try:
+            ipaddress.ip_address(peer)
+        except ValueError:
+            raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": "peer must be a valid IP address"})
     try:
         capture = request.app.state.session_store.get(upload_id)
     except KeyError:
@@ -32,6 +38,8 @@ async def drilldown(
     matched = []
     for s in capture.sessions:
         if s.src_ip != ip and s.dst_ip != ip:
+            continue
+        if peer is not None and {s.src_ip, s.dst_ip} != {ip, peer}:
             continue
         matched.append({
             "session_id": s.session_id,

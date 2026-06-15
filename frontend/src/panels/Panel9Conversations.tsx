@@ -24,13 +24,8 @@ export function Panel9Conversations({ data, uploadId, onFlowSelect }: Props) {
     if (!uploadId) return
     setLoading(true)
     try {
-      const r = await getDrilldown(uploadId, src)
-      setDrill({
-        src, dst,
-        sessions: r.sessions.filter(s =>
-          (s.src_ip === src && s.dst_ip === dst) || (s.src_ip === dst && s.dst_ip === src)
-        ),
-      })
+      const r = await getDrilldown(uploadId, src, undefined, dst)
+      setDrill({ src, dst, sessions: r.sessions })
     } catch { /* 드릴다운 실패 시 무시 */ } finally {
       setLoading(false)
     }
