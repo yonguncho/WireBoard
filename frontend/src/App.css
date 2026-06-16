@@ -970,3 +970,45 @@ button.stat-card:focus-visible { outline: 2px solid var(--blue); outline-offset:
 
 /* risk-badge-wrap */
 .risk-badge-wrap { display: flex; align-items: center; flex-shrink: 0; }
+
+/* ── HAR 워터폴 ──────────────────────────────────────────────── */
+.har-waterfall { display:flex; flex-direction:column; gap:12px; font-size:12px }
+.har-summary { display:flex; align-items:center; gap:24px; flex-wrap:wrap; padding:10px 14px; background:var(--card); border:1px solid var(--card-border); border-radius:var(--radius) }
+.har-sum-item { display:flex; flex-direction:column; line-height:1.2 }
+.har-sum-num { font-size:18px; font-weight:700; color:var(--txt-primary) }
+.har-sum-lbl { font-size:11px; color:var(--txt-muted) }
+.har-sum-status { display:flex; gap:6px; margin-left:auto; flex-wrap:wrap }
+.har-sum-badge { padding:2px 8px; border-radius:10px; font-weight:700; font-size:11px }
+.har-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap }
+.har-filters, .har-sorts { display:flex; gap:4px }
+.har-toolbar .filter-btn { padding:5px 11px; background:#3a4252 }
+.har-toolbar .filter-btn.active { background:var(--blue) }
+.har-search { flex:1; min-width:160px; background:var(--card); border:1px solid var(--card-border); border-radius:var(--radius-sm); color:var(--txt-primary); padding:6px 10px; font-size:12px }
+.har-search:focus { border-color:var(--blue); outline:none }
+.har-legend { display:flex; flex-wrap:wrap; gap:12px; padding:6px 4px; font-size:11px; color:var(--txt-secondary) }
+.har-legend-item { display:flex; align-items:center; gap:5px }
+.har-legend-swatch { width:11px; height:11px; border-radius:2px; display:inline-block }
+.har-legend-hint { margin-left:auto; color:var(--txt-muted) }
+.har-rows { display:flex; flex-direction:column; border:1px solid var(--card-border); border-radius:var(--radius); overflow:hidden }
+.har-row { display:grid; grid-template-columns:54px 44px minmax(160px,1.6fr) 70px 64px 3fr; align-items:center; gap:8px; padding:5px 10px; border-bottom:1px solid var(--card-border); transition:background .12s }
+.har-row:last-child { border-bottom:none }
+.har-row.clickable { cursor:pointer }
+.har-row.clickable:hover { background:rgba(99,179,237,0.08) }
+.har-method { font-family:var(--mono); font-size:10px; font-weight:700; text-align:center; padding:2px 0; border-radius:4px; background:#3a4252; color:#cbd5e1 }
+.har-method.m-get { background:#1e3a5f; color:#7dd3fc }
+.har-method.m-post { background:#1e4032; color:#86efac }
+.har-method.m-put, .har-method.m-patch { background:#42371e; color:#fcd34d }
+.har-method.m-delete { background:#4a1e1e; color:#fca5a5 }
+.har-status { font-family:var(--mono); font-size:11px; font-weight:700; text-align:center }
+.har-st-2xx { color:#22c55e } .har-sum-badge.har-st-2xx { background:rgba(34,197,94,0.18) }
+.har-st-3xx { color:#3b82f6 } .har-sum-badge.har-st-3xx { background:rgba(59,130,246,0.18) }
+.har-st-4xx { color:#f59e0b } .har-sum-badge.har-st-4xx { background:rgba(245,158,11,0.18) }
+.har-st-5xx { color:#ef4444 } .har-sum-badge.har-st-5xx { background:rgba(239,68,68,0.18) }
+.har-st-na { color:var(--txt-muted) }
+.har-url { display:flex; flex-direction:column; min-width:0; line-height:1.25 }
+.har-host { color:var(--txt-primary); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.har-path { font-family:var(--mono); font-size:10px; color:var(--txt-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.har-size, .har-time { font-family:var(--mono); font-size:11px; color:var(--txt-secondary); text-align:right }
+.har-track { position:relative; height:16px; background:rgba(148,163,184,0.08); border-radius:3px }
+.har-bar { position:absolute; top:0; height:16px; display:flex; border-radius:2px; overflow:hidden; min-width:2px }
+.har-seg { height:100% }

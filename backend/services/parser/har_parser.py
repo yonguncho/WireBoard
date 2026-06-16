@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 _PLACEHOLDER_BASE = int(ipaddress.ip_address("198.18.0.1"))
 _PLACEHOLDER_MAX = 131070  # /15 대역 크기 한도
 _PAYLOAD_CAP = 1024        # 합성 패킷 페이로드 ASCII 최대 바이트
+# HAR timings 단계 (워터폴 표시용). -1 은 HAR 표준상 '해당 없음'
+_TIMING_PHASES = ("blocked", "dns", "ssl", "connect", "send", "wait", "receive")
 
 
 class HarParser:
@@ -86,6 +88,10 @@ class HarParser:
             if packets:
                 self.packet_map[session_id] = packets
 
+            timings_raw = entry.get("timings") or {}
+            timings = {p: timings_raw.get(p, -1) for p in _TIMING_PHASES}
+            mime = (resp.get("content") or {}).get("mimeType", "") or ""
+
             sessions.append(SessionModel(
                 session_id=session_id,
                 src_ip="127.0.0.1",
@@ -100,7 +106,16 @@ class HarParser:
                 packet_count=max(1, len(packets)),
                 payload_length=resp_body,
                 confidence="low" if unresolved else "normal",
-                meta={"method": method, "url": url, "status_code": resp.get("status") or 0, "hostname": host},
+                meta={
+                    "method": method,
+                    "url": url,
+                    "status_code": resp.get("status") or 0,
+                    "hostname": host,
+                    "time_ms": round(time_ms, 1),
+                    "resp_size": resp_body,
+                    "mime": mime,
+                    "timings": timings,
+                },
             ))
 
         return sessions

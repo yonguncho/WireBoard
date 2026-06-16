@@ -377,3 +377,33 @@ export async function getNetworkHealth(upload_id: string, capture_token?: string
   if (!r.ok) return handleError(r, '통신 상태 진단 실패')
   return r.json()
 }
+
+export interface HarTimings {
+  blocked: number; dns: number; ssl: number; connect: number
+  send: number; wait: number; receive: number
+}
+export interface HarEntry {
+  session_id: string
+  method: string; url: string; host: string
+  status: number; mime: string
+  start_offset_ms: number; total_ms: number; resp_size: number
+  timings: HarTimings
+}
+export interface HarData {
+  source_type: string
+  count: number
+  entries: HarEntry[]
+  summary: {
+    count: number; total_bytes: number; total_time_ms: number
+    status_groups: Record<string, number>
+    slowest: { url: string; host: string; total_ms: number; status: number }[]
+  }
+}
+
+export async function getHar(upload_id: string, capture_token?: string): Promise<HarData> {
+  const r = await fetch(`${BASE}/api/har/${upload_id}`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
+  if (!r.ok) return handleError(r, 'HAR 분석 로드 실패')
+  return r.json()
+}

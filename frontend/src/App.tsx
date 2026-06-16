@@ -22,12 +22,13 @@ import { Panel10Attacks } from './panels/Panel10Attacks'
 import { YaraPanel } from './panels/YaraPanel'
 import { NetworkHealthPanel } from './panels/NetworkHealthPanel'
 import { SessionExplorer } from './panels/SessionExplorer'
+import { HarWaterfall } from './panels/HarWaterfall'
 import './App.css'
 
 const ALLOWED = /\.(pcap|pcapng|cap|har|log|txt|tcpdump)$/i
 
 type Layer = 'overview' | 'investigate' | 'output'
-type InvTab = 'sessions' | 'traffic' | 'protocol' | 'health' | 'geoip' | 'yara'
+type InvTab = 'sessions' | 'traffic' | 'protocol' | 'health' | 'geoip' | 'yara' | 'har'
 
 interface UploadMeta {
   uploadId: string
@@ -609,7 +610,7 @@ export default function App() {
           {/* Investigate Sub-nav */}
           {layer === 'investigate' && (
             <nav className="sub-nav">
-              {([ ['sessions','세션/패킷'], ['traffic','트래픽'], ['protocol','프로토콜'], ['health','통신진단'], ['geoip','GeoIP'], ['yara','YARA'] ] as [InvTab, string][]).map(([key, label]) => (
+              {(([ ['sessions','세션/패킷'], ['traffic','트래픽'], ['protocol','프로토콜'], ['health','통신진단'], ['geoip','GeoIP'], ['yara','YARA'], ...(meta.sourceType === 'har' ? [['har','HAR 워터폴']] : []) ] as [InvTab, string][])).map(([key, label]) => (
                 <button key={key} className={`sub-btn${invTab === key ? ' active' : ''}`} onClick={() => setInvTab(key)}>
                   {label}
                 </button>
@@ -765,6 +766,15 @@ export default function App() {
                 <div className="panel-card-title">YARA 서명 탐지</div>
                 <div className="panel-card-body">
                   <YaraPanel uploadId={meta.uploadId} />
+                </div>
+              </div>
+            )}
+
+            {layer === 'investigate' && invTab === 'har' && meta.sourceType === 'har' && (
+              <div className="panel-card wide">
+                <div className="panel-card-title">HAR 요청 워터폴 (타이밍 · 상태 · 크기)</div>
+                <div className="panel-card-body">
+                  <HarWaterfall uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
                 </div>
               </div>
             )}
