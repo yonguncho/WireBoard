@@ -83,6 +83,9 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
                     sessions, pkt_map = result
                 else:
                     sessions, pkt_map = result, {}
+                # 레거시 파서가 self.packet_map 으로 합성 패킷을 노출하면 수용 (HAR 등)
+                if not pkt_map:
+                    pkt_map = getattr(parser, "packet_map", {}) or {}
                 icmp_events = list(getattr(parser, "icmp_events", []))
                 source_type = _source_type(parser)
                 logger.info("파일 파싱 완료: parser=%s sessions=%d icmp_events=%d warnings=%d",
