@@ -17,12 +17,8 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# pcap link types
+# pcap link type (출력은 항상 이더넷)
 LINKTYPE_ETHERNET = 1
-LINKTYPE_RAW = 101
-
-# 이더넷 프레임 식별용 ethertype (offset 12~13)
-_ETHERTYPES = {0x0800, 0x86DD, 0x0806, 0x8100, 0x88A8}
 
 # 요약 줄: FortiGate 절대 타임스탬프 "YYYY-MM-DD HH:MM:SS.ffffff"
 _FORTI_TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)")
@@ -93,15 +89,27 @@ def _extract_hex(line: str) -> bytes | None:
     return bytes(out) if out else b""
 
 
-def _detect_linktype(first_pkt: bytes) -> int:
-    """첫 패킷 바이트로 link-layer 타입 추정."""
-    if len(first_pkt) >= 14:
-        ethertype = int.from_bytes(first_pkt[12:14], "big")
-        if ethertype in _ETHERTYPES:
-            return LINKTYPE_ETHERNET
-    if first_pkt and (first_pkt[0] >> 4) in (4, 6):
-        return LINKTYPE_RAW  # raw IPv4/IPv6 (이더넷 헤더 없음)
-    return LINKTYPE_ETHERNET
+def _is_raw_ip(pkt: bytes) -> bool:
+    """패킷이 이더넷 헤더 없는 raw IP 데이터그램인지 헤더 정합성으로 판정.
+
+    오프셋 12~13의 ethertype만 보면 src IP가 8.0.x.x(=0x0800) 같은 경우
+    raw IPv4를 이더넷으로 오판한다. IP 헤더 자체의 version·IHL·total_length
+    정합성을 검사해 이를 피한다. 이더넷 프레임은 선두 12바이트가 MAC이라
+    유효한 IP 헤더를 이룰 확률이 거의 없다.
+    """
+    if len(pkt) < 20:
+        return False
+    ver = pkt[0] >> 4
+    if ver == 4:
+        ihl = (pkt[0] & 0x0F) * 4
+        if ihl < 20 or ihl > len(pkt):
+            return False
+        total_len = int.from_bytes(pkt[2:4], "big")
+        # total_length 는 최소 헤더 길이 이상(캡처 잘림으로 len 초과 가능)
+        return total_len >= ihl
+    if ver == 6 and len(pkt) >= 40:
+        return True
+    return False
 
 
 def _iter_blocks(text: str):
@@ -169,8 +177,9 @@ def convert_raw_log_to_pcap(data: bytes) -> tuple[bytes, int] | None:
     if not packets:
         return None
 
-    if _detect_linktype(packets[0][1]) == LINKTYPE_RAW:
-        packets = [(ts, _wrap_raw_ip(pkt)) for ts, pkt in packets]
+    # 패킷별로 raw IP 여부를 판정해 raw IP 만 합성 이더넷으로 감싼다.
+    # (첫 패킷만으로 전체를 판정하던 기존 로직은 혼재·오판에 취약했다)
+    packets = [(ts, _wrap_raw_ip(pkt) if _is_raw_ip(pkt) else pkt) for ts, pkt in packets]
 
     pcap_bytes = build_pcap(packets, LINKTYPE_ETHERNET)
     return pcap_bytes, len(packets)

@@ -32,6 +32,15 @@ _TCPDUMP_RAW = (
     "\t0x0020:  5002 2000 8b9f 0000                      P.......\n"
 )
 
+# 엣지: raw IPv4 인데 src IP 가 8.0.0.1 → 오프셋 12~13 이 0x0800(IPv4 ethertype)과 충돌.
+# 첫 패킷 ethertype 만 보던 기존 로직은 이를 이더넷으로 오판해 감싸지 않았다.
+_TCPDUMP_RAW_8DOT = (
+    "12:34:56.789012 IP 8.0.0.1.1234 > 10.0.0.2.80: Flags [S], seq 0, length 0\n"
+    "\t0x0000:  4500 0028 0001 0000 4006 66c1 0800 0001  E..(....@.f.....\n"
+    "\t0x0010:  0a00 0002 04d2 0050 0000 0000 0000 0000  .......P........\n"
+    "\t0x0020:  5002 2000 8b9f 0000                      P.......\n"
+)
+
 
 def _linktype(pcap: bytes) -> int:
     return struct.unpack_from("<I", pcap, 20)[0]
@@ -62,6 +71,20 @@ def test_tcpdump_raw_ip_wrapped_to_ethernet():
     assert len(sessions) == 1
     s = sessions[0]
     assert s.src_ip == "10.0.0.1" and s.dst_ip == "10.0.0.2"
+    assert s.src_port == 1234 and s.dst_port == 80
+
+
+def test_raw_ipv4_with_ethertype_lookalike_src_ip():
+    """src IP 8.0.0.1 → bytes[12:14]=0x0800. raw IP 로 올바르게 감싸 파싱되어야 함."""
+    res = convert_raw_log_to_pcap(_TCPDUMP_RAW_8DOT.encode())
+    assert res is not None
+    pcap, n = res
+    assert n == 1
+    assert _linktype(pcap) == 1
+    sessions, _ = PcapParser().parse(pcap)
+    assert len(sessions) == 1
+    s = sessions[0]
+    assert s.src_ip == "8.0.0.1" and s.dst_ip == "10.0.0.2"
     assert s.src_port == 1234 and s.dst_port == 80
 
 
