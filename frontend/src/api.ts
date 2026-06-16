@@ -44,11 +44,11 @@ function tokenHeader(upload_id?: string, override?: string): Record<string, stri
   return token ? { 'X-Upload-Token': token } : {}
 }
 
-export async function uploadPcap(file: File): Promise<{ upload_id: string; capture_token: string; session_count: number; source_type: string; parse_warnings: string[] }> {
+export async function uploadPcap(file: File): Promise<{ upload_id: string; capture_token: string; session_count: number; source_type: string; parse_warnings: string[]; pcap_available?: boolean }> {
   const fd = new FormData()
   fd.append('file', file)
   const r = await fetch(`${BASE}/api/upload`, { method: 'POST', body: fd })
-  if (!r.ok) return handleError(r, '파일 형식을 인식할 수 없습니다')
+  if (!r.ok) return handleError(r, 'Unrecognized file format')
   const data = await r.json()
   if (data.upload_id && data.capture_token) setCaptureToken(data.upload_id, data.capture_token)
   return data
@@ -62,7 +62,7 @@ export async function analyzePcap(upload_id: string, target_ip?: string, capture
     headers: { 'Content-Type': 'application/json', ...tokenHeader(upload_id, capture_token) },
     body: JSON.stringify(body),
   })
-  if (!r.ok) return handleError(r, '분석 실패')
+  if (!r.ok) return handleError(r, 'Analysis failed')
   return r.json()
 }
 
@@ -70,7 +70,7 @@ export async function getPanels(upload_id: string, capture_token?: string): Prom
   const r = await fetch(`${BASE}/api/panels/${upload_id}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, '패널 로드 실패')
+  if (!r.ok) return handleError(r, 'Failed to load panels')
   return r.json()
 }
 
@@ -80,7 +80,7 @@ export async function addAnnotation(upload_id: string, start_ts: number, end_ts:
     headers: { 'Content-Type': 'application/json', ...tokenHeader(upload_id, capture_token) },
     body: JSON.stringify({ upload_id, start_ts, end_ts, comment }),
   })
-  if (!r.ok) return handleError(r, '마커 저장 실패')
+  if (!r.ok) return handleError(r, 'Failed to save marker')
   return r.json()
 }
 
@@ -90,7 +90,7 @@ export async function getDrilldown(upload_id: string, ip: string, capture_token?
   const r = await fetch(`${BASE}/api/drilldown/${upload_id}?${q.toString()}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, '드릴다운 실패')
+  if (!r.ok) return handleError(r, 'Drilldown failed')
   return r.json()
 }
 
@@ -100,7 +100,7 @@ export async function filterSessions(upload_id: string, query: string, capture_t
     headers: { 'Content-Type': 'application/json', ...tokenHeader(upload_id, capture_token) },
     body: JSON.stringify({ upload_id, query }),
   })
-  if (!r.ok) return handleError(r, '필터 실패')
+  if (!r.ok) return handleError(r, 'Filter failed')
   return r.json()
 }
 
@@ -131,7 +131,7 @@ export async function getSummary(upload_id: string, capture_token?: string): Pro
   const r = await fetch(`${BASE}/api/summary/${upload_id}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, '요약 로드 실패')
+  if (!r.ok) return handleError(r, 'Failed to load summary')
   return r.json()
 }
 
@@ -203,7 +203,7 @@ export async function getStream(upload_id: string, session_id: string, encoding 
   const r = await fetch(`${BASE}/api/stream/${upload_id}?session_id=${encodeURIComponent(session_id)}&encoding=${encoding}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, '스트림 로드 실패')
+  if (!r.ok) return handleError(r, 'Failed to load stream')
   return r.json()
 }
 
@@ -211,7 +211,7 @@ export async function getFlow(upload_id: string, session_id: string, capture_tok
   const r = await fetch(`${BASE}/api/flow/${upload_id}?session_id=${encodeURIComponent(session_id)}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, '흐름 로드 실패')
+  if (!r.ok) return handleError(r, 'Failed to load flow')
   return r.json()
 }
 
@@ -233,7 +233,7 @@ export async function getPackets(upload_id: string, queryString: string, capture
   const r = await fetch(`${BASE}/api/packets/${upload_id}?${queryString}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, '패킷 목록 로드 실패')
+  if (!r.ok) return handleError(r, 'Failed to load packet list')
   return r.json()
 }
 
@@ -241,7 +241,7 @@ export async function exportJson(upload_id: string, capture_token?: string): Pro
   const r = await fetch(`${BASE}/api/export/${upload_id}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, 'JSON 내보내기 실패')
+  if (!r.ok) return handleError(r, 'JSON export failed')
   const blob = await r.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -256,7 +256,7 @@ export async function exportPdf(upload_id: string, capture_token?: string): Prom
     method: 'POST',
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, 'PDF 내보내기 실패')
+  if (!r.ok) return handleError(r, 'PDF export failed')
   const blob = await r.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -266,11 +266,25 @@ export async function exportPdf(upload_id: string, capture_token?: string): Prom
   URL.revokeObjectURL(url)
 }
 
+export async function downloadConvertedPcap(upload_id: string, capture_token?: string): Promise<void> {
+  const r = await fetch(`${BASE}/api/upload/${upload_id}/pcap`, {
+    headers: tokenHeader(upload_id, capture_token),
+  })
+  if (!r.ok) return handleError(r, 'PCAP download failed')
+  const blob = await r.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `converted_${upload_id.slice(0, 8)}.pcap`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export async function exportIoc(uploadId: string, capture_token?: string): Promise<Blob> {
   const r = await fetch(`${BASE}/api/export/${uploadId}/ioc`, {
     headers: tokenHeader(uploadId, capture_token),
   })
-  if (!r.ok) return handleError(r, 'IOC 내보내기 실패')
+  if (!r.ok) return handleError(r, 'IOC export failed')
   return r.blob()
 }
 
@@ -315,7 +329,7 @@ export async function compareCaptures(
     headers,
     body: JSON.stringify({ base_upload_id, current_upload_id }),
   })
-  if (!r.ok) return handleError(r, '비교 분석 실패')
+  if (!r.ok) return handleError(r, 'Comparison analysis failed')
   return r.json()
 }
 
@@ -330,7 +344,7 @@ export async function getAnnotations(upload_id: string, capture_token?: string):
   const r = await fetch(`${BASE}/api/annotations/${upload_id}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, '어노테이션 로드 실패')
+  if (!r.ok) return handleError(r, 'Failed to load annotations')
   return r.json()
 }
 
@@ -350,13 +364,13 @@ export interface SessionHealth {
   rst_type: string        // NONE | EARLY | LATE
   close_type: string      // NORMAL | RESET | TIMEOUT | N/A
   score: number
-  status: string          // 정상 | 주의 | 이상
+  status: string          // Normal | Warning | Abnormal
   issues: string[]
   root_cause: string
   recommendations: string[]
   failure_type: string    // none | connection_refused | no_response | path_issue | slow_response
-  icmp_label?: string     // path_issue 시 ICMP 레이블 (ttl_expired | host_unreachable | ...)
-  icmp_src_ip?: string    // path_issue 시 ICMP 응답을 보낸 라우터 IP
+  icmp_label?: string     // ICMP label on path_issue (ttl_expired | host_unreachable | ...)
+  icmp_src_ip?: string    // Router IP that sent the ICMP response on path_issue
 }
 
 export interface NetworkHealthData {
@@ -374,7 +388,7 @@ export async function getNetworkHealth(upload_id: string, capture_token?: string
   const r = await fetch(`${BASE}/api/health/${upload_id}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, '통신 상태 진단 실패')
+  if (!r.ok) return handleError(r, 'Connection health diagnostics failed')
   return r.json()
 }
 
@@ -404,6 +418,6 @@ export async function getHar(upload_id: string, capture_token?: string): Promise
   const r = await fetch(`${BASE}/api/har/${upload_id}`, {
     headers: tokenHeader(upload_id, capture_token),
   })
-  if (!r.ok) return handleError(r, 'HAR 분석 로드 실패')
+  if (!r.ok) return handleError(r, 'Failed to load HAR analysis')
   return r.json()
 }

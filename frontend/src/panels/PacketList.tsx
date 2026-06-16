@@ -48,10 +48,10 @@ function decodePacketInfo(p: PacketEntry): string {
   const isFin    = flags.includes('FIN')
 
   if (!p.payload_hex || p.payload_len === 0) {
-    if (isSyn)    return '연결 요청 (SYN)'
-    if (isSynAck) return '연결 수락 (SYN+ACK)'
-    if (isRst)    return '연결 강제 종료 (RST)'
-    if (isFin)    return '연결 종료 (FIN)'
+    if (isSyn)    return 'Connection request (SYN)'
+    if (isSynAck) return 'Connection accepted (SYN+ACK)'
+    if (isRst)    return 'Connection reset (RST)'
+    if (isFin)    return 'Connection closed (FIN)'
     return 'ACK'
   }
 
@@ -63,7 +63,7 @@ function decodePacketInfo(p: PacketEntry): string {
   if (p.proto === 'UDP' && (p.src_port === 53 || p.dst_port === 53)) return `DNS ${p.payload_len}B`
   if (p.proto === 'UDP') return `UDP ${p.payload_len}B`
   if (p.proto === 'ICMP' || p.proto === 'ICMP6') return `ICMP ${p.payload_len}B`
-  return `데이터 ${p.payload_len}B`
+  return `Data ${p.payload_len}B`
 }
 
 interface Filters { src: string; dst: string; proto: string; flags: string }
@@ -79,7 +79,7 @@ function ExpandedRow({ p }: { p: PacketEntry }) {
       ) : dump ? (
         <pre className="hex-dump-wireshark">{dump}</pre>
       ) : (
-        <div className="pkt-expand-nodata">페이로드 없음</div>
+        <div className="pkt-expand-nodata">No payload</div>
       )}
     </div>
   )
@@ -112,7 +112,7 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setLoadError(msg)
-      console.error('패킷 로드 실패:', msg)
+      console.error('Failed to load packets:', msg)
     }
     finally { setLoading(false) }
   }, [uploadId])
@@ -132,9 +132,9 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
 
   if (loadError && !loaded) return (
     <div className="packet-list-init">
-      <div className="pkt-load-error">⚠ 패킷 로드 실패: {loadError}</div>
+      <div className="pkt-load-error">⚠ Failed to load packets: {loadError}</div>
       <button className="filter-btn" style={{ marginTop: 8 }} onClick={() => load(0, applied)}>
-        다시 시도
+        Retry
       </button>
     </div>
   )
@@ -142,23 +142,23 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
   if (!loaded) return (
     <div className="packet-list-init">
       <button className="filter-btn" onClick={() => load(0, applied)} disabled={loading}>
-        {loading ? '로딩 중...' : '패킷 목록 불러오기'}
+        {loading ? 'Loading...' : 'Load packet list'}
       </button>
-      <p className="pkt-hint">캡처된 모든 패킷을 타임스탬프 순으로 표시합니다 · 행 클릭 시 HEX 덤프 확인 가능</p>
+      <p className="pkt-hint">Shows all captured packets in timestamp order · click a row to view the HEX dump</p>
     </div>
   )
 
   return (
     <div className="packet-list-wrap">
       {loadError && (
-        <div className="pkt-load-error" style={{ marginBottom: 8 }}>⚠ 필터 적용 실패: {loadError}</div>
+        <div className="pkt-load-error" style={{ marginBottom: 8 }}>⚠ Failed to apply filter: {loadError}</div>
       )}
-      {/* 프리셋 필터 버튼 */}
+      {/* Preset filter buttons */}
       <div className="pkt-preset-bar">
-        <span className="pkt-preset-label">빠른 필터:</span>
+        <span className="pkt-preset-label">Quick filter:</span>
         {([
-          ['RST 연결', { flags: 'RST' }],
-          ['SYN 스캔', { flags: 'SYN', proto: 'TCP' }],
+          ['RST connections', { flags: 'RST' }],
+          ['SYN scan', { flags: 'SYN', proto: 'TCP' }],
           ['TCP', { proto: 'TCP' }],
           ['UDP', { proto: 'UDP' }],
           ['ICMP', { proto: 'ICMP' }],
@@ -168,46 +168,46 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
           </button>
         ))}
         {(applied.src || applied.dst || applied.proto || applied.flags) && (
-          <button className="pkt-preset-btn pkt-preset-clear" onClick={clearFilter}>✕ 초기화</button>
+          <button className="pkt-preset-btn pkt-preset-clear" onClick={clearFilter}>✕ Clear</button>
         )}
       </div>
 
-      {/* 필터 바 */}
+      {/* Filter bar */}
       <div className="pkt-filter-bar">
-        <input className="pkt-filter-input" placeholder="출발지 IP" value={filters.src} style={{ width: 130 }}
+        <input className="pkt-filter-input" placeholder="Source IP" value={filters.src} style={{ width: 130 }}
           onChange={e => setFilters(f => ({ ...f, src: e.target.value }))}
           onKeyDown={e => e.key === 'Enter' && applyFilter()} />
-        <input className="pkt-filter-input" placeholder="목적지 IP" value={filters.dst} style={{ width: 130 }}
+        <input className="pkt-filter-input" placeholder="Destination IP" value={filters.dst} style={{ width: 130 }}
           onChange={e => setFilters(f => ({ ...f, dst: e.target.value }))}
           onKeyDown={e => e.key === 'Enter' && applyFilter()} />
-        <input className="pkt-filter-input" placeholder="프로토콜" value={filters.proto} style={{ width: 90 }}
+        <input className="pkt-filter-input" placeholder="Protocol" value={filters.proto} style={{ width: 90 }}
           onChange={e => setFilters(f => ({ ...f, proto: e.target.value }))}
           onKeyDown={e => e.key === 'Enter' && applyFilter()} />
-        <input className="pkt-filter-input" placeholder="플래그 (SYN, RST...)" value={filters.flags} style={{ width: 140 }}
+        <input className="pkt-filter-input" placeholder="Flags (SYN, RST...)" value={filters.flags} style={{ width: 140 }}
           onChange={e => setFilters(f => ({ ...f, flags: e.target.value }))}
           onKeyDown={e => e.key === 'Enter' && applyFilter()} />
-        <button className="filter-btn" onClick={applyFilter}>필터</button>
-        <button className="filter-btn" style={{ background: '#4a5568' }} onClick={clearFilter}>초기화</button>
+        <button className="filter-btn" onClick={applyFilter}>Filter</button>
+        <button className="filter-btn" style={{ background: '#4a5568' }} onClick={clearFilter}>Clear</button>
         <span className="pkt-total">
-          <strong>{total.toLocaleString()}</strong> 패킷
-          {truncated && <span className="trunc-badge"> (상위 50,000만 집계)</span>}
+          <strong>{total.toLocaleString()}</strong> Packets
+          {truncated && <span className="trunc-badge"> (top 50,000 only)</span>}
         </span>
       </div>
 
-      {/* 테이블 */}
+      {/* Table */}
       <div className="pkt-table-wrap">
         <table className="pkt-global-table">
           <thead>
             <tr>
-              <th>No.</th><th>시각(s)</th><th>출발지</th><th>목적지</th>
-              <th>Proto</th><th>플래그</th><th>크기</th><th>Seq</th><th>정보</th>
+              <th>No.</th><th>Time(s)</th><th>Source</th><th>Destination</th>
+              <th>Proto</th><th>Flags</th><th>Size</th><th>Seq</th><th>Info</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="pkt-empty">로딩 중...</td></tr>
+              <tr><td colSpan={9} className="pkt-empty">Loading...</td></tr>
             ) : packets.length === 0 ? (
-              <tr><td colSpan={9} className="pkt-empty">패킷 없음</td></tr>
+              <tr><td colSpan={9} className="pkt-empty">No packets</td></tr>
             ) : packets.map((p, i) => {
               const color   = PROTO_COLOR[p.proto] ?? '#a0aec0'
               const isOpen  = expanded === i
@@ -223,7 +223,7 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
                       setExpanded(isOpen ? null : i)
                       if (onFlowSelect && !isOpen) onFlowSelect(p.session_id)
                     }}
-                    title={hasData ? '클릭: HEX 덤프 / 세션 열기' : '클릭: 세션 열기'}
+                    title={hasData ? 'Click: HEX dump / open session' : 'Click: open session'}
                   >
                     <td className="mono pkt-no">{p.no}</td>
                     <td className="mono pkt-relts">{p.rel_ts.toFixed(6)}</td>
@@ -250,15 +250,15 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
         </table>
       </div>
 
-      {/* 페이지네이션 */}
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="pkt-pagination">
           <button className="filter-btn" disabled={currentPage === 1 || loading} onClick={() => load(offset - limit, applied)}>
-            ◀ 이전
+            ◀ Previous
           </button>
-          <span className="pkt-page-info">{currentPage} / {totalPages} 페이지</span>
+          <span className="pkt-page-info">Page {currentPage} / {totalPages}</span>
           <button className="filter-btn" disabled={currentPage >= totalPages || loading} onClick={() => load(offset + limit, applied)}>
-            다음 ▶
+            Next ▶
           </button>
         </div>
       )}

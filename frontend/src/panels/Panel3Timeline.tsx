@@ -22,7 +22,7 @@ export function Panel3Timeline({ data, uploadId }: Props) {
   }, [uploadId])
 
   const buckets = data.buckets ?? []
-  if (!buckets.length) return <div className="no-data">데이터 없음</div>
+  if (!buckets.length) return <div className="no-data">No data</div>
 
   const xs: string[] = []
   const ys: number[] = []
@@ -77,7 +77,7 @@ export function Panel3Timeline({ data, uploadId }: Props) {
       await addAnnotation(uploadId, t0, t1, comment.trim())
       setMarkers((prev) => [...prev, { upload_id: uploadId, start_ts: t0, end_ts: t1, comment: comment.trim() }])
     } catch (e) {
-      setSaveErr(e instanceof Error ? e.message : '저장 실패')
+      setSaveErr(e instanceof Error ? e.message : 'Save failed')
       console.warn(JSON.stringify({ event: 'save_annotation_failed', error: (e as Error)?.message }))
     }
     setPendingRange(null)
@@ -96,7 +96,7 @@ export function Panel3Timeline({ data, uploadId }: Props) {
           fillcolor: 'rgba(66,153,225,0.15)',
         }]}
         layout={{
-          xaxis: { title: { text: '시간' }, type: 'date' },
+          xaxis: { title: { text: 'Time' }, type: 'date' },
           yaxis: { title: { text: 'bytes' } },
           shapes,
           annotations: chartAnnotations,
@@ -106,14 +106,15 @@ export function Panel3Timeline({ data, uploadId }: Props) {
         onRelayout={onRelayout}
       />
       {pendingRange && (
-        <div className="marker-modal">
+        <div className="marker-backdrop" onClick={() => { setPendingRange(null); setSaveErr(null) }}>
+        <div className="marker-modal" onClick={e => e.stopPropagation()}>
           <span style={{ fontSize: 12, color: '#a0aec0' }}>
             {new Date(pendingRange[0] * 1000).toLocaleTimeString()} –{' '}
             {new Date(pendingRange[1] * 1000).toLocaleTimeString()}
           </span>
           <input
             className="filter-input"
-            placeholder="코멘트 입력..."
+            placeholder="Enter a comment..."
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && saveMarker()}
@@ -121,14 +122,15 @@ export function Panel3Timeline({ data, uploadId }: Props) {
           />
           {saveErr && <span style={{ color: '#fc8181', fontSize: 12 }}>{saveErr}</span>}
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="filter-btn" onClick={saveMarker}>저장</button>
-            <button className="filter-btn" style={{ background: '#4a5568' }} onClick={() => { setPendingRange(null); setSaveErr(null) }}>취소</button>
+            <button className="filter-btn" onClick={saveMarker}>Save</button>
+            <button className="filter-btn" style={{ background: '#4a5568' }} onClick={() => { setPendingRange(null); setSaveErr(null) }}>Cancel</button>
           </div>
+        </div>
         </div>
       )}
       {uploadId && markers.length > 0 && (
         <div className="annotation-list">
-          <div className="annotation-list-title">저장된 마커 ({markers.length})</div>
+          <div className="annotation-list-title">Saved Markers ({markers.length})</div>
           <ul className="annotation-items">
             {markers.map((m, i) => (
               <li key={i} className="annotation-item">

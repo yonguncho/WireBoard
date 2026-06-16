@@ -9,7 +9,7 @@ interface Props {
   baseFilename: string
 }
 
-// 세션 매칭 키: 양방향 동일 취급 (IP 쌍 정렬 + dst_port + protocol)
+// Session match key: treat both directions as identical (sorted IP pair + dst_port + protocol)
 function sessionKey(s: CompareSession): string {
   const [a, b] = s.src_ip < s.dst_ip ? [s.src_ip, s.dst_ip] : [s.dst_ip, s.src_ip]
   return `${a}|${b}|${s.dst_port}|${s.protocol}`
@@ -30,13 +30,13 @@ function fmtTs(ts: number, baseTs: number): string {
 type SessionFilter = 'all' | 'new' | 'removed' | 'common'
 type InnerTab = 'sessions' | 'ips' | 'protocols'
 
-// 모달 상태 타입
+// Modal state type
 type ModalState =
   | { kind: 'new_ips';     sessions: CompareSession[]; title: string }
   | { kind: 'removed_ips'; sessions: CompareSession[]; title: string }
   | { kind: 'new_ports';   sessions: CompareSession[]; title: string }
 
-// ── 세션 상세 모달 ────────────────────────────────────────────────────────
+// ── Session detail modal ──────────────────────────────────────────────────
 function SessionModal({ state, onClose }: { state: ModalState; onClose: () => void }) {
   return (
     <div className="cmp-modal-overlay" onClick={onClose}>
@@ -47,17 +47,17 @@ function SessionModal({ state, onClose }: { state: ModalState; onClose: () => vo
         </div>
         <div className="cmp-modal-body">
           {state.sessions.length === 0
-            ? <div className="no-data">세션 없음</div>
+            ? <div className="no-data">No sessions</div>
             : (
               <table className="cmp-session-table">
                 <thead>
                   <tr>
-                    <th>시각</th>
-                    <th>출발지</th>
-                    <th>목적지</th>
-                    <th>프로토콜</th>
-                    <th>패킷</th>
-                    <th>전송량</th>
+                    <th>Time</th>
+                    <th>Source</th>
+                    <th>Destination</th>
+                    <th>Protocol</th>
+                    <th>Packets</th>
+                    <th>Bytes</th>
                     <th>RST</th>
                   </tr>
                 </thead>
@@ -86,7 +86,7 @@ function SessionModal({ state, onClose }: { state: ModalState; onClose: () => vo
   )
 }
 
-// ── 세션 사이드바이사이드 ─────────────────────────────────────────────────
+// ── Session side-by-side ──────────────────────────────────────────────────
 function SideBySide({
   result,
   baseFilename,
@@ -111,13 +111,13 @@ function SideBySide({
   const baseTs0   = result.base_sessions[0]?.start_ts    ?? 0
   const compareTs0 = result.compare_sessions[0]?.start_ts ?? 0
 
-  // 기준 세션 분류
+  // Classify base sessions
   const baseSessions = useMemo(() => result.base_sessions.map(s => ({
     ...s,
     status: compareKeySet.has(sessionKey(s)) ? 'common' : 'removed',
   })), [result.base_sessions, compareKeySet])
 
-  // 비교 세션 분류
+  // Classify compare sessions
   const compareSessions = useMemo(() => result.compare_sessions.map(s => ({
     ...s,
     status: baseKeySet.has(sessionKey(s)) ? 'common' : 'new',
@@ -127,26 +127,26 @@ function SideBySide({
     if (filter === 'all')     return baseSessions
     if (filter === 'removed') return baseSessions.filter(s => s.status === 'removed')
     if (filter === 'common')  return baseSessions.filter(s => s.status === 'common')
-    return [] // 'new' — base에 신규 없음
+    return [] // 'new' — no new sessions in base
   }, [baseSessions, filter])
 
   const filteredCompare = useMemo(() => {
     if (filter === 'all')    return compareSessions
     if (filter === 'new')    return compareSessions.filter(s => s.status === 'new')
     if (filter === 'common') return compareSessions.filter(s => s.status === 'common')
-    return [] // 'removed' — compare에 사라진 없음
+    return [] // 'removed' — no removed sessions in compare
   }, [compareSessions, filter])
 
   const FILTERS: { key: SessionFilter; label: string }[] = [
-    { key: 'all',     label: '전체' },
-    { key: 'new',     label: '신규만' },
-    { key: 'removed', label: '사라진만' },
-    { key: 'common',  label: '공통만' },
+    { key: 'all',     label: 'All' },
+    { key: 'new',     label: 'New only' },
+    { key: 'removed', label: 'Removed only' },
+    { key: 'common',  label: 'Common only' },
   ]
 
   return (
     <div className="cmp-sbs-wrap">
-      {/* 필터 바 */}
+      {/* Filter bar */}
       <div className="cmp-filter-bar">
         {FILTERS.map(f => (
           <button
@@ -157,20 +157,20 @@ function SideBySide({
             {f.label}
           </button>
         ))}
-        <span className="cmp-sbs-hint">세션 행 클릭 시 상세 펼침</span>
+        <span className="cmp-sbs-hint">Click a session row to expand details</span>
       </div>
 
-      {/* 좌우 분할 */}
+      {/* Split view */}
       <div className="cmp-sbs-grid">
-        {/* 기준 컬럼 */}
+        {/* Base column */}
         <div className="cmp-sbs-col">
           <div className="cmp-sbs-col-header base">
-            기준: {baseFilename}
-            <span className="cmp-sbs-count">{filteredBase.length}개 세션</span>
+            Base: {baseFilename}
+            <span className="cmp-sbs-count">{filteredBase.length} sessions</span>
           </div>
           <div className="cmp-sbs-list">
             {filteredBase.length === 0
-              ? <div className="no-data">해당 세션 없음</div>
+              ? <div className="no-data">No matching sessions</div>
               : filteredBase.map(s => (
                 <SessionRow
                   key={s.session_id}
@@ -184,15 +184,15 @@ function SideBySide({
           </div>
         </div>
 
-        {/* 비교 컬럼 */}
+        {/* Compare column */}
         <div className="cmp-sbs-col">
           <div className="cmp-sbs-col-header compare">
-            비교: {compareFilename}
-            <span className="cmp-sbs-count">{filteredCompare.length}개 세션</span>
+            Compare: {compareFilename}
+            <span className="cmp-sbs-count">{filteredCompare.length} sessions</span>
           </div>
           <div className="cmp-sbs-list">
             {filteredCompare.length === 0
-              ? <div className="no-data">해당 세션 없음</div>
+              ? <div className="no-data">No matching sessions</div>
               : filteredCompare.map(s => (
                 <SessionRow
                   key={s.session_id}
@@ -209,7 +209,7 @@ function SideBySide({
 
       {result.base_session_total > 300 || result.compare_session_total > 300
         ? <div className="cmp-truncate-notice">
-            ⚠ 세션 수가 많아 각 최대 300개만 표시 (기준 {result.base_session_total}개 / 비교 {result.compare_session_total}개)
+            ⚠ Too many sessions — showing up to 300 each (base {result.base_session_total} / compare {result.compare_session_total})
           </div>
         : null
       }
@@ -230,8 +230,8 @@ function SessionRow({
     s.status === 'removed' ? 'cmp-badge-removed' :
                              'cmp-badge-common'
   const badgeLabel =
-    s.status === 'new'     ? '신규' :
-    s.status === 'removed' ? '사라짐' : '공통'
+    s.status === 'new'     ? 'New' :
+    s.status === 'removed' ? 'Removed' : 'Common'
 
   const duration = s.end_ts - s.start_ts
 
@@ -256,19 +256,19 @@ function SessionRow({
       {expanded && (
         <div className="cmp-session-detail">
           <div className="cmp-detail-grid">
-            <span className="cmp-detail-label">세션 ID</span>
+            <span className="cmp-detail-label">Session ID</span>
             <span className="mono small">{s.session_id}</span>
-            <span className="cmp-detail-label">시작</span>
+            <span className="cmp-detail-label">Start</span>
             <span className="mono small">{new Date(s.start_ts * 1000).toISOString().replace('T', ' ').slice(0, 23)}</span>
-            <span className="cmp-detail-label">종료</span>
+            <span className="cmp-detail-label">End</span>
             <span className="mono small">{new Date(s.end_ts * 1000).toISOString().replace('T', ' ').slice(0, 23)}</span>
-            <span className="cmp-detail-label">지속시간</span>
+            <span className="cmp-detail-label">Duration</span>
             <span>{duration < 1 ? `${(duration * 1000).toFixed(0)}ms` : `${duration.toFixed(3)}s`}</span>
-            <span className="cmp-detail-label">패킷 수</span>
+            <span className="cmp-detail-label">Packets</span>
             <span>{s.packet_count}</span>
-            <span className="cmp-detail-label">전송↑</span>
+            <span className="cmp-detail-label">Sent↑</span>
             <span>{fmtBytes(s.bytes_sent)}</span>
-            <span className="cmp-detail-label">수신↓</span>
+            <span className="cmp-detail-label">Received↓</span>
             <span>{fmtBytes(s.bytes_recv)}</span>
           </div>
         </div>
@@ -277,7 +277,7 @@ function SessionRow({
   )
 }
 
-// ── 메인 컴포넌트 ─────────────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────────────────────
 export function ComparePanel({ baseUploadId, baseFilename }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
@@ -288,7 +288,7 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
 
   const handleFile = useCallback(async (file: File) => {
     if (!ALLOWED.test(file.name)) {
-      setError('지원 포맷: .pcap · .pcapng · .cap · .har · .log · .txt · .tcpdump')
+      setError('Supported formats: .pcap · .pcapng · .cap · .har · .log · .txt · .tcpdump')
       return
     }
     setLoading(true)
@@ -314,43 +314,43 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
     if (file) handleFile(file)
   }, [handleFile])
 
-  // 카운트 클릭 핸들러
+  // Count click handlers
   function openNewIps(r: CompareResult) {
     const ipSet = new Set(r.new_ips)
     const sessions = r.compare_sessions.filter(
       s => ipSet.has(s.src_ip) || ipSet.has(s.dst_ip)
     )
-    setModal({ kind: 'new_ips', sessions, title: `신규 IP 세션 (${r.new_ips.length}개 IP · ${sessions.length}개 세션)` })
+    setModal({ kind: 'new_ips', sessions, title: `New IP sessions (${r.new_ips.length} IPs · ${sessions.length} sessions)` })
   }
   function openRemovedIps(r: CompareResult) {
     const ipSet = new Set(r.removed_ips)
     const sessions = r.base_sessions.filter(
       s => ipSet.has(s.src_ip) || ipSet.has(s.dst_ip)
     )
-    setModal({ kind: 'removed_ips', sessions, title: `사라진 IP 세션 (${r.removed_ips.length}개 IP · ${sessions.length}개 세션)` })
+    setModal({ kind: 'removed_ips', sessions, title: `Removed IP sessions (${r.removed_ips.length} IPs · ${sessions.length} sessions)` })
   }
   function openNewPorts(r: CompareResult) {
     const portSet = new Set(r.new_ports)
     const sessions = r.compare_sessions.filter(s => portSet.has(s.dst_port))
-    setModal({ kind: 'new_ports', sessions, title: `신규 포트 세션 (${r.new_ports.length}개 포트 · ${sessions.length}개 세션)` })
+    setModal({ kind: 'new_ports', sessions, title: `New port sessions (${r.new_ports.length} ports · ${sessions.length} sessions)` })
   }
 
   return (
     <div className="compare-panel">
-      {/* 헤더 */}
+      {/* Header */}
       <div className="compare-header">
         <div className="compare-file-label">
-          <span className="chip chip-file">기준</span>
+          <span className="chip chip-file">Base</span>
           <span className="compare-filename">{baseFilename}</span>
         </div>
         <span className="compare-arrow">vs</span>
         <div className="compare-file-label">
-          <span className="chip chip-file">비교</span>
-          <span className="compare-filename">{compareFilename ?? '파일 미선택'}</span>
+          <span className="chip chip-file">Compare</span>
+          <span className="compare-filename">{compareFilename ?? 'No file selected'}</span>
         </div>
       </div>
 
-      {/* 업로드 존 */}
+      {/* Upload zone */}
       {!result && !loading && (
         <div
           className="compare-drop-zone"
@@ -365,8 +365,8 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
             hidden
           />
           <label htmlFor="compare-input" className="compare-drop-label">
-            <p className="drop-primary">비교할 파일을 드래그하거나 클릭하여 업로드</p>
-            <p className="drop-hint">업로드 후 세션 사이드바이사이드 비교 · IP/포트 차이 · 프로토콜 변화를 표시합니다</p>
+            <p className="drop-primary">Drag a file to compare or click to upload</p>
+            <p className="drop-hint">After upload, shows side-by-side session comparison · IP/port differences · protocol changes</p>
           </label>
         </div>
       )}
@@ -374,7 +374,7 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
       {loading && (
         <div className="compare-loading">
           <div className="spinner" style={{ width: 28, height: 28 }} />
-          <span>비교 파일 분석 중...</span>
+          <span>Analyzing compare file...</span>
         </div>
       )}
 
@@ -387,7 +387,7 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
 
       {result && compareFilename && (
         <>
-          {/* ── 요약 메트릭 (카운트 클릭 가능) ── */}
+          {/* ── Summary metrics (counts are clickable) ── */}
           <div className="compare-summary-row">
             <div className="compare-metric">
               <div className="compare-metric-val">
@@ -395,45 +395,45 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
                   ? 'N/A'
                   : `${result.traffic_delta_pct > 0 ? '+' : ''}${result.traffic_delta_pct}%`}
               </div>
-              <div className="compare-metric-label">트래픽 증감</div>
+              <div className="compare-metric-label">Traffic change</div>
             </div>
             <div className="compare-metric">
               <div className="compare-metric-val">{fmtBytes(result.byte_ratio.a_total ?? 0)}</div>
-              <div className="compare-metric-label">기준 트래픽</div>
+              <div className="compare-metric-label">Base traffic</div>
             </div>
             <div className="compare-metric">
               <div className="compare-metric-val">{fmtBytes(result.byte_ratio.b_total ?? 0)}</div>
-              <div className="compare-metric-label">비교 트래픽</div>
+              <div className="compare-metric-label">Compare traffic</div>
             </div>
 
-            {/* 클릭 가능 카운트 */}
+            {/* Clickable counts */}
             <button
               className="compare-metric clickable"
               onClick={() => openNewIps(result)}
-              title="클릭하여 신규 IP 세션 목록 보기"
+              title="Click to view new IP session list"
             >
               <div className="compare-metric-val level-danger">{result.new_ips.length}</div>
-              <div className="compare-metric-label">신규 IP ↗</div>
+              <div className="compare-metric-label">New IPs ↗</div>
             </button>
             <button
               className="compare-metric clickable"
               onClick={() => openRemovedIps(result)}
-              title="클릭하여 사라진 IP 세션 목록 보기"
+              title="Click to view removed IP session list"
             >
               <div className="compare-metric-val level-warn">{result.removed_ips.length}</div>
-              <div className="compare-metric-label">사라진 IP ↗</div>
+              <div className="compare-metric-label">Removed IPs ↗</div>
             </button>
             <button
               className="compare-metric clickable"
               onClick={() => openNewPorts(result)}
-              title="클릭하여 신규 포트 세션 목록 보기"
+              title="Click to view new port session list"
             >
               <div className="compare-metric-val">{result.new_ports.length}</div>
-              <div className="compare-metric-label">신규 포트 ↗</div>
+              <div className="compare-metric-label">New ports ↗</div>
             </button>
           </div>
 
-          {/* ── 내부 탭 ── */}
+          {/* ── Inner tabs ── */}
           <div className="cmp-inner-tabs">
             {(['sessions', 'ips', 'protocols'] as InnerTab[]).map(t => (
               <button
@@ -441,12 +441,12 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
                 className={`cmp-inner-tab${innerTab === t ? ' active' : ''}`}
                 onClick={() => setInnerTab(t)}
               >
-                {{ sessions: '⇄ 세션 비교', ips: '⊕ IP / 포트', protocols: '◎ 프로토콜' }[t]}
+                {{ sessions: '⇄ Session compare', ips: '⊕ IP / Port', protocols: '◎ Protocol' }[t]}
               </button>
             ))}
           </div>
 
-          {/* ── 세션 사이드바이사이드 탭 ── */}
+          {/* ── Session side-by-side tab ── */}
           {innerTab === 'sessions' && (
             <SideBySide
               result={result}
@@ -455,37 +455,37 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
             />
           )}
 
-          {/* ── IP / 포트 탭 ── */}
+          {/* ── IP / Port tab ── */}
           {innerTab === 'ips' && (
             <div className="compare-grid">
               <ClickableIpList
-                title="신규 IP (비교에만 있음)"
+                title="New IPs (compare only)"
                 ips={result.new_ips}
                 variant="danger"
                 onClick={() => openNewIps(result)}
               />
               <ClickableIpList
-                title="사라진 IP (기준에만 있음)"
+                title="Removed IPs (base only)"
                 ips={result.removed_ips}
                 variant="warn"
                 onClick={() => openRemovedIps(result)}
               />
               <ClickableIpList
-                title="공통 IP"
+                title="Common IPs"
                 ips={result.common_ips}
                 variant="ok"
               />
               <div className="compare-list-card">
                 <div className="compare-list-title">
-                  신규 포트 (비교에만 있음)
+                  New ports (compare only)
                   {result.new_ports.length > 0 && (
                     <button className="cmp-list-detail-btn" onClick={() => openNewPorts(result)}>
-                      세션 보기
+                      View sessions
                     </button>
                   )}
                 </div>
                 {result.new_ports.length === 0
-                  ? <div className="no-data">없음</div>
+                  ? <div className="no-data">None</div>
                   : <div className="compare-port-list">
                       {result.new_ports.map((p) => (
                         <span key={p} className="port-chip">{p}</span>
@@ -496,17 +496,17 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
             </div>
           )}
 
-          {/* ── 프로토콜 탭 ── */}
+          {/* ── Protocol tab ── */}
           {innerTab === 'protocols' && (
             <div className="compare-grid">
               {Object.keys(result.protocol_diff).length === 0
-                ? <div className="no-data">프로토콜 차이 없음</div>
+                ? <div className="no-data">No protocol differences</div>
                 : (
                   <div className="compare-list-card wide">
-                    <div className="compare-list-title">프로토콜 트래픽 변화 (세션 수)</div>
+                    <div className="compare-list-title">Protocol traffic change (session count)</div>
                     <table className="compare-proto-table">
                       <thead>
-                        <tr><th>프로토콜</th><th>기준</th><th>비교</th><th>변화</th></tr>
+                        <tr><th>Protocol</th><th>Base</th><th>Compare</th><th>Change</th></tr>
                       </thead>
                       <tbody>
                         {Object.entries(result.protocol_diff).map(([proto, { a, b }]) => {
@@ -535,12 +535,12 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
             style={{ marginTop: 16 }}
             onClick={() => { setResult(null); setCompareFilename(null) }}
           >
-            다른 파일과 비교
+            Compare with another file
           </button>
         </>
       )}
 
-      {/* 모달 */}
+      {/* Modal */}
       {modal && <SessionModal state={modal} onClose={() => setModal(null)} />}
     </div>
   )
@@ -560,12 +560,12 @@ function ClickableIpList({
         {title}
         {onClick && ips.length > 0 && (
           <button className="cmp-list-detail-btn" onClick={onClick}>
-            세션 보기
+            View sessions
           </button>
         )}
       </div>
       {ips.length === 0
-        ? <div className="no-data">없음</div>
+        ? <div className="no-data">None</div>
         : <ul className="compare-ip-list">
             {ips.map((ip) => <li key={ip}>{ip}</li>)}
           </ul>

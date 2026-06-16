@@ -30,7 +30,7 @@ export function Panel6IpRanking({ data, uploadId, onFlowSelect }: Props) {
     try {
       const r = await getDrilldown(uploadId, ip)
       setDrill({ ip: r.ip, sessions: r.sessions, count: r.session_count, truncated: r.truncated })
-    } catch { /* 드릴다운 실패 시 무시 */ } finally {
+    } catch { /* Ignore drill-down failures */ } finally {
       setLoading(false)
     }
   }
@@ -42,12 +42,12 @@ export function Panel6IpRanking({ data, uploadId, onFlowSelect }: Props) {
     }
   }
 
-  if (!rows.length) return <div className="no-data">데이터 없음</div>
+  if (!rows.length) return <div className="no-data">No data</div>
   return (
     <div style={{ position: 'relative' }}>
       <table className="mini-table full-width">
         <thead>
-          <tr><th>#</th><th>IP</th><th>바이트</th><th>유형</th></tr>
+          <tr><th>#</th><th>IP</th><th>Bytes</th><th>Type</th></tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
@@ -62,20 +62,21 @@ export function Panel6IpRanking({ data, uploadId, onFlowSelect }: Props) {
           ))}
         </tbody>
       </table>
-      {loading && <div style={{ textAlign: 'center', color: '#a0aec0', fontSize: 12, marginTop: 4 }}>로딩 중...</div>}
+      {loading && <div style={{ textAlign: 'center', color: '#a0aec0', fontSize: 12, marginTop: 4 }}>Loading...</div>}
       {drill && (
-        <div className="drilldown-modal">
+        <div className="drilldown-backdrop" onClick={() => setDrill(null)}>
+        <div className="drilldown-modal" onClick={e => e.stopPropagation()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <strong style={{ color: '#63b3ed' }}>
-              {drill.ip} — {drill.count}개 세션
-              {drill.truncated && <span style={{ color: '#a0aec0', fontWeight: 400, fontSize: 11, marginLeft: 6 }}>(바이트 상위 50건 표시)</span>}
+              {drill.ip} — {drill.count} Sessions
+              {drill.truncated && <span style={{ color: '#a0aec0', fontWeight: 400, fontSize: 11, marginLeft: 6 }}>(showing top 50 by bytes)</span>}
             </strong>
             <button className="filter-btn" style={{ background: '#4a5568', padding: '2px 8px' }} onClick={() => setDrill(null)}>✕</button>
           </div>
           <table className="mini-table full-width">
             <thead>
               <tr>
-                <th>대상</th><th>포트</th><th>프로토콜</th><th>바이트</th><th>시작</th><th>RST</th>
+                <th>Destination</th><th>Port</th><th>Protocol</th><th>Bytes</th><th>Start</th><th>RST</th>
                 {onFlowSelect && <th>Flow</th>}
               </tr>
             </thead>
@@ -93,13 +94,14 @@ export function Panel6IpRanking({ data, uploadId, onFlowSelect }: Props) {
                     <td>{fmtTs(s.start_ts)}</td>
                     <td>{s.rst ? '⚠' : ''}</td>
                     {onFlowSelect && (
-                      <td><button className="flow-open-btn" onClick={() => openFlow(s.session_id)} title="패킷 뷰어 열기">패킷 ▶</button></td>
+                      <td><button className="flow-open-btn" onClick={() => openFlow(s.session_id)} title="Open packet viewer">Packets ▶</button></td>
                     )}
                   </tr>
                 )
               })}
             </tbody>
           </table>
+        </div>
         </div>
       )}
     </div>

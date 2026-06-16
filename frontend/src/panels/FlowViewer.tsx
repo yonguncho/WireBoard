@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { getFlow, getStream } from '../api'
 import type { FlowData, FlowPacket, StreamData } from '../api'
 
-// ── HEX 유틸 ────────────────────────────────────────────────────────────────
+// ── HEX utils ─────────────────────────────────────────────────────────────────
 
 function hexToBytes(hex: string): number[] {
   return (hex.replace(/\s+/g, '').match(/.{1,2}/g) ?? []).map(b => parseInt(b, 16))
@@ -32,7 +32,7 @@ function hexToAscii(hex: string): string {
     .join('')
 }
 
-// ── 프로토콜 디코드 ──────────────────────────────────────────────────────────
+// ── Protocol decode ──────────────────────────────────────────────────────────
 
 function decodeInfo(pkt: FlowPacket): string {
   const flags    = pkt.flags || ''
@@ -42,11 +42,11 @@ function decodeInfo(pkt: FlowPacket): string {
   const isFin    = flags.includes('FIN')
 
   if (!pkt.payload_hex || pkt.payload_len === 0) {
-    if (isSyn)    return '연결 요청 (SYN)'
-    if (isSynAck) return '연결 수락 (SYN+ACK)'
-    if (isRst)    return '연결 강제 종료 (RST)'
-    if (isFin)    return '연결 종료 (FIN)'
-    return '확인 응답 (ACK)'
+    if (isSyn)    return 'Connection request (SYN)'
+    if (isSynAck) return 'Connection accept (SYN+ACK)'
+    if (isRst)    return 'Connection reset (RST)'
+    if (isFin)    return 'Connection close (FIN)'
+    return 'Acknowledgment (ACK)'
   }
 
   const ascii = hexToAscii(pkt.payload_hex).trimStart()
@@ -55,12 +55,12 @@ function decodeInfo(pkt: FlowPacket): string {
   const httpRes = ascii.match(/^HTTP\/([\d.]+)\s+(\d+)\s*([^\r\n]*)/)
   if (httpRes) return `HTTP ${httpRes[2]} ${httpRes[3].trim() || 'OK'}`
   if (pkt.proto === 'UDP') return `UDP ${pkt.payload_len} bytes`
-  if (isRst) return `RST+데이터 ${pkt.payload_len} bytes`
-  if (isFin) return `FIN+데이터 ${pkt.payload_len} bytes`
-  return `데이터 ${pkt.payload_len} bytes`
+  if (isRst) return `RST+data ${pkt.payload_len} bytes`
+  if (isFin) return `FIN+data ${pkt.payload_len} bytes`
+  return `Data ${pkt.payload_len} bytes`
 }
 
-// ── 연결 분석 (클라이언트 사이드) ────────────────────────────────────────────
+// ── Connection analysis (client-side) ────────────────────────────────────────
 
 interface FlowAnalysis {
   handshake: string; rttMs: number | null
@@ -101,23 +101,23 @@ function computeFlowAnalysis(packets: FlowPacket[]): FlowAnalysis {
   const closeType = rstPkts.length ? 'RESET' : finPkts.length ? 'NORMAL' : 'TIMEOUT'
 
   let score = 100; const issues: string[] = []
-  if (handshake === 'REFUSED')   { score -= 40; issues.push('연결 거부 (서버 RST)') }
-  else if (handshake === 'TIMEOUT')   { score -= 35; issues.push('연결 응답 없음 (타임아웃)') }
-  else if (handshake === 'HALF_OPEN') { score -= 25; issues.push('불완전한 핸드셰이크') }
+  if (handshake === 'REFUSED')   { score -= 40; issues.push('Connection refused (server RST)') }
+  else if (handshake === 'TIMEOUT')   { score -= 35; issues.push('No connection response (timeout)') }
+  else if (handshake === 'HALF_OPEN') { score -= 25; issues.push('Incomplete handshake') }
   if (rttMs !== null) {
-    if (rttMs > 500) { score -= 20; issues.push(`RTT 심각 (${rttMs.toFixed(1)} ms)`) }
-    else if (rttMs > 150) { score -= 10; issues.push(`RTT 높음 (${rttMs.toFixed(1)} ms)`) }
+    if (rttMs > 500) { score -= 20; issues.push(`Critical RTT (${rttMs.toFixed(1)} ms)`) }
+    else if (rttMs > 150) { score -= 10; issues.push(`High RTT (${rttMs.toFixed(1)} ms)`) }
   }
   const rr = dataPkts ? retransmits / dataPkts : 0
-  if (rr > 0.20) { score -= 30; issues.push(`재전송 과다 (${(rr * 100).toFixed(0)}%)`) }
-  else if (rr > 0.05) { score -= 15; issues.push(`재전송 발생 (${(rr * 100).toFixed(0)}%)`) }
-  if (closeType === 'RESET') { score -= 10; issues.push('RST 강제 종료') }
+  if (rr > 0.20) { score -= 30; issues.push(`Excessive retransmits (${(rr * 100).toFixed(0)}%)`) }
+  else if (rr > 0.05) { score -= 15; issues.push(`Retransmits present (${(rr * 100).toFixed(0)}%)`) }
+  if (closeType === 'RESET') { score -= 10; issues.push('RST forced close') }
   score = Math.max(0, Math.min(100, score))
-  const status = score >= 80 ? '정상' : score >= 50 ? '주의' : '이상'
+  const status = score >= 80 ? 'Normal' : score >= 50 ? 'Warning' : 'Critical'
   return { handshake, rttMs, retransmits, dataPkts, closeType, score, status, issues }
 }
 
-// ── 서브컴포넌트 ─────────────────────────────────────────────────────────────
+// ── Subcomponents ────────────────────────────────────────────────────────────
 
 function fmtBytes(b: number) {
   if (b >= 1e6) return (b / 1e6).toFixed(1) + ' MB'
@@ -149,7 +149,7 @@ function PacketRow({ pkt, idx, base }: { pkt: FlowPacket; idx: number; base: str
         className={`pkt-row ${isFwd ? 'pkt-fwd' : 'pkt-rev'}`}
         onClick={() => hasHex && setExpanded(v => !v)}
         style={{ cursor: hasHex ? 'pointer' : 'default' }}
-        title={hasHex ? '클릭 → HEX 덤프' : ''}
+        title={hasHex ? 'Click → HEX dump' : ''}
       >
         <td className="mono pkt-num">{idx + 1}</td>
         <td className="mono pkt-relts">{idx === 0 ? '0.000 s' : fmtRelTs(pkt.rel_ts)}</td>
@@ -174,7 +174,7 @@ function PacketRow({ pkt, idx, base }: { pkt: FlowPacket; idx: number; base: str
   )
 }
 
-// ── 래더(Flow Sequence) 다이어그램 ───────────────────────────────────────────
+// ── Ladder (Flow Sequence) diagram ───────────────────────────────────────────
 
 function ladderColor(pkt: FlowPacket): string {
   const flags = pkt.flags || ''
@@ -187,14 +187,14 @@ function ladderColor(pkt: FlowPacket): string {
 }
 
 const LADDER_LEGEND: [string, string][] = [
-  ['#60a5fa', 'SYN'], ['#c084fc', 'SYN+ACK'], ['#22c55e', '데이터'],
+  ['#60a5fa', 'SYN'], ['#c084fc', 'SYN+ACK'], ['#22c55e', 'Data'],
   ['#718096', 'ACK'], ['#f59e0b', 'FIN'], ['#ef4444', 'RST'],
 ]
 
 function LadderView({ packets, session }: { packets: FlowPacket[]; session: FlowData['session'] | null }) {
   const [selected, setSelected] = useState<number | null>(null)
   if (!session) return null
-  if (!packets.length) return <div className="flow-no-packets">패킷 없음 (PCAP 포맷이 아닌 경우 미지원)</div>
+  if (!packets.length) return <div className="flow-no-packets">No packets (unsupported for non-PCAP formats)</div>
 
   const rows: ReactNode[] = []
   packets.forEach((p, i) => {
@@ -204,7 +204,7 @@ function LadderView({ packets, session }: { packets: FlowPacket[]; session: Flow
       rows.push(
         <div key={`gap-${i}`} className="ladder-gap">
           <span className="ladder-gap-line" />
-          <span className="ladder-gap-label">⏱ {gap.toFixed(1)}s 공백</span>
+          <span className="ladder-gap-label">⏱ {gap.toFixed(1)}s gap</span>
           <span className="ladder-gap-line" />
         </div>
       )
@@ -219,7 +219,7 @@ function LadderView({ packets, session }: { packets: FlowPacket[]; session: Flow
         className={`ladder-row${isSel ? ' selected' : ''}`}
         onClick={() => hasHex && setSelected(isSel ? null : i)}
         style={{ cursor: hasHex ? 'pointer' : 'default' }}
-        title={hasHex ? '클릭 → HEX 덤프' : ''}
+        title={hasHex ? 'Click → HEX dump' : ''}
       >
         <span className="ladder-time">{i === 0 ? '0.000 s' : fmtRelTs(p.rel_ts)}</span>
         <div className="ladder-arrow-track">
@@ -243,7 +243,7 @@ function LadderView({ packets, session }: { packets: FlowPacket[]; session: Flow
         <span className="ladder-endpoint src">
           {session.src_ip}<span className="ep-port">:{session.src_port}</span>
         </span>
-        <span style={{ fontSize: 11, color: 'var(--txt-muted)' }}>{session.protocol} 흐름 · {packets.length}패킷</span>
+        <span style={{ fontSize: 11, color: 'var(--txt-muted)' }}>{session.protocol} flow · {packets.length} packets</span>
         <span className="ladder-endpoint dst">
           {session.dst_ip}<span className="ep-port">:{session.dst_port}</span>
         </span>
@@ -259,7 +259,7 @@ function LadderView({ packets, session }: { packets: FlowPacket[]; session: Flow
             <span className="ladder-legend-swatch" style={{ background: c }} />{label}
           </span>
         ))}
-        <span className="ladder-legend-item" style={{ marginLeft: 'auto' }}>→ 송신 · ← 수신 · 행 클릭 시 HEX</span>
+        <span className="ladder-legend-item" style={{ marginLeft: 'auto' }}>→ Sent · ← Received · Click row for HEX</span>
       </div>
     </div>
   )
@@ -273,13 +273,13 @@ function ReplayView({ packets }: { packets: FlowPacket[] }) {
       .filter(s => s.text.trim().length > 0),
     [packets]
   )
-  if (!segments.length) return <div className="replay-empty">재생할 페이로드 없음</div>
+  if (!segments.length) return <div className="replay-empty">No payload to replay</div>
   return (
     <div className="replay-view">
       {segments.map((seg, i) => (
         <div key={i} className={`replay-segment ${seg.dir === 'fwd' ? 'replay-fwd' : 'replay-rev'}`}>
           <div className="replay-dir-label">
-            {seg.dir === 'fwd' ? '→ 송신' : '← 수신'}
+            {seg.dir === 'fwd' ? '→ Sent' : '← Received'}
             <span className="replay-info-tag"> [{seg.info}]</span>
           </div>
           <pre className="replay-text">{seg.text}</pre>
@@ -310,13 +310,13 @@ function buildExpertEvents(packets: FlowPacket[]): ExpertEvent[] {
     const relTs = p.rel_ts
 
     if (flags.includes('SYN') && !flags.includes('ACK') && i > 0)
-      events.push({ severity: 'warn', pktIdx: i, relTs, msg: 'SYN 재전송' })
+      events.push({ severity: 'warn', pktIdx: i, relTs, msg: 'SYN retransmit' })
 
     if (p.payload_len > 0 && p.proto === 'TCP') {
       const key = `${p.direction}:${p.seq}`
       const prev = seenSeqs.get(key)
       if (prev !== undefined) {
-        events.push({ severity: 'warn', pktIdx: i, relTs, msg: `TCP 재전송 (Seq ${p.seq}, 패킷 #${prev + 1})` })
+        events.push({ severity: 'warn', pktIdx: i, relTs, msg: `TCP retransmit (Seq ${p.seq}, packet #${prev + 1})` })
       } else {
         seenSeqs.set(key, i)
       }
@@ -324,11 +324,11 @@ function buildExpertEvents(packets: FlowPacket[]): ExpertEvent[] {
 
     if (flags.includes('RST')) {
       const hasData = packets.slice(0, i).some(q => q.payload_len > 0)
-      events.push({ severity: hasData ? 'error' : 'warn', pktIdx: i, relTs, msg: hasData ? 'RST — 데이터 전송 중 강제 종료' : 'RST — 연결 수립 전 거부' })
+      events.push({ severity: hasData ? 'error' : 'warn', pktIdx: i, relTs, msg: hasData ? 'RST — forced close during data transfer' : 'RST — refused before connection established' })
     }
 
     if (p.seq === 0 && p.ack === 0 && !flags.includes('SYN') && p.payload_len === 0 && p.proto === 'TCP')
-      events.push({ severity: 'note', pktIdx: i, relTs, msg: 'Seq/Ack 모두 0 — 캡처 불완전 가능성' })
+      events.push({ severity: 'note', pktIdx: i, relTs, msg: 'Seq/Ack both 0 — capture may be incomplete' })
   })
 
   return events
@@ -339,9 +339,9 @@ function ConnAnalysisView({ packets, session }: { packets: FlowPacket[]; session
   const expertEvents = useMemo(() => buildExpertEvents(packets), [packets])
   if (!session) return null
 
-  const hsLabel: Record<string, string> = { COMPLETE: '✓ 완료', REFUSED: '✗ 거부됨', TIMEOUT: '✗ 타임아웃', HALF_OPEN: '⚠ 불완전', 'N/A': '— 해당없음' }
+  const hsLabel: Record<string, string> = { COMPLETE: '✓ Complete', REFUSED: '✗ Refused', TIMEOUT: '✗ Timeout', HALF_OPEN: '⚠ Incomplete', 'N/A': '— N/A' }
   const hsClass: Record<string, string> = { COMPLETE: 'ok', REFUSED: 'bad', TIMEOUT: 'bad', HALF_OPEN: 'warn', 'N/A': 'neutral' }
-  const closeLabel: Record<string, string> = { NORMAL: '✓ 정상 (FIN)', RESET: '✗ 강제 (RST)', TIMEOUT: '⚠ 타임아웃', 'N/A': '—' }
+  const closeLabel: Record<string, string> = { NORMAL: '✓ Normal (FIN)', RESET: '✗ Forced (RST)', TIMEOUT: '⚠ Timeout', 'N/A': '—' }
 
   const scoreColor = a.score >= 80 ? '#22c55e' : a.score >= 50 ? '#f59e0b' : '#ef4444'
 
@@ -353,30 +353,30 @@ function ConnAnalysisView({ packets, session }: { packets: FlowPacket[]; session
           <span className="conn-score-label">{a.status}</span>
         </div>
         <div className="conn-metrics">
-          <MetricRow label="핸드셰이크"  value={hsLabel[a.handshake] ?? a.handshake}    cls={hsClass[a.handshake] ?? 'neutral'} />
-          <MetricRow label="RTT"        value={a.rttMs !== null ? `${a.rttMs.toFixed(1)} ms` : '측정 불가'} cls={a.rttMs !== null && a.rttMs > 150 ? 'warn' : 'ok'} />
-          <MetricRow label="재전송"     value={a.dataPkts ? `${a.retransmits}회 / ${a.dataPkts}패킷 (${Math.round(a.retransmits / a.dataPkts * 100)}%)` : '없음'} cls={a.retransmits > 0 ? 'warn' : 'ok'} />
-          <MetricRow label="종료"       value={closeLabel[a.closeType] ?? a.closeType}   cls={a.closeType === 'NORMAL' ? 'ok' : a.closeType === 'RESET' ? 'bad' : 'warn'} />
-          <MetricRow label="세션 시간"  value={`${session.duration_s.toFixed(3)} s`}    cls="neutral" />
-          <MetricRow label="송신/수신"  value={`${fmtBytes(session.bytes_sent)} / ${fmtBytes(session.bytes_recv)}`} cls="neutral" />
+          <MetricRow label="Handshake"  value={hsLabel[a.handshake] ?? a.handshake}    cls={hsClass[a.handshake] ?? 'neutral'} />
+          <MetricRow label="RTT"        value={a.rttMs !== null ? `${a.rttMs.toFixed(1)} ms` : 'Not measurable'} cls={a.rttMs !== null && a.rttMs > 150 ? 'warn' : 'ok'} />
+          <MetricRow label="Retransmits" value={a.dataPkts ? `${a.retransmits} / ${a.dataPkts} packets (${Math.round(a.retransmits / a.dataPkts * 100)}%)` : 'None'} cls={a.retransmits > 0 ? 'warn' : 'ok'} />
+          <MetricRow label="Close"      value={closeLabel[a.closeType] ?? a.closeType}   cls={a.closeType === 'NORMAL' ? 'ok' : a.closeType === 'RESET' ? 'bad' : 'warn'} />
+          <MetricRow label="Session Time" value={`${session.duration_s.toFixed(3)} s`}    cls="neutral" />
+          <MetricRow label="Sent/Received"  value={`${fmtBytes(session.bytes_sent)} / ${fmtBytes(session.bytes_recv)}`} cls="neutral" />
         </div>
       </div>
       {a.issues.length > 0 ? (
         <div className="conn-issues">
-          <div className="conn-issues-title">진단 결과</div>
+          <div className="conn-issues-title">Diagnosis</div>
           {a.issues.map((issue, i) => (
             <div key={i} className="conn-issue-item"><span className="conn-issue-icon">⚠</span> {issue}</div>
           ))}
         </div>
       ) : (
-        <div className="conn-ok-msg">✓ 이상 없음 — 정상 통신</div>
+        <div className="conn-ok-msg">✓ No anomalies — normal communication</div>
       )}
 
       {expertEvents.length > 0 && (
         <div className="expert-info">
           <div className="expert-info-title">Expert Information</div>
           <table className="expert-table">
-            <thead><tr><th>#</th><th>+시각</th><th>수준</th><th>내용</th></tr></thead>
+            <thead><tr><th>#</th><th>+Time</th><th>Level</th><th>Details</th></tr></thead>
             <tbody>
               {expertEvents.map((ev, i) => {
                 const sev = ev.severity === 'error' ? { color: '#ef4444', icon: '✗' }
@@ -417,16 +417,16 @@ function FollowStreamView({ uploadId, sessionId, session }: {
       .finally(() => setLoading(false))
   }, [uploadId, sessionId, encoding])
 
-  if (loading) return <div className="flow-loading"><div className="spinner sm" />로드 중...</div>
+  if (loading) return <div className="flow-loading"><div className="spinner sm" />Loading...</div>
   if (error) return <div className="flow-error">{error}</div>
-  if (!data || data.segments.length === 0) return <div className="flow-no-packets">페이로드 없음 — 스트림 재조합 불가</div>
+  if (!data || data.segments.length === 0) return <div className="flow-no-packets">No payload — stream reassembly not possible</div>
 
   return (
     <div className="follow-stream">
       <div className="follow-stream-toolbar">
         <span className="follow-stream-stats">
-          ↑ {fmtBytes(data.fwd_bytes)} 송신 · ↓ {fmtBytes(data.rev_bytes)} 수신
-          {data.truncated && <span className="trunc-badge"> (상위 200 패킷)</span>}
+          ↑ {fmtBytes(data.fwd_bytes)} sent · ↓ {fmtBytes(data.rev_bytes)} received
+          {data.truncated && <span className="trunc-badge"> (top 200 packets)</span>}
         </span>
         <div className="follow-encoding-btns">
           <button className={`follow-enc-btn${encoding === 'ascii' ? ' active' : ''}`} onClick={() => setEncoding('ascii')}>ASCII</button>
@@ -435,8 +435,8 @@ function FollowStreamView({ uploadId, sessionId, session }: {
       </div>
       {session && (
         <div className="follow-stream-legend">
-          <span className="follow-fwd-legend">■ {session.src_ip}:{session.src_port} (송신)</span>
-          <span className="follow-rev-legend">■ {session.dst_ip}:{session.dst_port} (수신)</span>
+          <span className="follow-fwd-legend">■ {session.src_ip}:{session.src_port} (sent)</span>
+          <span className="follow-rev-legend">■ {session.dst_ip}:{session.dst_port} (received)</span>
         </div>
       )}
       <div className="follow-stream-body">
@@ -456,7 +456,7 @@ function FollowStreamView({ uploadId, sessionId, session }: {
   )
 }
 
-// ── 메인 ─────────────────────────────────────────────────────────────────────
+// ── Main ─────────────────────────────────────────────────────────────────────
 
 interface Props { uploadId: string; sessionId: string; onClose: () => void }
 type ViewTab = 'ladder' | 'packets' | 'replay' | 'stream' | 'analysis'
@@ -496,14 +496,14 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
                   </span>
                 )}
               </span>
-            ) : '로드 중...'}
+            ) : 'Loading...'}
           </div>
           <button className="flow-close-btn" onClick={onClose}>✕</button>
         </div>
 
         {s && data && (
           <div className="flow-stats-bar">
-            <span><strong>{data.packet_count.toLocaleString()}</strong>패킷{data.truncated && <span className="trunc-badge"> (상위 200)</span>}</span>
+            <span><strong>{data.packet_count.toLocaleString()}</strong> packets{data.truncated && <span className="trunc-badge"> (top 200)</span>}</span>
             <span>↑{fmtBytes(s.bytes_sent)}</span>
             <span>↓{fmtBytes(s.bytes_recv)}</span>
             <span>⏱{s.duration_s.toFixed(3)}s</span>
@@ -511,31 +511,31 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
               <span style={{ color: (analysis.rttMs > 150 ? '#f59e0b' : '#22c55e') }}>RTT {analysis.rttMs.toFixed(1)} ms</span>
             )}
             <div className="flow-view-tabs">
-              <button className={`flow-tab${view === 'ladder'   ? ' active' : ''}`} onClick={() => setView('ladder')}>래더</button>
-              <button className={`flow-tab${view === 'packets'  ? ' active' : ''}`} onClick={() => setView('packets')}>패킷</button>
+              <button className={`flow-tab${view === 'ladder'   ? ' active' : ''}`} onClick={() => setView('ladder')}>Ladder</button>
+              <button className={`flow-tab${view === 'packets'  ? ' active' : ''}`} onClick={() => setView('packets')}>Packets</button>
               <button className={`flow-tab${view === 'stream'   ? ' active' : ''}`} onClick={() => setView('stream')}>Follow Stream</button>
-              <button className={`flow-tab${view === 'replay'   ? ' active' : ''}`} onClick={() => setView('replay')}>재생</button>
-              <button className={`flow-tab${view === 'analysis' ? ' active' : ''}`} onClick={() => setView('analysis')}>연결 분석</button>
+              <button className={`flow-tab${view === 'replay'   ? ' active' : ''}`} onClick={() => setView('replay')}>Replay</button>
+              <button className={`flow-tab${view === 'analysis' ? ' active' : ''}`} onClick={() => setView('analysis')}>Connection Analysis</button>
             </div>
           </div>
         )}
 
         {error && <div className="flow-error">{error}</div>}
-        {!data && !error && <div className="flow-loading"><div className="spinner sm" />로드 중...</div>}
+        {!data && !error && <div className="flow-loading"><div className="spinner sm" />Loading...</div>}
 
         {data && view === 'packets' && s && (
           data.packets.length > 0 ? (
             <div className="flow-table-wrap">
               <table className="flow-table">
                 <thead>
-                  <tr><th>#</th><th>시각</th><th>방향</th><th>플래그</th><th>Seq</th><th>Ack</th><th>크기</th><th>Payload</th><th>정보</th></tr>
+                  <tr><th>#</th><th>Time</th><th>Direction</th><th>Flags</th><th>Seq</th><th>Ack</th><th>Size</th><th>Payload</th><th>Info</th></tr>
                 </thead>
                 <tbody>
                   {data.packets.map((p, i) => <PacketRow key={i} pkt={p} idx={i} base={`${s.dst_ip}:${s.dst_port}`} />)}
                 </tbody>
               </table>
             </div>
-          ) : <div className="flow-no-packets">패킷 없음 (PCAP 포맷이 아닌 경우 패킷 뷰어 미지원)</div>
+          ) : <div className="flow-no-packets">No packets (packet viewer unsupported for non-PCAP formats)</div>
         )}
 
         {data && view === 'ladder'   && <LadderView packets={data.packets} session={s ?? null} />}

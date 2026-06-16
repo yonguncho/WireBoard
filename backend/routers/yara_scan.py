@@ -24,7 +24,7 @@ async def get_yara(
     try:
         capture = store.get(upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found"})
 
     check_capture_token(capture, x_upload_token)
     detector = request.app.state.yara_detector

@@ -44,7 +44,7 @@ class DoSDetector:
                 mitre_id="T1499",
                 description=f"{s.src_ip}→{s.dst_ip}: {rate:.0f} pps, {s.packet_count} pkts",
                 src_ip=s.src_ip,
-                evidence=[f"{s.packet_count} 패킷 / {rate:.0f} pps ({s.src_ip}→{s.dst_ip})"],
+                evidence=[f"{s.packet_count} packets / {rate:.0f} pps ({s.src_ip}→{s.dst_ip})"],
                 sample_count=s.packet_count,
             )
             if s.confidence == "low":

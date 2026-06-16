@@ -42,14 +42,14 @@ async def create_annotation(
     try:
         capture = session_store.get(body.upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found"})
 
     check_capture_token(capture, x_upload_token)
     ann_list = request.app.state.annotations_store[body.upload_id]
     if len(ann_list) >= _MAX_ANNOTATIONS_PER_UPLOAD:
         raise HTTPException(
             status_code=429,
-            detail={"code": "annotation_limit_exceeded", "msg": f"upload당 최대 {_MAX_ANNOTATIONS_PER_UPLOAD}개 어노테이션 허용"},
+            detail={"code": "annotation_limit_exceeded", "msg": f"Maximum {_MAX_ANNOTATIONS_PER_UPLOAD} annotations allowed per upload"},
         )
     annotation = body.model_dump()
     ann_list.append(annotation)
@@ -67,6 +67,6 @@ async def get_annotations(
     try:
         capture = request.app.state.session_store.get(upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found"})
     check_capture_token(capture, x_upload_token)
     return list(request.app.state.annotations_store.get(upload_id, []))

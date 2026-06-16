@@ -55,7 +55,7 @@ class DDoSDetector:
                 attack_type="DDoS",
                 severity=severity,
                 mitre_id="T1498",
-                description=f"→ {dst_ip}: {rate:.0f} pps, {unique_src}개 소스",
+                description=f"→ {dst_ip}: {rate:.0f} pps, {unique_src} sources",
             )
 
             if any(s.confidence == "low" for s in grp):

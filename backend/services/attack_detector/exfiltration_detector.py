@@ -63,7 +63,7 @@ class ExfiltrationDetector:
                 attack_type="Exfiltration",
                 severity=severity,
                 mitre_id="T1041",
-                description=f"{src_ip}: {connections}개 외부 연결, {bytes_out // _MB} MB 전송 (아웃바운드 {outbound_ratio:.0%})",
+                description=f"{src_ip}: {connections} external connections, {bytes_out // _MB} MB sent (outbound {outbound_ratio:.0%})",
                 src_ip=src_ip,
             )
 

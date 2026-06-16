@@ -7,72 +7,73 @@ from typing import NamedTuple
 # ── MITRE ID → 방어 권고 매핑 ───────────────────────────────────────────────
 _MITRE_DEFENSE: dict[str, list[str]] = {
     "T1046": [
-        "포트스캔 출발지 IP를 방화벽에서 즉시 차단하세요",
-        "IDS/IPS에서 SYN 스캔 탐지 룰을 활성화하세요",
-        "불필요한 서비스 포트를 닫으세요",
+        "Block the port-scan source IP at the firewall immediately",
+        "Enable SYN scan detection rules on your IDS/IPS",
+        "Close unnecessary service ports",
     ],
     "T1071": [
-        "탐지된 C2 도메인·IP를 DNS 싱크홀 또는 방화벽으로 차단하세요",
-        "아웃바운드 비표준 포트(80/443 외) 트래픽을 검토하세요",
-        "의심 호스트에서 EDR 에이전트 점검을 실행하세요",
+        "Block detected C2 domains/IPs via DNS sinkhole or firewall",
+        "Review outbound traffic on non-standard ports (other than 80/443)",
+        "Run an EDR agent check on suspect hosts",
     ],
     "T1498": [
-        "업스트림 ISP에 DDoS 완화 요청을 고려하세요",
-        "스크러빙 서비스(CloudFlare, AWS Shield 등) 활성화를 검토하세요",
-        "Rate-limiting 룰을 적용하세요",
+        "Consider requesting DDoS mitigation from your upstream ISP",
+        "Review enabling a scrubbing service (CloudFlare, AWS Shield, etc.)",
+        "Apply rate-limiting rules",
     ],
     "T1041": [  # ExfiltrationDetector가 사용하는 MITRE ID
-        "대용량 아웃바운드 트래픽 출발지를 격리하세요",
-        "DLP 솔루션으로 민감 데이터 유출 여부를 확인하세요",
-        "DNS exfiltration 패턴을 분석하세요",
+        "Isolate the source of large outbound traffic",
+        "Use a DLP solution to check for sensitive data exfiltration",
+        "Analyze for DNS exfiltration patterns",
     ],
     "T1110": [
-        "브루트포스 대상 서비스에서 계정 잠금 정책을 활성화하세요",
-        "MFA(다중 인증)를 적용하세요",
-        "반복 실패 IP를 자동 차단하는 fail2ban 등을 설정하세요",
+        "Enable an account lockout policy on the targeted service",
+        "Enforce MFA (multi-factor authentication)",
+        "Set up fail2ban or similar to auto-block repeatedly failing IPs",
     ],
     "T1499": [  # CommFailureDetector
-        "RST 급증 구간의 출발지 IP를 조사하세요",
-        "방화벽 ACL과 서비스 포트 설정을 점검하세요",
-        "IDS/IPS에서 비정상 연결 종료 패턴을 모니터링하세요",
+        "Investigate the source IPs during the RST spike window",
+        "Review firewall ACLs and service port configuration",
+        "Monitor for abnormal connection-close patterns on your IDS/IPS",
     ],
 }
 
 _ATTACK_KO: dict[str, str] = {
-    "PortScan":    "포트스캔",
-    "Beacon":      "C2 비콘",
-    "CommFailure": "통신 실패 급증",
-    "DDoS":        "DDoS 공격",
-    "Exfiltration":"데이터 유출",
-    "BruteForce":  "브루트포스",
+    "PortScan":    "Port scan",
+    "Beacon":      "C2 beacon",
+    "CommFailure": "Communication failure spike",
+    "DDoS":        "DDoS attack",
+    "Exfiltration":"Data exfiltration",
+    "BruteForce":  "Brute force",
 }
 
 _ATTACK_EXPLAIN: dict[str, str] = {
     "PortScan": (
-        "포트스캔은 공격자가 목표 서버의 열린 포트(서비스)를 파악하기 위해 "
-        "다수의 포트에 연결 시도를 보내는 정찰 행위입니다. "
-        "이를 통해 공격자는 어떤 서비스가 취약한지 파악합니다."
+        "A port scan is reconnaissance in which an attacker sends connection "
+        "attempts to many ports to identify which ports (services) are open on "
+        "the target server. This lets the attacker find out which services are vulnerable."
     ),
     "Beacon": (
-        "비콘(Beacon)은 이미 감염된 호스트가 공격자의 C2(Command & Control) 서버와 "
-        "주기적으로 통신하는 패턴입니다. 정기적인 간격으로 연결이 발생한다면 "
-        "악성코드 감염을 의심해야 합니다."
+        "A beacon is a pattern where an already-compromised host periodically "
+        "communicates with the attacker's C2 (Command & Control) server. "
+        "Regularly spaced connections should raise suspicion of malware infection."
     ),
     "DDoS": (
-        "DDoS(분산 서비스 거부) 공격은 대량의 트래픽으로 서버나 네트워크를 "
-        "마비시키는 공격입니다. 서비스 중단이 목적입니다."
+        "A DDoS (Distributed Denial of Service) attack overwhelms a server or "
+        "network with massive traffic. Its goal is service disruption."
     ),
     "Exfiltration": (
-        "데이터 유출(Exfiltration)은 공격자가 내부 민감 데이터를 외부로 "
-        "몰래 전송하는 행위입니다. 대용량 아웃바운드 트래픽이 특징입니다."
+        "Exfiltration is when an attacker covertly transfers sensitive internal "
+        "data to the outside. It is characterized by large outbound traffic."
     ),
     "BruteForce": (
-        "브루트포스는 SSH, RDP, 웹 로그인 등에 수많은 비밀번호를 자동으로 "
-        "시도하는 공격입니다. 계정 탈취가 목적입니다."
+        "Brute force is an attack that automatically tries large numbers of "
+        "passwords against SSH, RDP, web logins, etc. Its goal is account takeover."
     ),
     "CommFailure": (
-        "통신 실패 급증은 네트워크 장애, 잘못된 설정, 또는 연결 기반 공격의 "
-        "부작용으로 나타날 수 있습니다. RST/ICMP unreachable 패킷이 다수 발생합니다."
+        "A communication failure spike can appear as a side effect of network "
+        "outages, misconfiguration, or connection-based attacks. Many RST/ICMP "
+        "unreachable packets occur."
     ),
 }
 
@@ -95,11 +96,11 @@ def _confidence_label(severity: str) -> str:
     """severity 기반 탐지 강도 레이블 반환."""
     conf = _SEVERITY_CONFIDENCE.get(severity.lower(), 0.5)
     if conf >= 0.8:
-        return "탐지"
+        return "Detected"
     elif conf >= _CONFIDENCE_THRESHOLD:
-        return "의심 탐지"
+        return "Suspected"
     else:
-        return "낮은 확신"
+        return "Low confidence"
 
 
 def _confidence_pct(severity: str) -> int:
@@ -127,7 +128,7 @@ class NarrativeResult(NamedTuple):
     victim_ips: list[str]
     recommendations: list[str]
     attack_timeline: list[dict]
-    attack_explanations: dict[str, str]  # attack_type → 초보자 설명
+    attack_explanations: dict[str, str]  # attack_type → 초보자 설명 (영문)
 
 
 def build_summary(attacks: list, sessions: list) -> NarrativeResult:
@@ -136,15 +137,15 @@ def build_summary(attacks: list, sessions: list) -> NarrativeResult:
 
     if not attacks:
         return NarrativeResult(
-            headline="정상 트래픽 — 이상 이벤트 없음",
+            headline="Normal traffic — no anomalous events",
             narrative=(
-                "분석된 캡처 파일에서 알려진 이상 패턴이 탐지되지 않았습니다. "
-                "일반적인 네트워크 트래픽으로 판단됩니다."
+                "No known anomaly patterns were detected in the analyzed capture file. "
+                "It appears to be ordinary network traffic."
             ),
             risk_level="CLEAN",
             attacker_ips=[],
             victim_ips=[],
-            recommendations=["정기적인 pcap 캡처와 모니터링을 유지하세요"],
+            recommendations=["Keep up regular pcap capture and monitoring"],
             attack_timeline=[],
             attack_explanations={},
         )
@@ -188,7 +189,7 @@ def build_summary(attacks: list, sessions: list) -> NarrativeResult:
         ko = _ATTACK_KO.get(a.get("attack_type", "Unknown"), a.get("attack_type", "Unknown"))
         conf = _confidence_pct(str(a.get("severity", "low")))
         label = _confidence_label(str(a.get("severity", "low")))
-        return f"{ko} {label} (확신도: {conf}%)"
+        return f"{ko} {label} (confidence: {conf}%)"
 
     attack_ko = " + ".join(_ATTACK_KO.get(t, t) for t in attack_type_set)
 
@@ -228,10 +229,10 @@ def build_summary(attacks: list, sessions: list) -> NarrativeResult:
     # ── 내러티브 생성 ──────────────────────────────────────────────────────
     time_range = ""
     if min_ts > 0 and max_ts > 0:
-        time_range = f"{_fmt_ts(min_ts)}~{_fmt_ts(max_ts)} 사이에 "
+        time_range = f"Between {_fmt_ts(min_ts)} and {_fmt_ts(max_ts)}, "
 
-    attacker_str = ", ".join(attacker_ips[:3]) if attacker_ips else "불상의 호스트"
-    victim_str   = ", ".join(victim_ips[:3])   if victim_ips   else "내부 서버"
+    attacker_str = ", ".join(attacker_ips[:3]) if attacker_ips else "an unknown host"
+    victim_str   = ", ".join(victim_ips[:3])   if victim_ips   else "internal servers"
 
     total_bytes = sum(
         (s.get("bytes_sent", 0) + s.get("bytes_recv", 0)) if isinstance(s, dict)
@@ -241,11 +242,11 @@ def build_summary(attacks: list, sessions: list) -> NarrativeResult:
 
     # 메인 문장
     main_sentence = (
-        f"{time_range}{attacker_str}이(가) {victim_str}을(를) 대상으로 "
-        f"{attack_ko} 활동을 수행했습니다."
+        f"{time_range}{attacker_str} carried out {attack_ko} activity "
+        f"against {victim_str}."
     )
     stat_sentence = (
-        f"총 {len(sessions)}개 세션에서 {_fmt_bytes(total_bytes)} 트래픽이 분석되었습니다."
+        f"Analyzed {_fmt_bytes(total_bytes)} of traffic across {len(sessions)} sessions."
         if sessions else ""
     )
     # 탐지 상세 줄 (각 공격별 — 확신도 포함)
@@ -270,19 +271,19 @@ def build_summary(attacks: list, sessions: list) -> NarrativeResult:
                 recommendations.append(rec)
                 seen.add(rec)
     if not recommendations:
-        recommendations.append("탐지된 공격 IP를 방화벽에서 차단하세요")
+        recommendations.append("Block the detected attacker IPs at the firewall")
 
     # ── 초보자 설명 ────────────────────────────────────────────────────────
     attack_explanations = {
-        t: _ATTACK_EXPLAIN.get(t, f"{t} 공격이 탐지되었습니다.")
+        t: _ATTACK_EXPLAIN.get(t, f"A {t} attack was detected.")
         for t in attack_type_set
     }
 
     # 헤드라인: 확신도 낮은 공격이 섞여 있으면 "의심 포함" 표시
     has_suspected = bool(suspected_types)
-    headline_suffix = " (의심 포함)" if has_suspected and confirmed_types else (" 의심" if has_suspected else "")
+    headline_suffix = " (incl. suspected)" if has_suspected and confirmed_types else (" suspected" if has_suspected else "")
     return NarrativeResult(
-        headline=f"{attack_ko} 탐지{headline_suffix} — {risk} 위험",
+        headline=f"{attack_ko} detected{headline_suffix} — {risk} risk",
         narrative=narrative,
         risk_level=risk,
         attacker_ips=attacker_ips,

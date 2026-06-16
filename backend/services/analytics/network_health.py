@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from typing import Optional
 
 _ICMP_LABEL_KR: dict[str, str] = {
-    "ttl_expired":       "TTL 만료",
-    "fragment_timeout":  "단편화 재조립 타임아웃",
-    "net_unreachable":   "네트워크 도달 불가",
-    "host_unreachable":  "호스트 도달 불가",
-    "port_unreachable":  "포트 도달 불가",
-    "admin_prohibited":  "관리자 차단",
-    "unreachable":       "도달 불가",
+    "ttl_expired":       "TTL exceeded",
+    "fragment_timeout":  "Fragment reassembly timeout",
+    "net_unreachable":   "Network unreachable",
+    "host_unreachable":  "Host unreachable",
+    "port_unreachable":  "Port unreachable",
+    "admin_prohibited":  "Administratively prohibited",
+    "unreachable":       "Unreachable",
 }
 
 
@@ -65,7 +65,7 @@ class SessionHealth:
     close_type: str          # NORMAL | RESET | TIMEOUT | N/A
 
     score: int               # 0-100
-    status: str              # 정상 | 주의 | 이상
+    status: str              # Healthy | Warning | Critical
     issues: list
     root_cause: str
     recommendations: list
@@ -135,53 +135,53 @@ def _analyze_tcp(session, packets: list) -> SessionHealth:
 
     if handshake == "REFUSED":
         score -= 40
-        issues.append("연결 거부됨 (서버 RST 응답)")
-        recommendations.append("대상 포트 개방 여부 및 방화벽 정책을 확인하세요")
+        issues.append("Connection refused (server RST)")
+        recommendations.append("Check whether the target port is open and review firewall policy")
     elif handshake == "TIMEOUT":
         score -= 35
-        issues.append("연결 응답 없음 (SYN 타임아웃)")
-        recommendations.append("서버 가용성 및 네트워크 경로를 점검하세요")
+        issues.append("No connection response (SYN timeout)")
+        recommendations.append("Check server availability and the network path")
     elif handshake == "HALF_OPEN":
         score -= 25
-        issues.append("불완전한 핸드셰이크 (SYN-ACK 미수신)")
-        recommendations.append("패킷 손실 또는 방화벽 차단 가능성을 확인하세요")
+        issues.append("Incomplete handshake (no SYN-ACK)")
+        recommendations.append("Check for packet loss or firewall blocking")
 
     if rtt_ms is not None:
         if rtt_ms > 500:
             score -= 20
-            issues.append(f"RTT 심각 ({rtt_ms:.0f} ms) — 매우 높은 지연")
-            recommendations.append("네트워크 경로 병목 또는 서버 과부하를 확인하세요")
+            issues.append(f"Critical RTT ({rtt_ms:.0f} ms) — very high latency")
+            recommendations.append("Check for network path bottlenecks or server overload")
         elif rtt_ms > 150:
             score -= 10
-            issues.append(f"RTT 높음 ({rtt_ms:.0f} ms)")
-            recommendations.append("네트워크 지연 원인을 조사하세요")
+            issues.append(f"High RTT ({rtt_ms:.0f} ms)")
+            recommendations.append("Investigate the cause of network latency")
 
     if retransmit_rate > 0.20:
         score -= 30
-        issues.append(f"재전송률 매우 높음 ({retransmit_rate:.0%}) — 패킷 손실 의심")
-        recommendations.append("링크 품질, MTU 설정, 혼잡 제어를 점검하세요")
+        issues.append(f"Very high retransmit rate ({retransmit_rate:.0%}) — suspected packet loss")
+        recommendations.append("Check link quality, MTU settings, and congestion control")
     elif retransmit_rate > 0.05:
         score -= 15
-        issues.append(f"재전송 발생 ({retransmit_rate:.0%})")
-        recommendations.append("간헐적 패킷 손실 가능성이 있습니다")
+        issues.append(f"Retransmissions detected ({retransmit_rate:.0%})")
+        recommendations.append("Intermittent packet loss is possible")
 
     if rst_type == "LATE":
         score -= 20
-        issues.append("데이터 전송 중 RST 강제 종료")
-        recommendations.append("서버 크래시, 방화벽 세션 타임아웃 등을 확인하세요")
+        issues.append("RST during data transfer (forced close)")
+        recommendations.append("Check for server crash, firewall session timeout, etc.")
 
     if session.bytes_sent == 0 and session.bytes_recv == 0:
         score -= 15
-        issues.append("데이터 교환 없음")
+        issues.append("No data exchanged")
 
     if session.bytes_sent > 0 and session.bytes_recv == 0 and handshake == "COMPLETE":
         score -= 15
-        issues.append("서버 응답 없음 (요청은 전송됨)")
-        recommendations.append("서버 로그와 애플리케이션 상태를 확인하세요")
+        issues.append("No server response (request was sent)")
+        recommendations.append("Check server logs and application status")
 
     score = max(0, min(100, score))
-    status = "정상" if score >= 80 else ("주의" if score >= 50 else "이상")
-    root_cause = issues[0] if issues else "이상 없음 — 정상 통신"
+    status = "Healthy" if score >= 80 else ("Warning" if score >= 50 else "Critical")
+    root_cause = issues[0] if issues else "No issues — normal communication"
 
     # failure_type 분류
     if handshake == "REFUSED":
@@ -222,14 +222,14 @@ def _analyze_udp(session, packets: list) -> SessionHealth:
 
     if packets and not has_response:
         score -= 30
-        issues.append("UDP 응답 없음")
-        recommendations.append("대상 포트가 열려 있는지 확인하세요")
+        issues.append("No UDP response")
+        recommendations.append("Check whether the target port is open")
     if session.bytes_sent == 0 and session.bytes_recv == 0:
         score -= 20
-        issues.append("데이터 교환 없음")
+        issues.append("No data exchanged")
 
     score = max(0, min(100, score))
-    status = "정상" if score >= 80 else ("주의" if score >= 50 else "이상")
+    status = "Healthy" if score >= 80 else ("Warning" if score >= 50 else "Critical")
     failure_type = "no_response" if (packets and not has_response) else "none"
 
     return SessionHealth(
@@ -245,7 +245,7 @@ def _analyze_udp(session, packets: list) -> SessionHealth:
         rst_type="NONE", close_type="N/A",
         score=score, status=status,
         issues=issues,
-        root_cause=issues[0] if issues else "이상 없음",
+        root_cause=issues[0] if issues else "No issues",
         recommendations=recommendations,
         failure_type=failure_type,
     )
@@ -261,18 +261,18 @@ def _analyze_no_packets(session) -> SessionHealth:
 
     if session.rst:
         score -= 25
-        issues.append("RST 플래그 감지 (연결 비정상 종료)")
+        issues.append("RST flag detected (abnormal connection close)")
 
     if session.bytes_sent == 0 and session.bytes_recv == 0:
         score -= 20
-        issues.append("데이터 교환 없음")
+        issues.append("No data exchanged")
     elif session.bytes_sent > 0 and session.bytes_recv == 0:
         score -= 15
-        issues.append("서버 응답 없음")
-        recommendations.append("서버 애플리케이션 상태를 확인하세요")
+        issues.append("No server response")
+        recommendations.append("Check the server application status")
 
     score = max(0, min(100, score))
-    status = "정상" if score >= 80 else ("주의" if score >= 50 else "이상")
+    status = "Healthy" if score >= 80 else ("Warning" if score >= 50 else "Critical")
 
     return SessionHealth(
         session_id=session.session_id,
@@ -288,7 +288,7 @@ def _analyze_no_packets(session) -> SessionHealth:
         close_type="N/A",
         score=score, status=status,
         issues=issues,
-        root_cause=issues[0] if issues else "이상 없음",
+        root_cause=issues[0] if issues else "No issues",
         recommendations=recommendations,
         failure_type="connection_refused" if session.rst else "none",
     )
@@ -328,17 +328,17 @@ def analyze(
             ev = icmp_lookup.get((sh.dst_ip, sh.dst_port))
             if ev and sh.failure_type in ("none", "no_response"):
                 label_kr = _ICMP_LABEL_KR.get(ev.get("label", ""), ev.get("label", ""))
-                msg = f"경로 문제 — {ev['src_ip']}에서 {label_kr}"
+                msg = f"Path issue — {label_kr} from {ev['src_ip']}"
                 sh.failure_type = "path_issue"
                 sh.icmp_label   = ev.get("label", "")
                 sh.icmp_src_ip  = ev.get("src_ip", "")
                 sh.issues.append(msg)
                 sh.root_cause = msg
                 sh.recommendations.append(
-                    "네트워크 경로상 라우터 TTL 설정 및 방화벽 정책을 점검하세요"
+                    "Check router TTL settings and firewall policy along the network path"
                 )
                 sh.score  = max(0, sh.score - 30)
-                sh.status = "정상" if sh.score >= 80 else ("주의" if sh.score >= 50 else "이상")
+                sh.status = "Healthy" if sh.score >= 80 else ("Warning" if sh.score >= 50 else "Critical")
 
     total    = len(healths)
     healthy  = sum(1 for h in healths if h.score >= 80)

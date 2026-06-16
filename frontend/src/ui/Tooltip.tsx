@@ -6,7 +6,7 @@ interface Props {
   position?: 'top' | 'bottom'
 }
 
-/** 용어 위에 호버하면 초보자 설명을 보여주는 tooltip. TERMS 사전에 없으면 그냥 children 렌더링. */
+/** Tooltip that shows a beginner-friendly explanation when hovering over a term. Renders children as-is if the term is not in the TERMS dictionary. */
 export function Tooltip({ term, children, position = 'top' }: Props) {
   const def = TERMS[term]
   if (!def) return <>{children}</>

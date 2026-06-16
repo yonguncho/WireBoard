@@ -26,7 +26,7 @@ async def get_summary(
     try:
         capture = store.get(upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음 — 분석을 먼저 실행하세요"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found — run analysis first"})
 
     check_capture_token(capture, x_upload_token)
     attacks = capture.attacks

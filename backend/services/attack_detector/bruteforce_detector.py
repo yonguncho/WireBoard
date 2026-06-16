@@ -56,7 +56,7 @@ class BruteForceDetector:
                 attack_type="BruteForce",
                 severity=severity,
                 mitre_id="T1110",
-                description=f"{src_ip} → {dst_ip}:{dst_port}: {total}회 시도, 실패율 {fail_rate:.0%}",
+                description=f"{src_ip} → {dst_ip}:{dst_port}: {total} attempts, {fail_rate:.0%} failure rate",
                 src_ip=src_ip,
             )
 
@@ -83,7 +83,7 @@ class BruteForceDetector:
                     attack_type="BruteForce",
                     severity="high" if max_rst_per_sec >= _ATTEMPTS_HIGH else "medium",
                     mitre_id="T1110",
-                    description=f"RST flood: {max_rst_per_sec}회/초 탐지",
+                    description=f"RST flood: {max_rst_per_sec}/sec detected",
                     src_ip=rst_src_ip,
                 )
                 if any(s.confidence == "low" for s in rst_sessions):

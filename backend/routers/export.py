@@ -57,20 +57,20 @@ async def export_flexible(
     # format 검증을 store 조회 전에 수행 (422 우선)
     fmt = body.format.lower()
     if fmt not in _ALLOWED_FORMATS:
-        raise HTTPException(status_code=422, detail={"code": "invalid_format", "msg": f"지원하지 않는 형식: {body.format!r}"})
+        raise HTTPException(status_code=422, detail={"code": "invalid_format", "msg": f"Unsupported format: {body.format!r}"})
 
     # target_ip 검증
     if body.target_ip:
         try:
             ipaddress.ip_address(body.target_ip)
         except ValueError:
-            raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": f"유효하지 않은 target_ip: {body.target_ip!r}"})
+            raise HTTPException(status_code=400, detail={"code": "invalid_ip", "msg": f"Invalid target_ip: {body.target_ip!r}"})
 
     store = request.app.state.session_store
     try:
         capture = store.get(body.upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found"})
 
     check_capture_token(capture, x_upload_token)
 
@@ -118,7 +118,7 @@ async def export_json(
         capture = store.get(upload_id)
     except KeyError:
         logger.warning("upload_id 없음: %s", upload_id)
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found"})
 
     check_capture_token(capture, x_upload_token)
     annotations = list(request.app.state.annotations_store.get(upload_id, []))
@@ -139,7 +139,7 @@ async def export_pdf(
         capture = store.get(upload_id)
     except KeyError:
         logger.warning("upload_id 없음: %s", upload_id)
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found"})
 
     check_capture_token(capture, x_upload_token)
 
@@ -161,7 +161,7 @@ async def export_pdf(
     except OSError as exc:
         logger.error("PDF 읽기 실패: %s", exc)
         pdf_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail="PDF 파일 읽기 실패")
+        raise HTTPException(status_code=500, detail="Failed to read PDF file")
     finally:
         pdf_path.unlink(missing_ok=True)
 
@@ -192,7 +192,7 @@ async def export_ioc(
         capture = store.get(upload_id)
     except KeyError:
         logger.warning("upload_id 없음: %s", upload_id)
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found"})
 
     check_capture_token(capture, x_upload_token)
 

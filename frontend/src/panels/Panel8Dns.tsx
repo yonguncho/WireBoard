@@ -4,10 +4,10 @@ interface Props { data: DnsEntry[] }
 
 export function Panel8Dns({ data }: Props) {
   const rows = (data ?? []).slice(0, 50)
-  if (!rows.length) return <div className="no-data">DNS 쿼리 없음</div>
+  if (!rows.length) return <div className="no-data">No DNS queries</div>
   return (
     <table className="mini-table full-width">
-      <thead><tr><th>도메인</th><th>타입</th><th>응답</th><th>상태</th></tr></thead>
+      <thead><tr><th>Domain</th><th>Type</th><th>Response</th><th>Status</th></tr></thead>
       <tbody>
         {rows.map((r, i) => (
           <tr key={i} className={r.nxdomain ? 'row-error' : ''}>

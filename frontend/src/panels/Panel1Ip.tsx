@@ -35,6 +35,6 @@ export function Panel1Ip({ data }: Props) {
       hovertemplate: '%{y}<br>%{text}<extra>DST</extra>',
     },
   ]
-  if (!top5src.length && !top5dst.length) return <div className="no-data">데이터 없음</div>
+  if (!top5src.length && !top5dst.length) return <div className="no-data">No data</div>
   return <PlotlyChart data={traces} layout={{ barmode: 'group', xaxis: { title: 'bytes' }, yaxis: { automargin: true } }} />
 }

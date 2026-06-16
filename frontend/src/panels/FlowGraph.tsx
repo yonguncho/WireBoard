@@ -69,7 +69,7 @@ export function FlowGraph({ sessions }: Props) {
 
     const allIps = [...nodeSet]
     const truncated = Math.max(0, allIps.length - MAX_NODES)
-    // 세션 수 많은 순으로 상위 MAX_NODES만 표시
+    // Show only the top MAX_NODES, sorted by session count descending
     const visible = allIps
       .sort((a, b) => (ipSessions.get(b) ?? 0) - (ipSessions.get(a) ?? 0))
       .slice(0, MAX_NODES)
@@ -93,15 +93,15 @@ export function FlowGraph({ sessions }: Props) {
     return { nodes, edges, truncated }
   }, [sessions])
 
-  if (!nodes.length) return <div className="fg-empty">표시할 통신 흐름 없음</div>
+  if (!nodes.length) return <div className="fg-empty">No communication flow to display</div>
 
   const nodeMap = new Map(nodes.map(n => [n.id, n]))
 
   return (
     <div className="fg-wrap">
       <div className="fg-title">
-        통신 흐름 그래프
-        {truncated > 0 && <span className="fg-truncated"> (상위 {MAX_NODES}개 IP — {truncated}개 생략)</span>}
+        Communication Flow Graph
+        {truncated > 0 && <span className="fg-truncated"> (top {MAX_NODES} IPs — {truncated} omitted)</span>}
       </div>
       <svg className="fg-svg" viewBox={`0 0 ${W} ${H}`}>
         {edges.map((e, i) => {
@@ -159,16 +159,16 @@ export function FlowGraph({ sessions }: Props) {
       {tooltip && (
         <div className="fg-tooltip" style={{ left: tooltip.x + 12, top: tooltip.y + 12 }}>
           <div className="fg-tt-pair">{tooltip.src} ↔ {tooltip.dst}</div>
-          <div>{tooltip.count}개 세션 · {fmtBytes(tooltip.bytes)}</div>
+          <div>{tooltip.count} Sessions · {fmtBytes(tooltip.bytes)}</div>
           <div>{tooltip.protocols}</div>
         </div>
       )}
       <div className="fg-legend">
-        <span className="fg-legend-item"><span className="fg-dot fg-dot-int" /> 내부 IP</span>
-        <span className="fg-legend-item"><span className="fg-dot fg-dot-ext" /> 외부 IP</span>
+        <span className="fg-legend-item"><span className="fg-dot fg-dot-int" /> Internal IP</span>
+        <span className="fg-legend-item"><span className="fg-dot fg-dot-ext" /> External IP</span>
         <span className="fg-legend-item"><span className="fg-line fg-line-tcp" /> TCP</span>
         <span className="fg-legend-item"><span className="fg-line fg-line-udp" /> UDP</span>
-        <span className="fg-legend-item"><span className="fg-line fg-line-rst" /> RST 포함</span>
+        <span className="fg-legend-item"><span className="fg-line fg-line-rst" /> RST included</span>
       </div>
     </div>
   )

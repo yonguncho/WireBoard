@@ -34,7 +34,7 @@ class StateLoader:
         for item in raw_sessions:
             if not isinstance(item, dict):
                 if parse_warnings is not None:
-                    msg = f"세션 항목 타입 오류 (skip): {item!r}"
+                    msg = f"Invalid session item type (skipped): {item!r}"
                     logger.warning(msg)
                     parse_warnings.append(msg)
                     continue
@@ -43,7 +43,7 @@ class StateLoader:
                 sessions.append(SessionModel(**item))
             except (ValidationError, KeyError, TypeError) as exc:
                 if parse_warnings is not None:
-                    msg = f"세션 복원 실패 (skip): {exc}"
+                    msg = f"Failed to restore session (skipped): {exc}"
                     logger.warning(msg)
                     parse_warnings.append(msg)
                 else:

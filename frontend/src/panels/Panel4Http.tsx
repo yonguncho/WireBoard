@@ -10,7 +10,7 @@ const STATUS_COLOR: Record<string, string> = {
 export function Panel4Http({ data }: Props) {
   const groups = data.groups ?? {}
   const keys = Object.keys(groups)
-  if (!keys.length) return <div className="no-data">HTTP 트래픽 없음</div>
+  if (!keys.length) return <div className="no-data">No HTTP traffic</div>
 
   const traces = [{
     type: 'bar' as const,
@@ -21,10 +21,10 @@ export function Panel4Http({ data }: Props) {
 
   return (
     <div>
-      <PlotlyChart data={traces} layout={{ xaxis: { title: { text: '상태 그룹' } }, yaxis: { title: { text: '횟수' } } }} height={200} />
+      <PlotlyChart data={traces} layout={{ xaxis: { title: { text: 'Status Group' } }, yaxis: { title: { text: 'Count' } } }} height={200} />
       {(data.top_errors ?? []).length > 0 && (
         <table className="mini-table">
-          <thead><tr><th>상태 코드</th><th>횟수</th></tr></thead>
+          <thead><tr><th>Status Code</th><th>Count</th></tr></thead>
           <tbody>
             {data.top_errors.slice(0, 5).map(e => (
               <tr key={e.status_code} className={e.status_code >= 500 ? 'row-error' : ''}>

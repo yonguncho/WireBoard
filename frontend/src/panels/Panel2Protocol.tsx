@@ -7,7 +7,7 @@ export function Panel2Protocol({ data }: Props) {
   const labels = Object.keys(dist)
   const values = Object.values(dist)
 
-  if (!labels.length) return <div className="no-data">데이터 없음</div>
+  if (!labels.length) return <div className="no-data">No data</div>
 
   const traces = [{
     type: 'pie' as const,
@@ -23,7 +23,7 @@ export function Panel2Protocol({ data }: Props) {
       <PlotlyChart data={traces} layout={{ showlegend: false }} height={220} />
       {data.top_ports?.length > 0 && (
         <table className="mini-table">
-          <thead><tr><th>포트</th><th>세션수</th></tr></thead>
+          <thead><tr><th>Port</th><th>Sessions</th></tr></thead>
           <tbody>
             {data.top_ports.slice(0, 5).map(p => (
               <tr key={p.port}><td>{p.port}</td><td>{p.count}</td></tr>

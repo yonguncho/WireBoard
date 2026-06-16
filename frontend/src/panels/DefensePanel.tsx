@@ -9,23 +9,23 @@ interface Props {
 export function DefensePanel({ recommendations, attackerIps, victimIps }: Props) {
   return (
     <div className="defense-panel">
-      <h3 className="defense-title">🛠 권장 조치</h3>
+      <h3 className="defense-title">🛠 Recommended Actions</h3>
 
       {(attackerIps.length > 0 || victimIps.length > 0) && (
         <div className="defense-ips">
           {attackerIps.length > 0 && (
             <div className="defense-ip-group">
-              <span className="defense-ip-label attacker-label">이벤트 출발지</span>
+              <span className="defense-ip-label attacker-label">Event Source</span>
               {attackerIps.map(ip => (
-                <span key={ip} className="ip-chip attacker copyable" title="클릭하여 IP 복사" onClick={() => copyText(ip)}>{ip}</span>
+                <span key={ip} className="ip-chip attacker copyable" title="Click to copy IP" onClick={() => copyText(ip)}>{ip}</span>
               ))}
             </div>
           )}
           {victimIps.length > 0 && (
             <div className="defense-ip-group">
-              <span className="defense-ip-label victim-label">대상 호스트</span>
+              <span className="defense-ip-label victim-label">Target Host</span>
               {victimIps.map(ip => (
-                <span key={ip} className="ip-chip victim copyable" title="클릭하여 IP 복사" onClick={() => copyText(ip)}>{ip}</span>
+                <span key={ip} className="ip-chip victim copyable" title="Click to copy IP" onClick={() => copyText(ip)}>{ip}</span>
               ))}
             </div>
           )}
@@ -42,7 +42,7 @@ export function DefensePanel({ recommendations, attackerIps, victimIps }: Props)
           ))}
         </ol>
       ) : (
-        <p className="no-data">권고 사항 없음</p>
+        <p className="no-data">No recommendations</p>
       )}
     </div>
   )

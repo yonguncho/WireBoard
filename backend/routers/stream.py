@@ -50,13 +50,13 @@ async def get_stream(
     try:
         capture = request.app.state.session_store.get(upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found"})
 
     check_capture_token(capture, x_upload_token)
 
     session = next((s for s in capture.sessions if s.session_id == session_id), None)
     if session is None:
-        raise HTTPException(status_code=404, detail={"code": "session_not_found", "message": "세션을 찾을 수 없습니다"})
+        raise HTTPException(status_code=404, detail={"code": "session_not_found", "message": "Session not found"})
 
     raw_pkts_all = capture.packet_map.get(session_id, [])
     truncated = len(raw_pkts_all) > _PARSER_MAX

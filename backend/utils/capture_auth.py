@@ -11,5 +11,5 @@ def check_capture_token(capture, x_upload_token: str | None) -> None:
         if not secrets.compare_digest(provided, capture.capture_token):
             raise HTTPException(
                 status_code=403,
-                detail={"code": "forbidden", "msg": "X-Upload-Token이 일치하지 않습니다"},
+                detail={"code": "forbidden", "msg": "X-Upload-Token does not match"},
             )

@@ -16,7 +16,7 @@ class TestBuildSummaryClean:
         from services.narrative.summary_builder import build_summary
         r = build_summary([], [])
         assert r.risk_level == "CLEAN"
-        assert "이상 이벤트 없음" in r.headline
+        assert "no anomalous events" in r.headline
         assert r.attacker_ips == []
         assert r.victim_ips == []
         assert r.attack_timeline == []
@@ -135,7 +135,7 @@ class TestMitreRecommendations:
         from services.narrative.summary_builder import build_summary
         r = build_summary([self._attack("T1046")], [])
         assert len(r.recommendations) > 0
-        assert any("포트스캔" in rec or "방화벽" in rec for rec in r.recommendations)
+        assert any("port-scan" in rec or "firewall" in rec for rec in r.recommendations)
 
     def test_T1071_has_recommendations(self):
         from services.narrative.summary_builder import build_summary
@@ -153,7 +153,7 @@ class TestMitreRecommendations:
         from services.narrative.summary_builder import build_summary
         r = build_summary([self._attack("T1041")], [])
         assert len(r.recommendations) > 0
-        assert any("아웃바운드" in rec or "유출" in rec or "격리" in rec for rec in r.recommendations)
+        assert any("outbound" in rec or "exfiltration" in rec or "Isolate" in rec for rec in r.recommendations)
 
     def test_T1110_bruteforce_has_recommendations(self):
         from services.narrative.summary_builder import build_summary
@@ -232,7 +232,7 @@ class TestNarrativeFormatting:
                     "mitre_id": "T1046", "description": "100개 포트 스캔", "src_ip": "1.2.3.4"}]
         r = build_summary(attacks, [])
         assert "\n" in r.narrative
-        assert "• 포트스캔" in r.narrative
+        assert "• Port scan" in r.narrative
 
     def test_narrative_no_bullets_when_no_description(self):
         from services.narrative.summary_builder import build_summary

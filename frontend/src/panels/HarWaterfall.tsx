@@ -8,13 +8,13 @@ interface Props {
 }
 
 const PHASES: { key: keyof HarEntry['timings']; label: string; color: string }[] = [
-  { key: 'blocked', label: '대기(Blocked)', color: '#94a3b8' },
+  { key: 'blocked', label: 'Blocked', color: '#94a3b8' },
   { key: 'dns', label: 'DNS', color: '#14b8a6' },
-  { key: 'connect', label: '연결(Connect)', color: '#f59e0b' },
+  { key: 'connect', label: 'Connect', color: '#f59e0b' },
   { key: 'ssl', label: 'TLS', color: '#a855f7' },
-  { key: 'send', label: '전송(Send)', color: '#ef4444' },
-  { key: 'wait', label: '대기응답(TTFB)', color: '#22c55e' },
-  { key: 'receive', label: '수신(Receive)', color: '#3b82f6' },
+  { key: 'send', label: 'Send', color: '#ef4444' },
+  { key: 'wait', label: 'Wait (TTFB)', color: '#22c55e' },
+  { key: 'receive', label: 'Receive', color: '#3b82f6' },
 ]
 
 function fmtBytes(b: number) {
@@ -75,8 +75,8 @@ export function HarWaterfall({ uploadId, onFlowSelect }: Props) {
   }, [data, filter, q, sort])
 
   if (error) return <div className="flow-error">{error}</div>
-  if (!data) return <div className="flow-loading"><div className="spinner sm" />HAR 분석 로드 중...</div>
-  if (data.count === 0) return <div className="no-data">HAR 요청 데이터 없음</div>
+  if (!data) return <div className="flow-loading"><div className="spinner sm" />Loading HAR analysis...</div>
+  if (data.count === 0) return <div className="no-data">No HAR request data</div>
 
   const totalSpan = Math.max(1, data.summary.total_time_ms)
   const sg = data.summary.status_groups
@@ -84,9 +84,9 @@ export function HarWaterfall({ uploadId, onFlowSelect }: Props) {
   return (
     <div className="har-waterfall">
       <div className="har-summary">
-        <div className="har-sum-item"><span className="har-sum-num">{data.summary.count}</span><span className="har-sum-lbl">요청</span></div>
-        <div className="har-sum-item"><span className="har-sum-num">{fmtBytes(data.summary.total_bytes)}</span><span className="har-sum-lbl">총 전송</span></div>
-        <div className="har-sum-item"><span className="har-sum-num">{fmtMs(data.summary.total_time_ms)}</span><span className="har-sum-lbl">총 소요</span></div>
+        <div className="har-sum-item"><span className="har-sum-num">{data.summary.count}</span><span className="har-sum-lbl">Requests</span></div>
+        <div className="har-sum-item"><span className="har-sum-num">{fmtBytes(data.summary.total_bytes)}</span><span className="har-sum-lbl">Total transferred</span></div>
+        <div className="har-sum-item"><span className="har-sum-num">{fmtMs(data.summary.total_time_ms)}</span><span className="har-sum-lbl">Total time</span></div>
         <div className="har-sum-status">
           {(['2xx', '3xx', '4xx', '5xx'] as const).map(g => (
             sg[g] > 0 && <span key={g} className={`har-sum-badge ${statusClass(g === '2xx' ? 200 : g === '3xx' ? 300 : g === '4xx' ? 400 : 500)}`}>{g} {sg[g]}</span>
@@ -98,13 +98,13 @@ export function HarWaterfall({ uploadId, onFlowSelect }: Props) {
         <div className="har-filters">
           {(['all', '2xx', '3xx', '4xx', '5xx'] as Filter[]).map(f => (
             <button key={f} className={`filter-btn${filter === f ? ' active' : ''}`} onClick={() => setFilter(f)}>
-              {f === 'all' ? '전체' : f}
+              {f === 'all' ? 'All' : f}
             </button>
           ))}
         </div>
-        <input className="har-search" placeholder="URL · 호스트 검색" value={q} onChange={e => setQ(e.target.value)} />
+        <input className="har-search" placeholder="Search URL · host" value={q} onChange={e => setQ(e.target.value)} />
         <div className="har-sorts">
-          {([['start', '시작순'], ['time', '느린순'], ['size', '큰순']] as [SortKey, string][]).map(([k, l]) => (
+          {([['start', 'By start'], ['time', 'Slowest'], ['size', 'Largest']] as [SortKey, string][]).map(([k, l]) => (
             <button key={k} className={`filter-btn${sort === k ? ' active' : ''}`} onClick={() => setSort(k)}>{l}</button>
           ))}
         </div>
@@ -116,7 +116,7 @@ export function HarWaterfall({ uploadId, onFlowSelect }: Props) {
             <span className="har-legend-swatch" style={{ background: p.color }} />{p.label}
           </span>
         ))}
-        {onFlowSelect && <span className="har-legend-hint">행 클릭 → 패킷 흐름</span>}
+        {onFlowSelect && <span className="har-legend-hint">Click a row → packet flow</span>}
       </div>
 
       <div className="har-rows">
@@ -151,7 +151,7 @@ export function HarWaterfall({ uploadId, onFlowSelect }: Props) {
             </div>
           )
         })}
-        {rows.length === 0 && <div className="no-data">조건에 맞는 요청 없음</div>}
+        {rows.length === 0 && <div className="no-data">No matching requests</div>}
       </div>
     </div>
   )

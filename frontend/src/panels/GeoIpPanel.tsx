@@ -27,11 +27,11 @@ export function GeoIpPanel({ uploadId }: Props) {
       .catch(e => setError(String(e)))
   }, [uploadId])
 
-  if (error) return <div className="no-data">GeoIP 로드 실패: {error}</div>
-  if (!entries) return <div className="no-data">GeoIP 로드 중...</div>
-  if (!entries.length) return <div className="no-data">분석된 외부 IP 없음</div>
+  if (error) return <div className="no-data">Failed to load GeoIP: {error}</div>
+  if (!entries) return <div className="no-data">Loading GeoIP...</div>
+  if (!entries.length) return <div className="no-data">No external IPs analyzed</div>
 
-  // 국가별 집계
+  // Aggregate by country
   const countryCount: Record<string, { code: string; count: number; attacker: boolean }> = {}
   for (const e of entries) {
     if (!countryCount[e.country_name]) {
@@ -42,14 +42,14 @@ export function GeoIpPanel({ uploadId }: Props) {
   }
   const countries = Object.entries(countryCount).sort((a, b) => b[1].count - a[1].count)
 
-  // choropleth 타입은 plotly-dist-min.d.ts에 없을 수 있으므로 any로 우회
+  // The choropleth type may be missing from plotly-dist-min.d.ts, so cast through any
   const choroplethData = [{
     type: 'choropleth' as const,
     locations: countries.map(([, v]) => v.code),
     z: countries.map(([, v]) => v.count),
     text: countries.map(([name]) => name),
     colorscale: 'Reds',
-    colorbar: { title: { text: 'IP 수' } },
+    colorbar: { title: { text: 'IP Count' } },
   }] as any[]
 
   const choroplethLayout = {
@@ -62,14 +62,14 @@ export function GeoIpPanel({ uploadId }: Props) {
       <PlotlyChart data={choroplethData} layout={choroplethLayout as any} height={260} />
       <table className="mini-table" style={{ marginTop: 8 }}>
         <thead>
-          <tr><th>국가</th><th>IP 수</th><th>역할</th></tr>
+          <tr><th>Country</th><th>IP Count</th><th>Role</th></tr>
         </thead>
         <tbody>
           {countries.slice(0, 15).map(([name, v]) => (
             <tr key={name} className={v.attacker ? 'row-error' : ''}>
               <td>{name}</td>
               <td>{v.count}</td>
-              <td>{v.attacker ? '⚠ 이벤트 출발지' : '외부'}</td>
+              <td>{v.attacker ? '⚠ Event Source' : 'External'}</td>
             </tr>
           ))}
         </tbody>

@@ -71,12 +71,12 @@ async def compare_captures(
     try:
         base_capture = store.get(body.base_upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음 (base)"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found (base)"})
     check_capture_token(base_capture, x_upload_token_base)
     try:
         current_capture = store.get(body.current_upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음 (current)"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found (current)"})
     check_capture_token(current_capture, x_upload_token_current)
 
     result = _comparator.compare(base_capture.sessions, current_capture.sessions)

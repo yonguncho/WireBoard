@@ -3,13 +3,13 @@ import { getNetworkHealth } from '../api'
 import type { NetworkHealthData, SessionHealth } from '../api'
 
 const ICMP_LABEL_KR: Record<string, string> = {
-  ttl_expired:      'TTL 만료',
-  fragment_timeout: '단편화 재조립 타임아웃',
-  net_unreachable:  '네트워크 도달 불가',
-  host_unreachable: '호스트 도달 불가',
-  port_unreachable: '포트 도달 불가',
-  admin_prohibited: '관리자 차단',
-  unreachable:      '도달 불가',
+  ttl_expired:      'TTL expired',
+  fragment_timeout: 'Fragment reassembly timeout',
+  net_unreachable:  'Network unreachable',
+  host_unreachable: 'Host unreachable',
+  port_unreachable: 'Port unreachable',
+  admin_prohibited: 'Administratively prohibited',
+  unreachable:      'Unreachable',
 }
 
 function icmpLabelKr(label: string | undefined): string {
@@ -61,36 +61,36 @@ function SessionDetail({ s }: { s: SessionHealth }) {
 
       <div className="nh-detail-grid">
         <div className="nh-detail-card">
-          <div className="nh-detail-card-title">연결 정보</div>
-          <div className="nh-detail-row"><span>핸드셰이크</span><span className="mono">{s.handshake}</span></div>
+          <div className="nh-detail-card-title">Connection info</div>
+          <div className="nh-detail-row"><span>Handshake</span><span className="mono">{s.handshake}</span></div>
           <div className="nh-detail-row"><span>RTT</span><span className="mono">{s.rtt_ms !== null ? `${s.rtt_ms.toFixed(2)} ms` : '—'}</span></div>
-          <div className="nh-detail-row"><span>종료 방식</span><span className="mono">{s.close_type}</span></div>
-          <div className="nh-detail-row"><span>RST 유형</span><span className="mono">{s.rst_type}</span></div>
+          <div className="nh-detail-row"><span>Close type</span><span className="mono">{s.close_type}</span></div>
+          <div className="nh-detail-row"><span>RST type</span><span className="mono">{s.rst_type}</span></div>
         </div>
         <div className="nh-detail-card">
-          <div className="nh-detail-card-title">트래픽</div>
-          <div className="nh-detail-row"><span>패킷 수</span><span className="mono">{s.packet_count.toLocaleString()}</span></div>
-          <div className="nh-detail-row"><span>송신</span><span className="mono">{s.bytes_sent.toLocaleString()} B</span></div>
-          <div className="nh-detail-row"><span>수신</span><span className="mono">{s.bytes_recv.toLocaleString()} B</span></div>
-          <div className="nh-detail-row"><span>세션 시간</span><span className="mono">{s.duration_s.toFixed(3)} s</span></div>
+          <div className="nh-detail-card-title">Traffic</div>
+          <div className="nh-detail-row"><span>Packets</span><span className="mono">{s.packet_count.toLocaleString()}</span></div>
+          <div className="nh-detail-row"><span>Sent</span><span className="mono">{s.bytes_sent.toLocaleString()} B</span></div>
+          <div className="nh-detail-row"><span>Received</span><span className="mono">{s.bytes_recv.toLocaleString()} B</span></div>
+          <div className="nh-detail-row"><span>Session time</span><span className="mono">{s.duration_s.toFixed(3)} s</span></div>
         </div>
         <div className="nh-detail-card">
-          <div className="nh-detail-card-title">재전송</div>
-          <div className="nh-detail-row"><span>횟수</span><span className="mono">{s.retransmit_count}</span></div>
-          <div className="nh-detail-row"><span>비율</span><span className="mono">{(s.retransmit_rate * 100).toFixed(2)}%</span></div>
+          <div className="nh-detail-card-title">Retransmission</div>
+          <div className="nh-detail-row"><span>Count</span><span className="mono">{s.retransmit_count}</span></div>
+          <div className="nh-detail-row"><span>Ratio</span><span className="mono">{(s.retransmit_rate * 100).toFixed(2)}%</span></div>
         </div>
         {s.failure_type === 'path_issue' && (
           <div className="nh-detail-card">
-            <div className="nh-detail-card-title">경로 문제 (ICMP)</div>
-            <div className="nh-detail-row"><span>유형</span><span className="mono">{icmpLabelKr(s.icmp_label)}</span></div>
-            <div className="nh-detail-row"><span>응답 라우터</span><span className="mono">{s.icmp_src_ip ?? '—'}</span></div>
+            <div className="nh-detail-card-title">Path issue (ICMP)</div>
+            <div className="nh-detail-row"><span>Type</span><span className="mono">{icmpLabelKr(s.icmp_label)}</span></div>
+            <div className="nh-detail-row"><span>Responding router</span><span className="mono">{s.icmp_src_ip ?? '—'}</span></div>
           </div>
         )}
       </div>
 
       {s.issues.length > 0 && (
         <div className="nh-issues">
-          <div className="nh-issues-title">진단된 이슈</div>
+          <div className="nh-issues-title">Diagnosed issues</div>
           {s.issues.map((issue, i) => (
             <div key={i} className="nh-issue-item">
               <span className="nh-issue-icon">⚠</span> {issue}
@@ -101,7 +101,7 @@ function SessionDetail({ s }: { s: SessionHealth }) {
 
       {s.recommendations.length > 0 && (
         <div className="nh-recs">
-          <div className="nh-recs-title">권장 조치</div>
+          <div className="nh-recs-title">Recommended actions</div>
           {s.recommendations.map((rec, i) => (
             <div key={i} className="nh-rec-item">
               <span className="nh-rec-icon">→</span> {rec}
@@ -136,12 +136,12 @@ export function NetworkHealthPanel({ uploadId }: Props) {
 
   if (!data && !loading && !error) return (
     <div className="nh-init">
-      <button className="filter-btn" onClick={run}>통신 상태 진단 실행</button>
-      <p className="pkt-hint">전체 세션의 TCP 핸드셰이크·RTT·재전송·RST를 분석해 이상 원인을 진단합니다</p>
+      <button className="filter-btn" onClick={run}>Run connection health diagnostics</button>
+      <p className="pkt-hint">Analyzes TCP handshake · RTT · retransmission · RST across all sessions to diagnose anomaly causes</p>
     </div>
   )
-  if (loading) return <div className="nh-init"><div className="spinner sm" /> 분석 중...</div>
-  if (error)   return <div className="nh-init" style={{ color: '#fc8181' }}>오류: {error}</div>
+  if (loading) return <div className="nh-init"><div className="spinner sm" /> Analyzing...</div>
+  if (error)   return <div className="nh-init" style={{ color: '#fc8181' }}>Error: {error}</div>
   if (!data)   return null
 
   const visible = [...data.sessions]
@@ -158,45 +158,45 @@ export function NetworkHealthPanel({ uploadId }: Props) {
         <div className="nh-overall">
           <ScoreCircle
             score={data.overall_score}
-            status={data.overall_score >= 80 ? '정상' : data.overall_score >= 50 ? '주의' : '이상'}
+            status={data.overall_score >= 80 ? 'Healthy' : data.overall_score >= 50 ? 'Warning' : 'Critical'}
           />
-          <div className="nh-overall-label">전체 점수</div>
+          <div className="nh-overall-label">Overall score</div>
         </div>
         <div className="nh-counts">
-          <div className="nh-count-item nh-ok" onClick={() => setStatusFilter(statusFilter === '정상' ? 'all' : '정상')}>
+          <div className="nh-count-item nh-ok" onClick={() => setStatusFilter(statusFilter === 'Healthy' ? 'all' : 'Healthy')}>
             <span className="nh-count-num">{data.healthy}</span>
-            <span className="nh-count-label">정상</span>
+            <span className="nh-count-label">Healthy</span>
           </div>
-          <div className="nh-count-item nh-warn" onClick={() => setStatusFilter(statusFilter === '주의' ? 'all' : '주의')}>
+          <div className="nh-count-item nh-warn" onClick={() => setStatusFilter(statusFilter === 'Warning' ? 'all' : 'Warning')}>
             <span className="nh-count-num">{data.warning}</span>
-            <span className="nh-count-label">주의</span>
+            <span className="nh-count-label">Warning</span>
           </div>
-          <div className="nh-count-item nh-crit" onClick={() => setStatusFilter(statusFilter === '이상' ? 'all' : '이상')}>
+          <div className="nh-count-item nh-crit" onClick={() => setStatusFilter(statusFilter === 'Critical' ? 'all' : 'Critical')}>
             <span className="nh-count-num">{data.critical}</span>
-            <span className="nh-count-label">이상</span>
+            <span className="nh-count-label">Critical</span>
           </div>
         </div>
         {data.top_issues.length > 0 && (
           <div className="nh-top-issues">
-            <div className="nh-top-issues-title">주요 문제</div>
+            <div className="nh-top-issues-title">Top issues</div>
             {data.top_issues.slice(0, 5).map((t, i) => (
               <div key={i} className="nh-top-issue-item">
-                <span className="nh-top-issue-count">{t.count}건</span>
+                <span className="nh-top-issue-count">{t.count}</span>
                 <span className="nh-top-issue-text">{t.issue}</span>
               </div>
             ))}
           </div>
         )}
         <div className="nh-controls">
-          <button className="filter-btn" onClick={run}>새로고침</button>
+          <button className="filter-btn" onClick={run}>Refresh</button>
           <select className="pkt-filter-input" value={sortKey} style={{ width: 120 }}
             onChange={e => setSortKey(e.target.value as NhSortKey)}>
-            <option value="score">점수순</option>
-            <option value="rtt_ms">RTT순</option>
-            <option value="retransmit_rate">재전송순</option>
+            <option value="score">By score</option>
+            <option value="rtt_ms">By RTT</option>
+            <option value="retransmit_rate">By retransmission</option>
           </select>
           <span className="pkt-total">
-            <strong>{data.total_sessions.toLocaleString()}</strong> 세션 | 표시 <strong>{visible.length}</strong>
+            <strong>{data.total_sessions.toLocaleString()}</strong> sessions | shown <strong>{visible.length}</strong>
           </span>
         </div>
       </div>
@@ -206,13 +206,13 @@ export function NetworkHealthPanel({ uploadId }: Props) {
           <table className="nh-table">
             <thead>
               <tr>
-                <th>점수</th><th>상태</th><th>출발지</th><th></th><th>목적지</th>
-                <th>Proto</th><th>핸드셰이크</th><th>RTT</th><th>재전송</th><th>진단 원인</th>
+                <th>Score</th><th>Status</th><th>Source</th><th></th><th>Destination</th>
+                <th>Proto</th><th>Handshake</th><th>RTT</th><th>Retransmit</th><th>Diagnosed cause</th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 ? (
-                <tr><td colSpan={10} className="pkt-empty">세션 없음</td></tr>
+                <tr><td colSpan={10} className="pkt-empty">No sessions</td></tr>
               ) : visible.map(s => (
                 <SessionRow
                   key={s.session_id}

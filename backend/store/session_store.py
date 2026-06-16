@@ -19,6 +19,7 @@ class ParsedCapture:
     packet_map: dict = field(default_factory=dict)  # session_id -> list[PacketRecord]
     icmp_events: list = field(default_factory=list)  # ICMP 에러 이벤트 (type 3/11)
     capture_token: str = ""  # /api/upload 발급 토큰; 빈 문자열이면 검증 생략
+    pcap_bytes: bytes | None = None  # raw 로그(FortiGate/tcpdump) → 변환된 pcap; 다운로드용
 
 
 class SessionStore:

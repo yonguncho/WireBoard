@@ -39,9 +39,9 @@ class PortScanDetector:
                 attack_type="PortScan",
                 severity=severity,
                 mitre_id="T1046",
-                description=f"{src_ip} → {dst_ip}: {count}개 포트 스캔",
+                description=f"{src_ip} → {dst_ip}: scanned {count} ports",
                 src_ip=src_ip,
-                evidence=[f"{count}개 고유 포트 스캔 감지 ({src_ip} → {dst_ip})"],
+                evidence=[f"Detected scan of {count} unique ports ({src_ip} → {dst_ip})"],
                 sample_count=count,
             )
 

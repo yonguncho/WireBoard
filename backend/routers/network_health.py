@@ -25,7 +25,7 @@ async def get_network_health(
     try:
         capture = request.app.state.session_store.get(upload_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "업로드 파일 없음"})
+        raise HTTPException(status_code=404, detail={"code": "upload_not_found", "message": "Upload not found"})
 
     check_capture_token(capture, x_upload_token)
     logger.info("통신 상태 진단 요청: upload_id=%s, sessions=%d icmp_events=%d",

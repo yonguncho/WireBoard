@@ -44,7 +44,7 @@ class CommFailureDetector:
             severity=severity,
             mitre_id="T1595",
             description=(
-                f"RST {effective_rst}건 + ICMP Unreachable {icmp_unreachable}건 "
-                f"— 연결 거부/차단 의심"
+                f"{effective_rst} RST + {icmp_unreachable} ICMP Unreachable "
+                f"— suspected connection refusal/blocking"
             ),
         )

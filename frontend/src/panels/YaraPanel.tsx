@@ -36,24 +36,24 @@ export function YaraPanel({ uploadId }: Props) {
       .catch(e => setError(String(e)))
   }, [uploadId])
 
-  if (error) return <div className="no-data">YARA 로드 실패: {error}</div>
-  if (!data) return <div className="no-data">YARA 스캔 중...</div>
+  if (error) return <div className="no-data">Failed to load YARA: {error}</div>
+  if (!data) return <div className="no-data">Scanning with YARA...</div>
   if (!data.available) return (
     <div className="no-data">
-      yara-python 패키지가 설치되지 않아 YARA 탐지를 사용할 수 없습니다.<br/>
+      The yara-python package is not installed, so YARA detection is unavailable.<br/>
       <code>pip install yara-python</code>
     </div>
   )
-  if (!data.matches.length) return <div className="no-data" style={{color: '#48bb78'}}>✓ YARA 매치 없음 — 알려진 악성 패턴 미탐지</div>
+  if (!data.matches.length) return <div className="no-data" style={{color: '#48bb78'}}>✓ No YARA matches — no known malicious patterns detected</div>
 
   return (
     <div>
       <div style={{ marginBottom: 8, fontWeight: 600, fontSize: 13 }}>
-        {data.match_count}개 YARA 매치 발견
+        {data.match_count} YARA matches found
       </div>
       <table className="mini-table">
         <thead>
-          <tr><th>룰</th><th>심각도</th><th>MITRE</th><th>세션</th><th>설명</th></tr>
+          <tr><th>Rule</th><th>Severity</th><th>MITRE</th><th>Session</th><th>Description</th></tr>
         </thead>
         <tbody>
           {data.matches.map((m, i) => (

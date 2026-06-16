@@ -1,4 +1,4 @@
-// 전역 토스트 + 클립보드 복사 유틸 — 구독자(App)에게 메시지를 전달한다.
+// Global toast + clipboard copy utility — delivers messages to the subscriber (App).
 type ToastListener = (msg: string) => void
 
 let _listener: ToastListener | null = null
@@ -15,9 +15,9 @@ export function showToast(msg: string): void {
 export async function copyText(text: string, label?: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text)
-    showToast(`${label ?? text} 복사됨`)
+    showToast(`${label ?? text} copied`)
   } catch {
-    // clipboard API 실패 시 폴백 (http 환경 등)
+    // Fallback when the clipboard API fails (e.g. plain http environments)
     const ta = document.createElement('textarea')
     ta.value = text
     ta.style.position = 'fixed'
@@ -26,6 +26,6 @@ export async function copyText(text: string, label?: string): Promise<void> {
     ta.select()
     document.execCommand('copy')
     document.body.removeChild(ta)
-    showToast(`${label ?? text} 복사됨`)
+    showToast(`${label ?? text} copied`)
   }
 }

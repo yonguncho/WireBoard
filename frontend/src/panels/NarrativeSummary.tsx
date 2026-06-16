@@ -13,10 +13,10 @@ const RISK_COLOR: Record<string, string> = {
 }
 
 const RISK_LABEL: Record<string, string> = {
-  HIGH:   '⚠ HIGH — 이상 패턴 다수',
-  MEDIUM: '△ MEDIUM — 확인 권장',
-  LOW:    '▷ LOW — 참고',
-  CLEAN:  '✓ CLEAN — 정상 트래픽',
+  HIGH:   '⚠ HIGH — Multiple anomalous patterns',
+  MEDIUM: '△ MEDIUM — Review recommended',
+  LOW:    '▷ LOW — For reference',
+  CLEAN:  '✓ CLEAN — Normal traffic',
 }
 
 export function NarrativeSummary({ data }: Props) {
@@ -26,7 +26,7 @@ export function NarrativeSummary({ data }: Props) {
 
   return (
     <div className="narrative-card" style={{ borderLeft: `4px solid ${color}` }}>
-      {/* 위험도 뱃지 + 헤드라인 */}
+      {/* Risk badge + headline */}
       <div className="narrative-header">
         <span className="risk-badge" style={{ background: color + '22', color }}>
           {RISK_LABEL[data.risk_level] ?? data.risk_level}
@@ -34,15 +34,15 @@ export function NarrativeSummary({ data }: Props) {
         <h2 className="narrative-headline">{data.headline}</h2>
       </div>
 
-      {/* 내러티브 문장 */}
+      {/* Narrative text */}
       <p className="narrative-body">{data.narrative}</p>
 
-      {/* 공격자 / 피해자 IP */}
+      {/* Source / target IPs */}
       {(data.attacker_ips.length > 0 || data.victim_ips.length > 0) && (
         <div className="ip-row">
           {data.attacker_ips.length > 0 && (
             <div className="ip-group">
-              <span className="ip-group-label">🔴 이벤트 출발지</span>
+              <span className="ip-group-label">🔴 Event source</span>
               {data.attacker_ips.map(ip => (
                 <span key={ip} className="ip-chip attacker">{ip}</span>
               ))}
@@ -50,7 +50,7 @@ export function NarrativeSummary({ data }: Props) {
           )}
           {data.victim_ips.length > 0 && (
             <div className="ip-group">
-              <span className="ip-group-label">🔵 대상 호스트</span>
+              <span className="ip-group-label">🔵 Target host</span>
               {data.victim_ips.map(ip => (
                 <span key={ip} className="ip-chip victim">{ip}</span>
               ))}
@@ -59,7 +59,7 @@ export function NarrativeSummary({ data }: Props) {
         </div>
       )}
 
-      {/* 공격 설명 토글 */}
+      {/* Attack explanation toggle */}
       {Object.keys(data.attack_explanations).length > 0 && (
         <div className="explain-section">
           <div className="explain-chips">
@@ -69,7 +69,7 @@ export function NarrativeSummary({ data }: Props) {
                 className={`explain-chip${showExplain === t ? ' active' : ''}`}
                 onClick={() => setShowExplain(showExplain === t ? null : t)}
               >
-                ? {t}이란
+                ? What is {t}
               </button>
             ))}
           </div>
@@ -82,14 +82,14 @@ export function NarrativeSummary({ data }: Props) {
         </div>
       )}
 
-      {/* 방어 권고 토글 */}
+      {/* Recommendations toggle */}
       {data.recommendations.length > 0 && (
         <div className="rec-section">
           <button
             className="rec-toggle"
             onClick={() => setShowRecs(v => !v)}
           >
-            🛠 권장 조치 {data.recommendations.length}개 {showRecs ? '▲' : '▼'}
+            🛠 Recommended actions {data.recommendations.length} {showRecs ? '▲' : '▼'}
           </button>
           {showRecs && (
             <ul className="rec-list">

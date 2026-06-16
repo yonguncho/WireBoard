@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { uploadPcap, analyzePcap, getPanels, getSummary, exportJson, exportPdf, exportIoc } from './api'
+import { uploadPcap, analyzePcap, getPanels, getSummary, exportJson, exportPdf, exportIoc, downloadConvertedPcap } from './api'
 import type { PanelData, SummaryData } from './api'
 import { subscribeToast } from './toast'
 import { NarrativeSummary } from './panels/NarrativeSummary'
@@ -35,6 +35,7 @@ interface UploadMeta {
   filename: string
   sessionCount: number
   sourceType: string
+  pcapAvailable: boolean
 }
 
 interface RecentEntry {
@@ -62,35 +63,35 @@ function saveRecent(entry: RecentEntry): RecentEntry[] {
   return list
 }
 
-// ── 단축키 도움말 ─────────────────────────────────────────────────────────────
+// ── Keyboard shortcut help ─────────────────────────────────────────────────────────────
 
 const SHORTCUTS: [string, string][] = [
-  ['Ctrl + K', '커맨드 팔레트 (이동 · 액션 검색)'],
-  ['1 / 2 / 3', '현황 · 조사 · 출력 레이어 전환'],
-  ['T', '다크 / 라이트 테마 전환'],
-  ['N', '새 파일 업로드로 돌아가기'],
-  ['?', '단축키 도움말 열기/닫기'],
-  ['Esc', '오버레이 · 패킷 뷰어 닫기'],
+  ['Ctrl + K', 'Command palette (search navigation · actions)'],
+  ['1 / 2 / 3', 'Switch Overview · Investigate · Output layers'],
+  ['T', 'Toggle dark / light theme'],
+  ['N', 'Back to new file upload'],
+  ['?', 'Open/close shortcut help'],
+  ['Esc', 'Close overlay · packet viewer'],
 ]
 
 function ShortcutHelp({ onClose }: { onClose: () => void }) {
   return (
     <div className="sc-overlay" onClick={onClose}>
       <div className="sc-modal" onClick={e => e.stopPropagation()}>
-        <div className="sc-title">키보드 단축키</div>
+        <div className="sc-title">Keyboard Shortcuts</div>
         {SHORTCUTS.map(([key, desc]) => (
           <div key={key} className="sc-row">
             <span className="sc-key">{key}</span>
             <span className="sc-desc">{desc}</span>
           </div>
         ))}
-        <button className="sc-close" onClick={onClose}>닫기 (Esc)</button>
+        <button className="sc-close" onClick={onClose}>Close (Esc)</button>
       </div>
     </div>
   )
 }
 
-// ── 커맨드 팔레트 ─────────────────────────────────────────────────────────────
+// ── Command palette ─────────────────────────────────────────────────────────────
 
 interface CmdItem {
   id: string
@@ -131,13 +132,13 @@ function CommandPalette({ items, onClose }: { items: CmdItem[]; onClose: () => v
         <input
           ref={inputRef}
           className="cp-input"
-          placeholder="이동하거나 실행할 작업 검색..."
+          placeholder="Search to navigate or run an action..."
           value={q}
           onChange={e => { setQ(e.target.value); setIdx(0) }}
           onKeyDown={onKey}
         />
         <div className="cp-list">
-          {filtered.length === 0 && <div className="cp-empty">일치하는 항목 없음</div>}
+          {filtered.length === 0 && <div className="cp-empty">No matching items</div>}
           {filtered.map((it, i) => {
             const showSection = it.section !== lastSection
             lastSection = it.section
@@ -157,9 +158,9 @@ function CommandPalette({ items, onClose }: { items: CmdItem[]; onClose: () => v
           })}
         </div>
         <div className="cp-footer">
-          <span><kbd>↑↓</kbd> 이동</span>
-          <span><kbd>Enter</kbd> 실행</span>
-          <span><kbd>Esc</kbd> 닫기</span>
+          <span><kbd>↑↓</kbd> Navigate</span>
+          <span><kbd>Enter</kbd> Run</span>
+          <span><kbd>Esc</kbd> Close</span>
         </div>
       </div>
     </div>
@@ -190,14 +191,14 @@ function ProtocolHierarchy({ data }: { data: PanelData }) {
   const dist = data.panel2_protocol.distribution
   const ports = data.panel2_protocol.top_ports
   const total = Object.values(dist).reduce((a, b) => a + b, 0)
-  if (total === 0) return <div className="ph-empty">프로토콜 데이터 없음</div>
+  if (total === 0) return <div className="ph-empty">No protocol data</div>
 
   const sorted = Object.entries(dist).sort(([, a], [, b]) => b - a)
   const maxCount = sorted[0]?.[1] ?? 1
 
   return (
     <div className="ph-tree">
-      <div className="ph-section-title">프로토콜 분포</div>
+      <div className="ph-section-title">Protocol Distribution</div>
       {sorted.map(([proto, count]) => {
         const pct = ((count / total) * 100).toFixed(1)
         return (
@@ -213,7 +214,7 @@ function ProtocolHierarchy({ data }: { data: PanelData }) {
       })}
       {ports.length > 0 && (
         <>
-          <div className="ph-section-title" style={{ marginTop: 16 }}>상위 포트</div>
+          <div className="ph-section-title" style={{ marginTop: 16 }}>Top Ports</div>
           {ports.slice(0, 10).map(p => (
             <div key={p.port} className="ph-row ph-port-row">
               <span className="ph-proto">:{p.port}</span>
@@ -233,10 +234,10 @@ function ProtocolHierarchy({ data }: { data: PanelData }) {
 
 function RiskBadge({ level }: { level: string }) {
   const cfg: Record<string, { color: string; label: string }> = {
-    HIGH:   { color: '#ef4444', label: '고위험' },
-    MEDIUM: { color: '#f59e0b', label: '중위험' },
-    LOW:    { color: '#22c55e', label: '저위험' },
-    CLEAN:  { color: '#3b82f6', label: '정상' },
+    HIGH:   { color: '#ef4444', label: 'High Risk' },
+    MEDIUM: { color: '#f59e0b', label: 'Medium Risk' },
+    LOW:    { color: '#22c55e', label: 'Low Risk' },
+    CLEAN:  { color: '#3b82f6', label: 'Clean' },
   }
   const c = cfg[level] ?? cfg.CLEAN
   return (
@@ -286,12 +287,12 @@ export default function App() {
 
   const handleFile = useCallback(async (file: File) => {
     if (!ALLOWED.test(file.name)) {
-      setError('지원 포맷: .pcap · .pcapng · .cap · .har · .log · .txt · .tcpdump')
+      setError('Supported formats: .pcap · .pcapng · .cap · .har · .log · .txt · .tcpdump')
       return
     }
     setLoading(true)
     setLoadStep(0)
-    setLoadingMsg('파일 업로드 중...')
+    setLoadingMsg('Uploading file...')
     setError(null)
     setPanels(null)
     setMeta(null)
@@ -301,17 +302,17 @@ export default function App() {
       if (up.parse_warnings?.length) console.warn('Parse warnings:', up.parse_warnings)
 
       setLoadStep(1)
-      setLoadingMsg(`${up.session_count.toLocaleString()}개 세션 패턴 분석 중...`)
+      setLoadingMsg(`Analyzing patterns across ${up.session_count.toLocaleString()} sessions...`)
       await analyzePcap(up.upload_id, targetIp.trim() || undefined)
 
       setLoadStep(2)
-      setLoadingMsg('분석 요약 생성 중...')
+      setLoadingMsg('Generating analysis summary...')
       const [data, sum] = await Promise.all([
         getPanels(up.upload_id),
         getSummary(up.upload_id),
       ])
 
-      setMeta({ uploadId: up.upload_id, filename: file.name, sessionCount: up.session_count, sourceType: up.source_type })
+      setMeta({ uploadId: up.upload_id, filename: file.name, sessionCount: up.session_count, sourceType: up.source_type, pcapAvailable: !!up.pcap_available })
       setPanels(data)
       setSummary(sum)
       setLayer('overview')
@@ -341,7 +342,7 @@ export default function App() {
     setMeta(null); setPanels(null); setSummary(null); setError(null)
   }, [])
 
-  // 대시보드 상태에서도 화면 어디든 파일을 드롭하면 새 분석 시작
+  // Even in the dashboard state, dropping a file anywhere on screen starts a new analysis
   useEffect(() => {
     if (!meta || loading) return
     const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes('Files')
@@ -383,7 +384,7 @@ export default function App() {
     setTimeout(() => attackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
   }, [])
 
-  // 전역 키보드 단축키 — 입력 필드 포커스 중에는 비활성 (Ctrl+K 제외)
+  // Global keyboard shortcuts — disabled while an input field is focused (except Ctrl+K)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
@@ -416,20 +417,20 @@ export default function App() {
 
   const paletteItems: CmdItem[] = [
     ...(meta ? [
-      { id: 'go-overview', label: '현황 레이어', section: '이동', hint: '1', keywords: 'overview layer dashboard', run: () => setLayer('overview') },
-      { id: 'go-sessions', label: '조사 › 세션/패킷', section: '이동', hint: '2', keywords: 'investigate session packet wireshark', run: () => { setLayer('investigate'); setInvTab('sessions') } },
-      { id: 'go-traffic', label: '조사 › 트래픽', section: '이동', keywords: 'traffic timeline ip ranking conversation', run: () => { setLayer('investigate'); setInvTab('traffic') } },
-      { id: 'go-protocol', label: '조사 › 프로토콜', section: '이동', keywords: 'protocol http dns tls', run: () => { setLayer('investigate'); setInvTab('protocol') } },
-      { id: 'go-health', label: '조사 › 통신진단', section: '이동', keywords: 'health rtt retransmit handshake diagnose', run: () => { setLayer('investigate'); setInvTab('health') } },
-      { id: 'go-geoip', label: '조사 › GeoIP', section: '이동', keywords: 'geoip geo location country', run: () => { setLayer('investigate'); setInvTab('geoip') } },
-      { id: 'go-yara', label: '조사 › YARA', section: '이동', keywords: 'yara signature malware', run: () => { setLayer('investigate'); setInvTab('yara') } },
-      { id: 'go-output', label: '출력 › 캡처 비교', section: '이동', hint: '3', keywords: 'output compare diff', run: () => setLayer('output') },
-      { id: 'export-json', label: 'JSON 내보내기', section: '액션', keywords: 'export json download', run: () => exportJson(meta.uploadId).catch(e => setError(e.message)) },
-      { id: 'export-pdf', label: 'PDF 리포트 내보내기', section: '액션', keywords: 'export pdf report download', run: () => exportPdf(meta.uploadId).catch(e => setError(e.message)) },
-      { id: 'new-file', label: '새 파일 업로드', section: '액션', hint: 'N', keywords: 'new upload reset', run: resetToUpload },
+      { id: 'go-overview', label: 'Overview layer', section: 'Navigate', hint: '1', keywords: 'overview layer dashboard', run: () => setLayer('overview') },
+      { id: 'go-sessions', label: 'Investigate › Sessions/Packets', section: 'Navigate', hint: '2', keywords: 'investigate session packet wireshark', run: () => { setLayer('investigate'); setInvTab('sessions') } },
+      { id: 'go-traffic', label: 'Investigate › Traffic', section: 'Navigate', keywords: 'traffic timeline ip ranking conversation', run: () => { setLayer('investigate'); setInvTab('traffic') } },
+      { id: 'go-protocol', label: 'Investigate › Protocol', section: 'Navigate', keywords: 'protocol http dns tls', run: () => { setLayer('investigate'); setInvTab('protocol') } },
+      { id: 'go-health', label: 'Investigate › Health Diagnostics', section: 'Navigate', keywords: 'health rtt retransmit handshake diagnose', run: () => { setLayer('investigate'); setInvTab('health') } },
+      { id: 'go-geoip', label: 'Investigate › GeoIP', section: 'Navigate', keywords: 'geoip geo location country', run: () => { setLayer('investigate'); setInvTab('geoip') } },
+      { id: 'go-yara', label: 'Investigate › YARA', section: 'Navigate', keywords: 'yara signature malware', run: () => { setLayer('investigate'); setInvTab('yara') } },
+      { id: 'go-output', label: 'Output › Capture Comparison', section: 'Navigate', hint: '3', keywords: 'output compare diff', run: () => setLayer('output') },
+      { id: 'export-json', label: 'Export JSON', section: 'Actions', keywords: 'export json download', run: () => exportJson(meta.uploadId).catch(e => setError(e.message)) },
+      { id: 'export-pdf', label: 'Export PDF Report', section: 'Actions', keywords: 'export pdf report download', run: () => exportPdf(meta.uploadId).catch(e => setError(e.message)) },
+      { id: 'new-file', label: 'Upload New File', section: 'Actions', hint: 'N', keywords: 'new upload reset', run: resetToUpload },
     ] : []),
-    { id: 'toggle-theme', label: `${theme === 'dark' ? '라이트' : '다크'} 테마로 전환`, section: '설정', hint: 'T', keywords: 'theme dark light toggle', run: () => setTheme(t => t === 'dark' ? 'light' : 'dark') },
-    { id: 'show-help', label: '키보드 단축키 도움말', section: '설정', hint: '?', keywords: 'shortcut help keyboard', run: () => setShowHelp(true) },
+    { id: 'toggle-theme', label: `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`, section: 'Settings', hint: 'T', keywords: 'theme dark light toggle', run: () => setTheme(t => t === 'dark' ? 'light' : 'dark') },
+    { id: 'show-help', label: 'Keyboard shortcut help', section: 'Settings', hint: '?', keywords: 'shortcut help keyboard', run: () => setShowHelp(true) },
   ]
 
   return (
@@ -439,16 +440,16 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v7.1.0</span>
+          <span className="header-ver">v7.2.0</span>
         </div>
         {meta && (
           <div className="header-file-info">
             <span className="chip chip-file">{meta.filename}</span>
-            <span className="chip chip-sessions">{meta.sessionCount.toLocaleString()} 세션</span>
+            <span className="chip chip-sessions">{meta.sessionCount.toLocaleString()} sessions</span>
             <span className="chip chip-src">{meta.sourceType.toUpperCase()}</span>
-            <button className="btn-export" title="JSON 내보내기" onClick={() => exportJson(meta.uploadId).catch(e => setError(e.message))}>↓ JSON</button>
-            <button className="btn-export" title="PDF 리포트" onClick={() => exportPdf(meta.uploadId).catch(e => setError(e.message))}>↓ PDF</button>
-            <button className="btn-export" title="IOC 내보내기 (CSV)" onClick={async () => {
+            <button className="btn-export" title="Export JSON" onClick={() => exportJson(meta.uploadId).catch(e => setError(e.message))}>↓ JSON</button>
+            <button className="btn-export" title="PDF Report" onClick={() => exportPdf(meta.uploadId).catch(e => setError(e.message))}>↓ PDF</button>
+            <button className="btn-export" title="Export IOC (CSV)" onClick={async () => {
               try {
                 const blob = await exportIoc(meta.uploadId)
                 const url = URL.createObjectURL(blob)
@@ -457,44 +458,47 @@ export default function App() {
                 URL.revokeObjectURL(url)
               } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
             }}>↓ IOC</button>
-            <button className="btn-new-file" title="단축키 N" onClick={resetToUpload}>새 파일</button>
+            {meta.pcapAvailable && (
+              <button className="btn-export" title="Download log converted to PCAP" onClick={() => downloadConvertedPcap(meta.uploadId).catch(e => setError(e instanceof Error ? e.message : String(e)))}>↓ PCAP</button>
+            )}
+            <button className="btn-new-file" title="Shortcut N" onClick={resetToUpload}>New File</button>
           </div>
         )}
-        {!meta && <span className="header-tagline">PCAP 네트워크 분석 도구</span>}
-        <button className="theme-toggle" title="단축키 ?" onClick={() => setShowHelp(v => !v)}>⌨ 단축키</button>
-        <button className="theme-toggle" title="단축키 T" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
-          {theme === 'dark' ? '☀ 라이트' : '◑ 다크'}
+        {!meta && <span className="header-tagline">PCAP Network Analysis Tool</span>}
+        <button className="theme-toggle" title="Shortcut ?" onClick={() => setShowHelp(v => !v)}>⌨ Shortcuts</button>
+        <button className="theme-toggle" title="Shortcut T" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
+          {theme === 'dark' ? '☀ Light' : '◑ Dark'}
         </button>
       </header>
 
-      {/* 상단 로딩 프로그레스 바 */}
+      {/* Top loading progress bar */}
       {loading && <div className="top-progress" />}
 
-      {/* 전역 드롭 오버레이 — 대시보드 상태에서 파일 드롭 시 새 분석 */}
+      {/* Global drop overlay — dropping a file in the dashboard state starts a new analysis */}
       {globalDrag && (
         <div className="global-drop-overlay">
           <div className="global-drop-box">
             <IconUpload />
-            <p>여기에 놓으면 새 파일을 분석합니다</p>
+            <p>Drop here to analyze a new file</p>
           </div>
         </div>
       )}
 
-      {/* 전역 토스트 */}
+      {/* Global toast */}
       {toast && <div className="toast">{toast}</div>}
 
-      {/* 단축키 도움말 */}
+      {/* Keyboard shortcut help */}
       {showHelp && <ShortcutHelp onClose={() => setShowHelp(false)} />}
 
-      {/* 커맨드 팔레트 */}
+      {/* Command palette */}
       {showPalette && <CommandPalette items={paletteItems} onClose={() => setShowPalette(false)} />}
 
       {/* Upload Page */}
       {!meta && !loading && (
         <main className="upload-page">
           <div className="upload-hero">
-            <h1 className="upload-hero-title">네트워크 트래픽을 한눈에 분석하세요</h1>
-            <p className="upload-hero-sub">pcap 파일을 업로드하면 세션 · 프로토콜 · 이상 패턴을 자동으로 분석합니다</p>
+            <h1 className="upload-hero-title">Analyze network traffic at a glance</h1>
+            <p className="upload-hero-sub">Upload a pcap file to automatically analyze sessions, protocols, and anomalous patterns</p>
           </div>
           <div
             className={`drop-zone${dragging ? ' dragging' : ''}`}
@@ -506,42 +510,42 @@ export default function App() {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} hidden />
             <label htmlFor="pcap-input" className="drop-label">
               <div className="drop-icon-wrap"><IconUpload /></div>
-              <p className="drop-primary">파일을 드래그하거나 클릭하여 업로드</p>
-              <p className="drop-hint">.pcap &nbsp;·&nbsp; .pcapng &nbsp;·&nbsp; .har &nbsp;·&nbsp; .log &nbsp;·&nbsp; 최대 50 MB</p>
+              <p className="drop-primary">Drag a file or click to upload</p>
+              <p className="drop-hint">.pcap &nbsp;·&nbsp; .pcapng &nbsp;·&nbsp; .har &nbsp;·&nbsp; .log &nbsp;·&nbsp; up to 50 MB</p>
             </label>
           </div>
           <div className="feature-cards">
             <div className="feature-card">
               <span className="feature-icon">🔒</span>
-              <span className="feature-title">100% 오프라인 분석</span>
-              <span className="feature-desc">파일은 로컬에서만 처리되며 외부로 전송되지 않습니다</span>
+              <span className="feature-title">100% Offline Analysis</span>
+              <span className="feature-desc">Files are processed locally only and never sent anywhere</span>
             </div>
             <div className="feature-card">
               <span className="feature-icon">⚡</span>
-              <span className="feature-title">자동 이상 탐지</span>
-              <span className="feature-desc">포트스캔 · DDoS · 데이터 유출 등을 MITRE ATT&CK에 매핑</span>
+              <span className="feature-title">Automatic Anomaly Detection</span>
+              <span className="feature-desc">Maps port scans, DDoS, data exfiltration, and more to MITRE ATT&CK</span>
             </div>
             <div className="feature-card">
               <span className="feature-icon">📄</span>
-              <span className="feature-title">원클릭 리포트</span>
-              <span className="feature-desc">PDF 리포트 · JSON · IOC CSV로 즉시 내보내기</span>
+              <span className="feature-title">One-Click Report</span>
+              <span className="feature-desc">Instantly export as PDF report, JSON, or IOC CSV</span>
             </div>
           </div>
           <div className="target-ip-row">
-            <label htmlFor="target-ip" className="ip-label">분석 대상 IP <span className="optional">(선택 — 비우면 자동 감지)</span></label>
-            <input id="target-ip" className="ip-input" placeholder="예: 192.168.1.10" value={targetIp} onChange={(e) => setTargetIp(e.target.value)} />
+            <label htmlFor="target-ip" className="ip-label">Target IP <span className="optional">(optional — auto-detected if left blank)</span></label>
+            <input id="target-ip" className="ip-input" placeholder="e.g. 192.168.1.10" value={targetIp} onChange={(e) => setTargetIp(e.target.value)} />
           </div>
           {recent.length > 0 && (
             <div className="recent-files">
-              <div className="recent-title">최근 분석</div>
+              <div className="recent-title">Recent Analyses</div>
               {recent.map(r => (
                 <div key={r.filename + r.analyzedAt} className="recent-row">
                   <span className="recent-name mono">{r.filename}</span>
-                  <span className="recent-meta">{r.sessionCount.toLocaleString()} 세션</span>
+                  <span className="recent-meta">{r.sessionCount.toLocaleString()} sessions</span>
                   <span className={`recent-risk risk-${r.riskLevel.toLowerCase()}`}>
-                    {r.riskLevel}{r.attackCount > 0 ? ` · 이벤트 ${r.attackCount}` : ''}
+                    {r.riskLevel}{r.attackCount > 0 ? ` · ${r.attackCount} events` : ''}
                   </span>
-                  <span className="recent-time">{new Date(r.analyzedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="recent-time">{new Date(r.analyzedAt).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
               ))}
             </div>
@@ -561,7 +565,7 @@ export default function App() {
           <div className="spinner" />
           <p className="loading-msg">{loadingMsg}</p>
           <div className="load-steps">
-            {['업로드', '패턴 분석', '요약 생성'].map((label, i) => (
+            {['Upload', 'Pattern Analysis', 'Summary'].map((label, i) => (
               <div key={label} className={`load-step${i < loadStep ? ' done' : i === loadStep ? ' active' : ''}`}>
                 <span className="load-step-dot">{i < loadStep ? '✓' : i + 1}</span>
                 <span className="load-step-label">{label}</span>
@@ -572,7 +576,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Flow Viewer 오버레이 */}
+      {/* Flow Viewer overlay */}
       {flowSessionId && meta && (
         <FlowViewer
           uploadId={meta.uploadId}
@@ -594,23 +598,23 @@ export default function App() {
           {/* Layer Navigation */}
           <nav className="layer-nav">
             <button className={`layer-btn${layer === 'overview' ? ' active' : ''}`} onClick={() => setLayer('overview')}>
-              <span>▤</span> 현황 <kbd className="nav-kbd">1</kbd>
+              <span>▤</span> Overview <kbd className="nav-kbd">1</kbd>
             </button>
             <button className={`layer-btn${layer === 'investigate' ? ' active' : ''}`} onClick={() => setLayer('investigate')}>
-              <span>🔬</span> 조사 <kbd className="nav-kbd">2</kbd>
+              <span>🔬</span> Investigate <kbd className="nav-kbd">2</kbd>
             </button>
             <button className={`layer-btn${layer === 'output' ? ' active' : ''}`} onClick={() => setLayer('output')}>
-              <span>⇄</span> 출력 <kbd className="nav-kbd">3</kbd>
+              <span>⇄</span> Output <kbd className="nav-kbd">3</kbd>
             </button>
             <button className="palette-hint" onClick={() => setShowPalette(true)}>
-              <kbd className="nav-kbd">Ctrl K</kbd> 빠른 이동
+              <kbd className="nav-kbd">Ctrl K</kbd> Quick Navigate
             </button>
           </nav>
 
           {/* Investigate Sub-nav */}
           {layer === 'investigate' && (
             <nav className="sub-nav">
-              {(([ ['sessions','세션/패킷'], ['traffic','트래픽'], ['protocol','프로토콜'], ['health','통신진단'], ['geoip','GeoIP'], ['yara','YARA'], ...(meta.sourceType === 'har' ? [['har','HAR 워터폴']] : []) ] as [InvTab, string][])).map(([key, label]) => (
+              {(([ ['sessions','Sessions/Packets'], ['traffic','Traffic'], ['protocol','Protocol'], ['health','Health Diagnostics'], ['geoip','GeoIP'], ['yara','YARA'], ...(meta.sourceType === 'har' ? [['har','HAR Waterfall']] : []) ] as [InvTab, string][])).map(([key, label]) => (
                 <button key={key} className={`sub-btn${invTab === key ? ' active' : ''}`} onClick={() => setInvTab(key)}>
                   {label}
                 </button>
@@ -621,36 +625,36 @@ export default function App() {
           {/* Content */}
           <div className="panel-grid">
 
-            {/* ── 현황 레이어 ─────────────────────────────────────────────── */}
+            {/* ── Overview layer ─────────────────────────────────────────────── */}
             {layer === 'overview' && (
               <>
                 <div className="overview-header-row">
                   <RiskBadge level={summary.risk_level} />
                   <div className="stat-strip">
-                    <button className="stat-card stat-click" title="세션/패킷 조사로 이동"
+                    <button className="stat-card stat-click" title="Go to Sessions/Packets investigation"
                       onClick={() => { setLayer('investigate'); setInvTab('sessions') }}>
                       <span className="stat-num">{meta.sessionCount.toLocaleString()}</span>
-                      <span className="stat-lbl">세션</span>
+                      <span className="stat-lbl">Sessions</span>
                     </button>
                     <button className={`stat-card stat-click${panels.panel10_attacks.length > 0 ? ' stat-danger' : ''}`}
-                      title="탐지 이벤트 상세로 이동" onClick={goAttackDetail}>
+                      title="Go to detected event details" onClick={goAttackDetail}>
                       <span className="stat-num">{panels.panel10_attacks.length}</span>
-                      <span className="stat-lbl">탐지 이벤트</span>
+                      <span className="stat-lbl">Detected Events</span>
                     </button>
                     <button className={`stat-card stat-click${summary.attacker_ips.length > 0 ? ' stat-danger' : ''}`}
-                      title="GeoIP 지리 분포로 이동" onClick={() => { setLayer('investigate'); setInvTab('geoip') }}>
+                      title="Go to GeoIP geographic distribution" onClick={() => { setLayer('investigate'); setInvTab('geoip') }}>
                       <span className="stat-num">{summary.attacker_ips.length}</span>
-                      <span className="stat-lbl">이벤트 IP</span>
+                      <span className="stat-lbl">Event IPs</span>
                     </button>
                     <button className={`stat-card stat-click${panels.panel5_anomalies.rst_count > 0 ? ' stat-warn' : ''}`}
-                      title="통신 상태 진단으로 이동" onClick={() => { setLayer('investigate'); setInvTab('health') }}>
+                      title="Go to communication health diagnostics" onClick={() => { setLayer('investigate'); setInvTab('health') }}>
                       <span className="stat-num">{panels.panel5_anomalies.rst_count.toLocaleString()}</span>
                       <span className="stat-lbl">RST</span>
                     </button>
                     <button className={`stat-card stat-click${panels.panel5_anomalies.retransmit_count > 0 ? ' stat-warn' : ''}`}
-                      title="통신 상태 진단으로 이동" onClick={() => { setLayer('investigate'); setInvTab('health') }}>
+                      title="Go to communication health diagnostics" onClick={() => { setLayer('investigate'); setInvTab('health') }}>
                       <span className="stat-num">{panels.panel5_anomalies.retransmit_count.toLocaleString()}</span>
-                      <span className="stat-lbl">재전송</span>
+                      <span className="stat-lbl">Retransmits</span>
                     </button>
                   </div>
                 </div>
@@ -660,7 +664,7 @@ export default function App() {
                 </div>
 
                 <div className="attack-defense-row">
-                  <PCard title="이벤트 타임라인">
+                  <PCard title="Event Timeline">
                     <AttackTimeline events={summary.attack_timeline} />
                   </PCard>
                   <DefensePanel
@@ -671,27 +675,27 @@ export default function App() {
                 </div>
 
                 <div ref={attackRef} className="panel-card wide">
-                  <div className="panel-card-title">탐지 이벤트 상세</div>
+                  <div className="panel-card-title">Detected Event Details</div>
                   <div className="panel-card-body">
                     <Panel10Attacks data={panels.panel10_attacks} />
                   </div>
                 </div>
 
                 <div className="overview-bottom-row">
-                  <PCard title="이상 지표">
+                  <PCard title="Anomaly Indicators">
                     <Panel5Anomalies data={panels.panel5_anomalies} />
                   </PCard>
-                  <PCard title="IP 트래픽">
+                  <PCard title="IP Traffic">
                     <Panel1Ip data={panels.panel1_ip} />
                   </PCard>
-                  <PCard title="프로토콜 분포">
+                  <PCard title="Protocol Distribution">
                     <Panel2Protocol data={panels.panel2_protocol} />
                   </PCard>
                 </div>
               </>
             )}
 
-            {/* ── 조사 레이어 ─────────────────────────────────────────────── */}
+            {/* ── Investigate layer ─────────────────────────────────────────────── */}
             {layer === 'investigate' && invTab === 'sessions' && (
               <div className="panel-card wide" style={{ padding: 0, overflow: 'hidden' }}>
                 <SessionExplorer
@@ -705,7 +709,7 @@ export default function App() {
 
             {layer === 'investigate' && invTab === 'sessions' && (
               <div className="panel-card wide">
-                <div className="panel-card-title">Wireshark 스타일 패킷 뷰어</div>
+                <div className="panel-card-title">Wireshark-Style Packet Viewer</div>
                 <div className="panel-card-body">
                   <PacketList uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
                 </div>
@@ -714,13 +718,13 @@ export default function App() {
 
             {layer === 'investigate' && invTab === 'traffic' && (
               <>
-                <PCard title="트래픽 타임라인" wide>
+                <PCard title="Traffic Timeline" wide>
                   <Panel3Timeline data={panels.panel3_timeline} uploadId={meta.uploadId} />
                 </PCard>
-                <PCard title="IP 순위 (클릭 → 드릴다운)">
+                <PCard title="IP Ranking (click → drill down)">
                   <Panel6IpRanking data={panels.panel6_ip_ranking} uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
                 </PCard>
-                <PCard title="상위 대화 (클릭 → 세션)">
+                <PCard title="Top Conversations (click → session)">
                   <Panel9Conversations data={panels.panel9_conversations} uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
                 </PCard>
               </>
@@ -728,16 +732,16 @@ export default function App() {
 
             {layer === 'investigate' && invTab === 'protocol' && (
               <>
-                <PCard title="프로토콜 계층">
+                <PCard title="Protocol Hierarchy">
                   <ProtocolHierarchy data={panels} />
                 </PCard>
-                <PCard title="HTTP 상태 코드">
+                <PCard title="HTTP Status Codes">
                   <Panel4Http data={panels.panel4_http} />
                 </PCard>
-                <PCard title="DNS 쿼리">
+                <PCard title="DNS Queries">
                   <Panel8Dns data={panels.panel8_dns} />
                 </PCard>
-                <PCard title="TLS 세션">
+                <PCard title="TLS Sessions">
                   <Panel7Tls data={panels.panel7_tls} />
                 </PCard>
               </>
@@ -745,7 +749,7 @@ export default function App() {
 
             {layer === 'investigate' && invTab === 'health' && (
               <div className="panel-card wide">
-                <div className="panel-card-title">통신 상태 진단 (RTT · 재전송 · 핸드셰이크)</div>
+                <div className="panel-card-title">Communication Health Diagnostics (RTT · Retransmits · Handshake)</div>
                 <div className="panel-card-body">
                   <NetworkHealthPanel uploadId={meta.uploadId} />
                 </div>
@@ -754,7 +758,7 @@ export default function App() {
 
             {layer === 'investigate' && invTab === 'geoip' && (
               <div className="panel-card wide">
-                <div className="panel-card-title">출발지 IP 지리 분포</div>
+                <div className="panel-card-title">Source IP Geographic Distribution</div>
                 <div className="panel-card-body">
                   <GeoIpPanel uploadId={meta.uploadId} />
                 </div>
@@ -763,7 +767,7 @@ export default function App() {
 
             {layer === 'investigate' && invTab === 'yara' && (
               <div className="panel-card wide">
-                <div className="panel-card-title">YARA 서명 탐지</div>
+                <div className="panel-card-title">YARA Signature Detection</div>
                 <div className="panel-card-body">
                   <YaraPanel uploadId={meta.uploadId} />
                 </div>
@@ -772,17 +776,17 @@ export default function App() {
 
             {layer === 'investigate' && invTab === 'har' && meta.sourceType === 'har' && (
               <div className="panel-card wide">
-                <div className="panel-card-title">HAR 요청 워터폴 (타이밍 · 상태 · 크기)</div>
+                <div className="panel-card-title">HAR Request Waterfall (Timing · Status · Size)</div>
                 <div className="panel-card-body">
                   <HarWaterfall uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
                 </div>
               </div>
             )}
 
-            {/* ── 출력 레이어 ─────────────────────────────────────────────── */}
+            {/* ── Output layer ─────────────────────────────────────────────── */}
             {layer === 'output' && (
               <div className="panel-card wide">
-                <div className="panel-card-title">캡처 비교 분석</div>
+                <div className="panel-card-title">Capture Comparison Analysis</div>
                 <div className="panel-card-body">
                   <ComparePanel baseUploadId={meta.uploadId} baseFilename={meta.filename} />
                 </div>
