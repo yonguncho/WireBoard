@@ -439,7 +439,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v6.3</span>
+          <span className="header-ver">v7.1.0</span>
         </div>
         {meta && (
           <div className="header-file-info">
