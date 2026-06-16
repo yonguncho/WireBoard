@@ -1,4 +1,5 @@
 """WireBoard v7.1.0 — PyInstaller entry point."""
+import asyncio
 import logging
 import os
 import socket
@@ -20,6 +21,18 @@ _BANNER = """
 ║  종료: Ctrl+C                                        ║
 ╚══════════════════════════════════════════════════════╝
 """.format(ver=_VERSION)
+
+
+def _force_utf8_stdio() -> None:
+    # cp949 등 비 UTF-8 콘솔에서 배너·한글 출력 시 UnicodeEncodeError 방지
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
 
 
 def _pause(msg: str = "\n[Enter] 키를 눌러 창을 닫으세요..."):
@@ -57,6 +70,7 @@ def _wait_and_open_browser(port: int, timeout: float = 30.0) -> None:
 
 
 def main():
+    _force_utf8_stdio()
     # PyInstaller onefile: 임시 디렉토리에 압축 해제된 파일들
     if getattr(sys, "frozen", False):
         base = Path(sys._MEIPASS)  # type: ignore[attr-defined]
@@ -90,6 +104,12 @@ def main():
             return "Invalid HTTP request received" not in record.getMessage()
 
     logging.getLogger("uvicorn.error").addFilter(_SuppressInvalidHTTP())
+
+    # Windows 기본 ProactorEventLoop는 브라우저/프로브가 연결을 RST로 끊을 때
+    # accept 루프가 WinError 64로 죽어 리스너가 사라지는 버그가 있다.
+    # SelectorEventLoop로 전환해 회피 (단일 사용자 로컬 서버라 제약 없음).
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
     print(_BANNER)
     print(f"  >> 접속 주소 : http://127.0.0.1:{port}")
