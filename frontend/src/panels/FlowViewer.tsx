@@ -113,7 +113,7 @@ function computeFlowAnalysis(packets: FlowPacket[]): FlowAnalysis {
   else if (rr > 0.05) { score -= 15; issues.push(`Retransmits present (${(rr * 100).toFixed(0)}%)`) }
   if (closeType === 'RESET') { score -= 10; issues.push('RST forced close') }
   score = Math.max(0, Math.min(100, score))
-  const status = score >= 80 ? 'Normal' : score >= 50 ? 'Warning' : 'Critical'
+  const status = score >= 80 ? 'Healthy' : score >= 50 ? 'Warning' : 'Critical'
   return { handshake, rttMs, retransmits, dataPkts, closeType, score, status, issues }
 }
 

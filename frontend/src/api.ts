@@ -6,6 +6,7 @@ async function handleError(r: Response, label: string): Promise<never> {
     const body = await r.json()
     const d = body.detail
     if (d?.message) msg = d.message
+    else if (d?.msg) msg = d.msg
     else if (typeof d === 'string') msg = d
     if (d?.errors?.length) msg += '\n' + (d.errors as string[]).slice(0, 3).join('\n')
   } catch { /* ignore */ }
@@ -364,7 +365,7 @@ export interface SessionHealth {
   rst_type: string        // NONE | EARLY | LATE
   close_type: string      // NORMAL | RESET | TIMEOUT | N/A
   score: number
-  status: string          // Normal | Warning | Abnormal
+  status: string          // Healthy | Warning | Critical
   issues: string[]
   root_cause: string
   recommendations: string[]
