@@ -315,7 +315,13 @@ export default function App() {
       setMeta({ uploadId: up.upload_id, filename: file.name, sessionCount: up.session_count, sourceType: up.source_type, pcapAvailable: !!up.pcap_available })
       setPanels(data)
       setSummary(sum)
-      setLayer('overview')
+      // HAR 입력은 Waterfall 이 가장 유용하므로 해당 뷰를 먼저 보여준다.
+      if (up.source_type === 'har') {
+        setLayer('investigate')
+        setInvTab('har')
+      } else {
+        setLayer('overview')
+      }
       setRecent(saveRecent({
         filename: file.name,
         sessionCount: up.session_count,
@@ -440,7 +446,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v7.2.2</span>
+          <span className="header-ver">v7.2.3</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -511,7 +517,7 @@ export default function App() {
             <label htmlFor="pcap-input" className="drop-label">
               <div className="drop-icon-wrap"><IconUpload /></div>
               <p className="drop-primary">Drag a file or click to upload</p>
-              <p className="drop-hint">.pcap &nbsp;·&nbsp; .pcapng &nbsp;·&nbsp; .har &nbsp;·&nbsp; .log &nbsp;·&nbsp; up to 50 MB</p>
+              <p className="drop-hint">.pcap / .pcapng &nbsp;·&nbsp; up to 50 MB &nbsp;|&nbsp; .har / .log / .txt &nbsp;·&nbsp; up to 200 MB</p>
             </label>
           </div>
           <div className="feature-cards">
@@ -614,7 +620,7 @@ export default function App() {
           {/* Investigate Sub-nav */}
           {layer === 'investigate' && (
             <nav className="sub-nav">
-              {(([ ['sessions','Sessions/Packets'], ['traffic','Traffic'], ['protocol','Protocol'], ['health','Health Diagnostics'], ['geoip','GeoIP'], ['yara','YARA'], ...(meta.sourceType === 'har' ? [['har','HAR Waterfall']] : []) ] as [InvTab, string][])).map(([key, label]) => (
+              {(([ ...(meta.sourceType === 'har' ? [['har','HAR Waterfall']] : []), ['sessions','Sessions/Packets'], ['traffic','Traffic'], ['protocol','Protocol'], ['health','Health Diagnostics'], ['geoip','GeoIP'], ['yara','YARA'] ] as [InvTab, string][])).map(([key, label]) => (
                 <button key={key} className={`sub-btn${invTab === key ? ' active' : ''}`} onClick={() => setInvTab(key)}>
                   {label}
                 </button>

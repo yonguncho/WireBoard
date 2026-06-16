@@ -16,12 +16,14 @@ from services.parser.fortigate_parser import FortigateParser
 from services.parser.tcpdump_parser import TcpdumpParser
 from services.normalizer import SessionNormalizer
 from store.session_store import ParsedCapture
-from utils.constants import MAX_UPLOAD_BYTES, UUID_RE
+from utils.constants import MAX_UPLOAD_BYTES, MAX_TEXT_UPLOAD_BYTES, UUID_RE
 from utils.capture_auth import check_capture_token
 
 router = APIRouter()
 
 _ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".har", ".log", ".tcpdump", ".txt"}
+# 텍스트 로그(hex 덤프·HAR JSON)는 바이너리보다 부피가 커 상향 한도 적용.
+_TEXT_EXTENSIONS = {".txt", ".log", ".tcpdump", ".har"}
 _PARSERS = [PcapParser(), HarParser(), FortigateParser(), TcpdumpParser()]
 _CHUNK_SIZE = 65_536  # 64 KB read chunks
 
@@ -36,7 +38,8 @@ async def _read_stream_limited(file: UploadFile, max_bytes: int) -> bytes:
             break
         total += len(chunk)
         if total > max_bytes:
-            raise HTTPException(status_code=413, detail="File size exceeds the 50 MB limit")
+            limit_mb = max_bytes // (1024 * 1024)
+            raise HTTPException(status_code=413, detail=f"File size exceeds the {limit_mb} MB limit")
         chunks.append(chunk)
     return b"".join(chunks)
 
@@ -50,18 +53,21 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
     if ext not in _ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=415, detail=f"Unsupported file extension: {ext!r}")
 
+    max_bytes = MAX_TEXT_UPLOAD_BYTES if ext in _TEXT_EXTENSIONS else MAX_UPLOAD_BYTES
+    limit_mb = max_bytes // (1024 * 1024)
+
     content_length = request.headers.get("content-length")
     if content_length is not None:
         try:
             cl_int = int(content_length)
             if cl_int < 0:
                 raise HTTPException(status_code=400, detail="Content-Length cannot be negative")
-            if cl_int > MAX_UPLOAD_BYTES:
-                raise HTTPException(status_code=413, detail="File size exceeds the 50 MB limit")
+            if cl_int > max_bytes:
+                raise HTTPException(status_code=413, detail=f"File size exceeds the {limit_mb} MB limit")
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid Content-Length header")
 
-    raw = await _read_stream_limited(file, MAX_UPLOAD_BYTES)
+    raw = await _read_stream_limited(file, max_bytes)
 
     if len(raw) == 0:
         # .pcap/.pcapng 빈 파일: 400 (bad request — 유효한 pcap이 아님)
@@ -107,7 +113,7 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
             if conv is not None:
                 converted, pkt_count = conv
                 pcap_parser = PcapParser()
-                re_sessions, re_pkt_map = pcap_parser.parse(converted, parse_warnings=parse_warnings)
+                re_sessions, re_pkt_map = pcap_parser.parse(converted, parse_warnings=parse_warnings, max_bytes=MAX_TEXT_UPLOAD_BYTES)
                 if re_sessions:
                     sessions = re_sessions
                     pkt_map = re_pkt_map

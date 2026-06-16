@@ -4,13 +4,13 @@ from collections import defaultdict
 from models.session import SessionModel
 from services.attack_detector.base import AttackResult
 
-_RATE_HIGH = 1000.0   # pps
-_RATE_MEDIUM = 300.0
-_SRC_HIGH = 50
-_SRC_MEDIUM = 10
-# PRD: 분산 DDoS — 6개 이상 소스 + 5000 pkt/min (83.33 pps)
-_PRD_SRC_MIN = 6      # DDoS 탐지 최소 소스 수
-_PRD_RATE_MIN = 5000.0 / 60.0  # 5000/min → pps
+# 절대 pps floor 기준 (네트워크 분석 관점: 정상 서버 부하 오탐 방지).
+# 정상 DNS/웹 서버는 다수 소스에서 fan-in 수신이 정상이라, 소스 수만으로는
+# DDoS로 보지 않고 반드시 높은 절대 패킷 레이트를 동반해야 한다.
+_RATE_HIGH = 10000.0  # pps — 볼류메트릭/애플리케이션 플러드 영역
+_RATE_FLOOR = 2000.0  # pps — 이 미만이면 DDoS로 보지 않음 (정상 서버 부하)
+_SRC_HIGH = 50        # floor 충족 시 다수 소스면 high 로 격상
+_PRD_SRC_MIN = 6      # "분산"으로 보기 위한 최소 소스 수
 
 _SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3}
 
@@ -42,14 +42,15 @@ class DDoSDetector:
             if unique_src < _PRD_SRC_MIN:
                 continue
 
+            # 절대 pps floor 미만은 정상 서버 부하로 간주 (소스 수 무관).
+            # 예: DNS 서버에 33소스·995pps fan-in 은 정상 트래픽이지 DDoS 아님.
+            if rate < _RATE_FLOOR:
+                continue
+
             if rate >= _RATE_HIGH or unique_src >= _SRC_HIGH:
                 severity = "high"
-            elif rate >= _RATE_MEDIUM or unique_src >= _SRC_MEDIUM:
-                severity = "medium"
-            elif rate >= _PRD_RATE_MIN:
-                severity = "medium"
             else:
-                continue
+                severity = "medium"
 
             result = AttackResult(
                 attack_type="DDoS",

@@ -82,26 +82,46 @@ class TestFileFormatDetection:
 # ── File size limits ────────────────────────────────────────────
 
 class TestFileSizeLimits:
-    MAX_BYTES = 52_428_800  # 50 MB (server limit)
+    MAX_BYTES = 52_428_800  # 50 MB — 바이너리 pcap/pcapng 한도
+    MAX_TEXT_BYTES = 209_715_200  # 200 MB — .txt/.log/.tcpdump/.har 한도
 
     def test_content_length_exactly_at_limit_is_accepted(self):
-        """Content-Length exactly equal to MAX is not rejected by header check."""
+        """Content-Length exactly equal to text MAX is not rejected by header check."""
         resp = client.post(
             "/api/upload",
             files={"file": ("capture.txt", VALID_FORTIGATE, "text/plain")},
-            headers={"content-length": str(self.MAX_BYTES)},
+            headers={"content-length": str(self.MAX_TEXT_BYTES)},
         )
         # Header check passes (not > limit), actual body is small → 200
         assert resp.status_code == 200
 
-    def test_content_length_one_over_limit_returns_413(self):
-        # upload.py 은 multipart 오버헤드 ~8 KB를 허용하므로 실제 임계값은 MAX_BYTES + 8192
+    def test_binary_content_length_one_over_limit_returns_413(self):
+        # .pcap 은 50 MB 바이너리 한도. multipart 오버헤드 ~8 KB 허용 → 임계값 MAX_BYTES + 8192
+        resp = client.post(
+            "/api/upload",
+            files={"file": ("capture.pcap", PCAP_MAGIC, "application/octet-stream")},
+            headers={"content-length": str(self.MAX_BYTES + 8193)},
+        )
+        assert resp.status_code == 413
+
+    def test_text_content_length_one_over_limit_returns_413(self):
+        # .txt 은 200 MB 텍스트 한도. 그 이상이면 413
+        resp = client.post(
+            "/api/upload",
+            files={"file": ("capture.txt", VALID_FORTIGATE, "text/plain")},
+            headers={"content-length": str(self.MAX_TEXT_BYTES + 8193)},
+        )
+        assert resp.status_code == 413
+
+    def test_text_content_length_above_binary_limit_accepted(self):
+        # 50 MB 초과지만 200 MB 텍스트 한도 이내인 .txt 는 헤더 검사 통과
         resp = client.post(
             "/api/upload",
             files={"file": ("capture.txt", VALID_FORTIGATE, "text/plain")},
             headers={"content-length": str(self.MAX_BYTES + 8193)},
         )
-        assert resp.status_code == 413
+        # 본문은 작으므로 파싱까지 가서 200
+        assert resp.status_code == 200
 
     def test_invalid_content_length_string_returns_400(self):
         resp = client.post(

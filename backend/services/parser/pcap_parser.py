@@ -101,12 +101,16 @@ class PcapParser:
         self,
         data: bytes,
         parse_warnings: list[str] | None = None,
+        max_bytes: int = MAX_UPLOAD_BYTES,
     ) -> tuple[list[SessionModel], dict[str, list]]:
         """(sessions, packet_map) 튜플 반환. packet_map: session_id -> list[PacketRecord]
-        ICMP 에러 이벤트는 self.icmp_events 에 수집된다."""
+        ICMP 에러 이벤트는 self.icmp_events 에 수집된다.
+
+        max_bytes: 직접 업로드 바이너리 pcap 은 기본 50 MB. 텍스트 hex 로그에서
+        변환된 pcap 은 호출부에서 상향 한도를 넘겨 받는다."""
         self._icmp_events = []
-        if len(data) > MAX_UPLOAD_BYTES:
-            raise ValueError(f"입력 크기 {len(data)} 바이트가 50 MB 제한 초과")
+        if len(data) > max_bytes:
+            raise ValueError(f"입력 크기 {len(data)} 바이트가 {max_bytes // (1024 * 1024)} MB 제한 초과")
         if len(data) < 24:
             raise ValueError("pcap 파일이 너무 짧습니다 (global header 없음)")
 

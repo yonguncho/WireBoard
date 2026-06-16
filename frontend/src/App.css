@@ -833,6 +833,10 @@ body {
 .tooltip-top .tooltip-box { bottom:calc(100% + 7px) }
 .tooltip-bottom .tooltip-box { top:calc(100% + 7px) }
 .tooltip-wrap:hover .tooltip-box { display:block }
+/* Portal-rendered bubble (escapes ancestor overflow:hidden clipping). left/top set inline as viewport coords. */
+.tooltip-box.tooltip-fixed { display:block;position:fixed;bottom:auto;left:auto;max-width:min(280px,92vw) }
+.tooltip-fixed.tooltip-top { transform:translate(-50%,-100%) }
+.tooltip-fixed.tooltip-bottom { transform:translate(-50%,0) }
 .compare-panel { flex-direction:column;gap:16px;display:flex }
 .compare-header { flex-wrap:wrap;align-items:center;gap:12px;display:flex }
 .compare-file-label { align-items:center;gap:8px;display:flex }
