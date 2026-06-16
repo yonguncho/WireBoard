@@ -17,20 +17,24 @@ export function Panel1Ip({ data }: Props) {
     {
       type: 'bar' as const,
       name: 'SRC',
-      x: top5src.map(e => fmt(e.bytes)),
+      x: top5src.map(e => e.bytes),
       y: top5src.map(e => e.ip),
       orientation: 'h' as const,
       marker: { color: '#4299e1' },
+      text: top5src.map(e => fmt(e.bytes)),
+      hovertemplate: '%{y}<br>%{text}<extra>SRC</extra>',
     },
     {
       type: 'bar' as const,
       name: 'DST',
-      x: top5dst.map(e => fmt(e.bytes)),
+      x: top5dst.map(e => e.bytes),
       y: top5dst.map(e => e.ip),
       orientation: 'h' as const,
       marker: { color: '#f6ad55' },
+      text: top5dst.map(e => fmt(e.bytes)),
+      hovertemplate: '%{y}<br>%{text}<extra>DST</extra>',
     },
   ]
   if (!top5src.length && !top5dst.length) return <div className="no-data">데이터 없음</div>
-  return <PlotlyChart data={traces} layout={{ barmode: 'group', xaxis: { title: 'bytes' } }} />
+  return <PlotlyChart data={traces} layout={{ barmode: 'group', xaxis: { title: 'bytes' }, yaxis: { automargin: true } }} />
 }
