@@ -471,6 +471,7 @@ export default function App() {
           </div>
         )}
         {!meta && <span className="header-tagline">PCAP Network Analysis Tool</span>}
+        <a className="theme-toggle" href="https://apo-tool.lemonsqueezy.com/checkout/buy/80fcbece-5f38-4dee-87aa-c5c949c172f2" target="_blank" rel="noopener noreferrer" title="Get WireBoard License">💳 Get License</a>
         <button className="theme-toggle" title="Shortcut ?" onClick={() => setShowHelp(v => !v)}>⌨ Shortcuts</button>
         <button className="theme-toggle" title="Shortcut T" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
           {theme === 'dark' ? '☀ Light' : '◑ Dark'}

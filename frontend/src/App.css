@@ -51,6 +51,8 @@
   font-size: 0.8rem;
   transition: all 0.2s;
   flex-shrink: 0;
+  display: inline-block;
+  text-decoration: none;
 }
 .theme-toggle:hover { background: var(--hover); color: var(--txt-primary); }
 
