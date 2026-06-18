@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { getPackets } from '../api'
 import type { PacketEntry } from '../api'
 
@@ -117,6 +117,9 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
     finally { setLoading(false) }
   }, [uploadId])
 
+  // 패킷 리스트는 진입 즉시 자동 로드 (버튼 클릭 불필요)
+  useEffect(() => { load(0, { src: '', dst: '', proto: '', flags: '' }) }, [load])
+
   const applyFilter = () => { setApplied({ ...filters }); load(0, filters) }
   const clearFilter = () => {
     const empty = { src: '', dst: '', proto: '', flags: '' }
@@ -141,10 +144,7 @@ export function PacketList({ uploadId, onFlowSelect }: Props) {
 
   if (!loaded) return (
     <div className="packet-list-init">
-      <button className="filter-btn" onClick={() => load(0, applied)} disabled={loading}>
-        {loading ? 'Loading...' : 'Load packet list'}
-      </button>
-      <p className="pkt-hint">Shows all captured packets in timestamp order · click a row to view the HEX dump</p>
+      <div className="spinner sm" /> Loading packets...
     </div>
   )
 

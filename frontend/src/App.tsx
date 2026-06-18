@@ -2,27 +2,22 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { uploadPcap, analyzePcap, getPanels, getSummary, exportJson, exportPdf, exportIoc, downloadConvertedPcap } from './api'
 import type { PanelData, SummaryData } from './api'
 import { subscribeToast } from './toast'
-import { NarrativeSummary } from './panels/NarrativeSummary'
-import { AttackTimeline } from './panels/AttackTimeline'
-import { DefensePanel } from './panels/DefensePanel'
 import { FlowViewer } from './panels/FlowViewer'
 import { PacketList } from './panels/PacketList'
 import { ComparePanel } from './panels/ComparePanel'
 import { GeoIpPanel } from './panels/GeoIpPanel'
 import { Panel1Ip } from './panels/Panel1Ip'
-import { Panel2Protocol } from './panels/Panel2Protocol'
 import { Panel3Timeline } from './panels/Panel3Timeline'
 import { Panel4Http } from './panels/Panel4Http'
-import { Panel5Anomalies } from './panels/Panel5Anomalies'
 import { Panel6IpRanking } from './panels/Panel6IpRanking'
 import { Panel7Tls } from './panels/Panel7Tls'
 import { Panel8Dns } from './panels/Panel8Dns'
 import { Panel9Conversations } from './panels/Panel9Conversations'
-import { Panel10Attacks } from './panels/Panel10Attacks'
 import { YaraPanel } from './panels/YaraPanel'
 import { NetworkHealthPanel } from './panels/NetworkHealthPanel'
 import { SessionExplorer } from './panels/SessionExplorer'
 import { HarWaterfall } from './panels/HarWaterfall'
+import { TrafficOverview } from './panels/TrafficOverview'
 import './App.css'
 
 const ALLOWED = /\.(pcap|pcapng|cap|har|log|txt|tcpdump)$/i
@@ -187,62 +182,105 @@ function IconUpload() {
 
 // ── Protocol Hierarchy ────────────────────────────────────────────────────────
 
+// 잘 알려진 포트 → {애플리케이션 프로토콜명, 전송계층} 매핑
+const WELL_KNOWN_PORT: Record<number, { name: string; transport: 'TCP' | 'UDP' }> = {
+  80:   { name: 'HTTP',    transport: 'TCP' },
+  443:  { name: 'HTTPS / TLS', transport: 'TCP' },
+  8080: { name: 'HTTP-alt', transport: 'TCP' },
+  8443: { name: 'HTTPS-alt', transport: 'TCP' },
+  22:   { name: 'SSH',     transport: 'TCP' },
+  21:   { name: 'FTP',     transport: 'TCP' },
+  23:   { name: 'Telnet',  transport: 'TCP' },
+  25:   { name: 'SMTP',    transport: 'TCP' },
+  587:  { name: 'SMTP (submission)', transport: 'TCP' },
+  465:  { name: 'SMTPS',   transport: 'TCP' },
+  110:  { name: 'POP3',    transport: 'TCP' },
+  143:  { name: 'IMAP',    transport: 'TCP' },
+  993:  { name: 'IMAPS',   transport: 'TCP' },
+  3389: { name: 'RDP',     transport: 'TCP' },
+  445:  { name: 'SMB',     transport: 'TCP' },
+  139:  { name: 'NetBIOS', transport: 'TCP' },
+  3306: { name: 'MySQL',   transport: 'TCP' },
+  5432: { name: 'PostgreSQL', transport: 'TCP' },
+  6379: { name: 'Redis',   transport: 'TCP' },
+  53:   { name: 'DNS',     transport: 'UDP' },
+  67:   { name: 'DHCP',    transport: 'UDP' },
+  68:   { name: 'DHCP',    transport: 'UDP' },
+  123:  { name: 'NTP',     transport: 'UDP' },
+  161:  { name: 'SNMP',    transport: 'UDP' },
+  137:  { name: 'NetBIOS-NS', transport: 'UDP' },
+  138:  { name: 'NetBIOS-DGM', transport: 'UDP' },
+  1900: { name: 'SSDP',    transport: 'UDP' },
+  5353: { name: 'mDNS',    transport: 'UDP' },
+  500:  { name: 'IKE / IPsec', transport: 'UDP' },
+  4500: { name: 'IPsec NAT-T', transport: 'UDP' },
+}
+
+const TRANSPORT_COLOR: Record<string, string> = {
+  TCP: '#63b3ed', UDP: '#68d391', ICMP: '#f6ad55', ICMP6: '#f6ad55', Other: '#a0aec0',
+}
+
 function ProtocolHierarchy({ data }: { data: PanelData }) {
   const dist = data.panel2_protocol.distribution
   const ports = data.panel2_protocol.top_ports
   const total = Object.values(dist).reduce((a, b) => a + b, 0)
   if (total === 0) return <div className="ph-empty">No protocol data</div>
 
-  const sorted = Object.entries(dist).sort(([, a], [, b]) => b - a)
-  const maxCount = sorted[0]?.[1] ?? 1
+  // 전송계층(TCP/UDP/ICMP...) 하위에 애플리케이션 프로토콜(포트)을 중첩
+  const transports = Object.entries(dist).sort(([, a], [, b]) => b - a)
+  const appsByTransport: Record<string, { label: string; port: number; count: number }[]> = {}
+  for (const p of ports) {
+    const known = WELL_KNOWN_PORT[p.port]
+    const t = known?.transport ?? 'TCP'
+    const label = known?.name ?? `Port ${p.port}`
+    ;(appsByTransport[t] ??= []).push({ label, port: p.port, count: p.count })
+  }
+  for (const t of Object.keys(appsByTransport)) {
+    appsByTransport[t].sort((a, b) => b.count - a.count)
+  }
+
+  const pct = (n: number) => ((n / total) * 100).toFixed(1)
 
   return (
     <div className="ph-tree">
-      <div className="ph-section-title">Protocol Distribution</div>
-      {sorted.map(([proto, count]) => {
-        const pct = ((count / total) * 100).toFixed(1)
+      <div className="ph-node ph-root">
+        <span className="ph-icon">▣</span>
+        <span className="ph-name">Frame</span>
+        <span className="ph-meta">{total.toLocaleString()} packets · 100%</span>
+      </div>
+      <div className="ph-node ph-l1">
+        <span className="ph-connector" />
+        <span className="ph-icon">⬡</span>
+        <span className="ph-name">Ethernet · IP</span>
+        <span className="ph-meta">{total.toLocaleString()}</span>
+      </div>
+
+      {transports.map(([proto, count]) => {
+        const apps = appsByTransport[proto] ?? []
+        const color = TRANSPORT_COLOR[proto] ?? TRANSPORT_COLOR.Other
         return (
-          <div key={proto} className="ph-row">
-            <span className="ph-proto">{proto}</span>
-            <div className="ph-bar-wrap">
-              <div className="ph-bar" style={{ width: `${(count / maxCount) * 100}%` }} />
+          <div key={proto} className="ph-branch">
+            <div className="ph-node ph-l2">
+              <span className="ph-connector" />
+              <span className="ph-badge" style={{ background: color }}>{proto}</span>
+              <div className="ph-bar-wrap">
+                <div className="ph-bar" style={{ width: `${(count / total) * 100}%`, background: color }} />
+              </div>
+              <span className="ph-count">{count.toLocaleString()}</span>
+              <span className="ph-pct">{pct(count)}%</span>
             </div>
-            <span className="ph-count">{count.toLocaleString()}</span>
-            <span className="ph-pct">{pct}%</span>
+            {apps.slice(0, 8).map(a => (
+              <div key={`${proto}-${a.port}`} className="ph-node ph-l3">
+                <span className="ph-connector ph-connector-app" />
+                <span className="ph-app-name">{a.label}</span>
+                <span className="ph-app-port">:{a.port}</span>
+                <span className="ph-count">{a.count.toLocaleString()}</span>
+                <span className="ph-pct">{pct(a.count)}%</span>
+              </div>
+            ))}
           </div>
         )
       })}
-      {ports.length > 0 && (
-        <>
-          <div className="ph-section-title" style={{ marginTop: 16 }}>Top Ports</div>
-          {ports.slice(0, 10).map(p => (
-            <div key={p.port} className="ph-row ph-port-row">
-              <span className="ph-proto">:{p.port}</span>
-              <div className="ph-bar-wrap">
-                <div className="ph-bar ph-bar-port" style={{ width: `${(p.count / (ports[0]?.count ?? 1)) * 100}%` }} />
-              </div>
-              <span className="ph-count">{p.count.toLocaleString()}</span>
-            </div>
-          ))}
-        </>
-      )}
-    </div>
-  )
-}
-
-// ── Risk Badge ────────────────────────────────────────────────────────────────
-
-function RiskBadge({ level }: { level: string }) {
-  const cfg: Record<string, { color: string; label: string }> = {
-    HIGH:   { color: '#ef4444', label: 'High Risk' },
-    MEDIUM: { color: '#f59e0b', label: 'Medium Risk' },
-    LOW:    { color: '#22c55e', label: 'Low Risk' },
-    CLEAN:  { color: '#3b82f6', label: 'Clean' },
-  }
-  const c = cfg[level] ?? cfg.CLEAN
-  return (
-    <div className="risk-badge-wrap">
-      <span className="risk-badge" style={{ background: c.color }}>{c.label}</span>
     </div>
   )
 }
@@ -272,7 +310,6 @@ export default function App() {
   const [globalDrag, setGlobalDrag] = useState(false)
   const toastTimer = useRef<number | undefined>(undefined)
   const dragDepth = useRef(0)
-  const attackRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -385,10 +422,6 @@ export default function App() {
     }
   }, [meta, loading, handleFile])
 
-  const goAttackDetail = useCallback(() => {
-    setLayer('overview')
-    setTimeout(() => attackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
-  }, [])
 
   // Global keyboard shortcuts — disabled while an input field is focused (except Ctrl+K)
   useEffect(() => {
@@ -635,74 +668,38 @@ export default function App() {
             {/* ── Overview layer ─────────────────────────────────────────────── */}
             {layer === 'overview' && (
               <>
-                <div className="overview-header-row">
-                  <RiskBadge level={summary.risk_level} />
-                  <div className="stat-strip">
-                    <button className="stat-card stat-click" title="Go to Sessions/Packets investigation"
-                      onClick={() => { setLayer('investigate'); setInvTab('sessions') }}>
-                      <span className="stat-num">{meta.sessionCount.toLocaleString()}</span>
-                      <span className="stat-lbl">Sessions</span>
-                    </button>
-                    <button className={`stat-card stat-click${panels.panel10_attacks.length > 0 ? ' stat-danger' : ''}`}
-                      title="Go to detected event details" onClick={goAttackDetail}>
-                      <span className="stat-num">{panels.panel10_attacks.length}</span>
-                      <span className="stat-lbl">Detected Events</span>
-                    </button>
-                    <button className={`stat-card stat-click${summary.attacker_ips.length > 0 ? ' stat-danger' : ''}`}
-                      title="Go to GeoIP geographic distribution" onClick={() => { setLayer('investigate'); setInvTab('geoip') }}>
-                      <span className="stat-num">{summary.attacker_ips.length}</span>
-                      <span className="stat-lbl">Event IPs</span>
-                    </button>
-                    <button className={`stat-card stat-click${panels.panel5_anomalies.rst_count > 0 ? ' stat-warn' : ''}`}
-                      title="Go to communication health diagnostics" onClick={() => { setLayer('investigate'); setInvTab('health') }}>
-                      <span className="stat-num">{panels.panel5_anomalies.rst_count.toLocaleString()}</span>
-                      <span className="stat-lbl">RST</span>
-                    </button>
-                    <button className={`stat-card stat-click${panels.panel5_anomalies.retransmit_count > 0 ? ' stat-warn' : ''}`}
-                      title="Go to communication health diagnostics" onClick={() => { setLayer('investigate'); setInvTab('health') }}>
-                      <span className="stat-num">{panels.panel5_anomalies.retransmit_count.toLocaleString()}</span>
-                      <span className="stat-lbl">Retransmits</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="summary-section">
-                  <NarrativeSummary data={summary} />
-                </div>
-
-                <div className="attack-defense-row">
-                  <PCard title="Event Timeline">
-                    <AttackTimeline events={summary.attack_timeline} />
-                  </PCard>
-                  <DefensePanel
-                    recommendations={summary.recommendations}
-                    attackerIps={summary.attacker_ips}
-                    victimIps={summary.victim_ips}
-                  />
-                </div>
-
-                <div ref={attackRef} className="panel-card wide">
-                  <div className="panel-card-title">Detected Event Details</div>
-                  <div className="panel-card-body">
-                    <Panel10Attacks data={panels.panel10_attacks} />
-                  </div>
-                </div>
+                <TrafficOverview
+                  uploadId={meta.uploadId}
+                  panels={panels}
+                  sessionCount={meta.sessionCount}
+                  onGoTab={(tab) => { setLayer('investigate'); setInvTab(tab as InvTab) }}
+                  onFlowSelect={setFlowSessionId}
+                />
 
                 <div className="overview-bottom-row">
-                  <PCard title="Anomaly Indicators">
-                    <Panel5Anomalies data={panels.panel5_anomalies} />
-                  </PCard>
-                  <PCard title="IP Traffic">
+                  <PCard title="Top Talkers (IP Traffic)">
                     <Panel1Ip data={panels.panel1_ip} />
                   </PCard>
-                  <PCard title="Protocol Distribution">
-                    <Panel2Protocol data={panels.panel2_protocol} />
+                  <PCard title="Protocol Hierarchy">
+                    <ProtocolHierarchy data={panels} />
+                  </PCard>
+                  <PCard title="HTTP Status">
+                    <Panel4Http data={panels.panel4_http} />
                   </PCard>
                 </div>
               </>
             )}
 
             {/* ── Investigate layer ─────────────────────────────────────────────── */}
+            {layer === 'investigate' && invTab === 'sessions' && (
+              <div className="panel-card wide">
+                <div className="panel-card-title">Packet List (timestamp order · click a row for HEX/session)</div>
+                <div className="panel-card-body">
+                  <PacketList uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
+                </div>
+              </div>
+            )}
+
             {layer === 'investigate' && invTab === 'sessions' && (
               <div className="panel-card wide" style={{ padding: 0, overflow: 'hidden' }}>
                 <SessionExplorer
@@ -711,15 +708,6 @@ export default function App() {
                   sessionCount={meta.sessionCount}
                   onFlowSelect={setFlowSessionId}
                 />
-              </div>
-            )}
-
-            {layer === 'investigate' && invTab === 'sessions' && (
-              <div className="panel-card wide">
-                <div className="panel-card-title">Wireshark-Style Packet Viewer</div>
-                <div className="panel-card-body">
-                  <PacketList uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
-                </div>
               </div>
             )}
 

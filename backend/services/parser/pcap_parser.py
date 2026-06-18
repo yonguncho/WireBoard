@@ -33,6 +33,15 @@ _VLAN_ETHERTYPES = {0x8100, 0x88A8}
 _MAX_PKTS_PER_FLOW = 200
 # 패킷당 저장 payload 바이트 수 (YARA 탐지 + 세션 재생 품질 향상)
 _PAYLOAD_CAPTURE_BYTES = 128
+# TLS 핸드셰이크는 SNI/cipher가 128B 이후에 위치할 수 있어 더 길게 저장
+_TLS_PAYLOAD_CAPTURE_BYTES = 1024
+
+
+def _capture_payload_hex(payload: bytes) -> str:
+    """TLS 핸드셰이크 레코드(0x16 0x03)는 더 많은 바이트를 보존해 SNI·cipher 추출을 보장."""
+    if len(payload) >= 3 and payload[0] == 0x16 and payload[1] == 0x03:
+        return payload[:_TLS_PAYLOAD_CAPTURE_BYTES].hex()
+    return payload[:_PAYLOAD_CAPTURE_BYTES].hex()
 # 단일 캡처에서 허용할 최대 고유 플로우(세션) 수
 _MAX_FLOW_COUNT = 50_000
 # parse_warnings 목록의 최대 항목 수
@@ -225,7 +234,7 @@ class PcapParser:
                         ts=fts, direction=direction, proto=proto,
                         seq=seq, ack=ack_num, flags=flags_s,
                         length=pkt_len, payload_len=len(payload),
-                        payload_hex=payload[:_PAYLOAD_CAPTURE_BYTES].hex(),
+                        payload_hex=_capture_payload_hex(payload),
                     ),
                 )
             except Exception as exc:
@@ -315,7 +324,7 @@ class PcapParser:
                         ts=fts, direction=direction, proto=proto,
                         seq=seq, ack=ack_num, flags=flags_s,
                         length=pkt_len, payload_len=len(payload),
-                        payload_hex=payload[:_PAYLOAD_CAPTURE_BYTES].hex(),
+                        payload_hex=_capture_payload_hex(payload),
                     ),
                 )
             except Exception as exc:
@@ -447,7 +456,7 @@ class PcapParser:
                         ts=pkt_ts, direction=direction, proto=proto,
                         seq=seq, ack=ack_num, flags=flags_s,
                         length=pkt_len, payload_len=len(payload),
-                        payload_hex=payload[:_PAYLOAD_CAPTURE_BYTES].hex(),
+                        payload_hex=_capture_payload_hex(payload),
                     ),
                 )
             except (struct.error, IndexError) as exc:

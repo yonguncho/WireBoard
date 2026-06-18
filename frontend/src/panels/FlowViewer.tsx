@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { getFlow, getStream } from '../api'
-import type { FlowData, FlowPacket, StreamData } from '../api'
+import type { FlowData, FlowPacket, StreamData, TlsInfo } from '../api'
 
 // ── HEX utils ─────────────────────────────────────────────────────────────────
 
@@ -456,10 +456,54 @@ function FollowStreamView({ uploadId, sessionId, session }: {
   )
 }
 
+// ── TLS handshake detail ─────────────────────────────────────────────────────
+
+function TlsRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="tls-row">
+      <span className="tls-label">{label}</span>
+      <span className="tls-value">{value || <span className="tls-na">—</span>}</span>
+    </div>
+  )
+}
+
+function TlsView({ tls }: { tls: TlsInfo }) {
+  return (
+    <div className="tls-view">
+      <div className="tls-card">
+        <div className="tls-card-title">TLS Handshake</div>
+        <TlsRow label="Server Name (SNI)" value={tls.sni && <span className="mono tls-sni">{tls.sni}</span>} />
+        <TlsRow label="ALPN" value={tls.alpn && <span className="mono">{tls.alpn}</span>} />
+        <TlsRow label="Negotiated Version" value={tls.negotiated_version && <span className="tls-ver">{tls.negotiated_version}</span>} />
+        <TlsRow label="Client Offered Version" value={tls.client_version} />
+        <TlsRow label="Chosen Cipher" value={tls.chosen_cipher && <span className="mono tls-cipher">{tls.chosen_cipher}</span>} />
+        <TlsRow label="JA4 Fingerprint" value={tls.ja4 && <span className="mono tls-ja4">{tls.ja4}</span>} />
+      </div>
+
+      {tls.offered_ciphers.length > 0 && (
+        <div className="tls-card">
+          <div className="tls-card-title">
+            Client Offered Cipher Suites
+            <span className="tls-count"> ({tls.offered_cipher_count})</span>
+          </div>
+          <div className="tls-cipher-list">
+            {tls.offered_ciphers.map((c, i) => (
+              <span key={i} className={`tls-cipher-chip${c === tls.chosen_cipher ? ' tls-cipher-chosen' : ''}`}>{c}</span>
+            ))}
+            {tls.offered_cipher_count > tls.offered_ciphers.length && (
+              <span className="tls-cipher-more">+{tls.offered_cipher_count - tls.offered_ciphers.length} more</span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 interface Props { uploadId: string; sessionId: string; onClose: () => void }
-type ViewTab = 'ladder' | 'packets' | 'replay' | 'stream' | 'analysis'
+type ViewTab = 'ladder' | 'packets' | 'replay' | 'stream' | 'analysis' | 'tls'
 
 export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
   const [data, setData]   = useState<FlowData | null>(null)
@@ -516,6 +560,9 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
               <button className={`flow-tab${view === 'stream'   ? ' active' : ''}`} onClick={() => setView('stream')}>Follow Stream</button>
               <button className={`flow-tab${view === 'replay'   ? ' active' : ''}`} onClick={() => setView('replay')}>Replay</button>
               <button className={`flow-tab${view === 'analysis' ? ' active' : ''}`} onClick={() => setView('analysis')}>Connection Analysis</button>
+              {data.tls && (
+                <button className={`flow-tab flow-tab-tls${view === 'tls' ? ' active' : ''}`} onClick={() => setView('tls')}>🔒 TLS</button>
+              )}
             </div>
           </div>
         )}
@@ -542,6 +589,7 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
         {data && view === 'stream'   && <FollowStreamView uploadId={uploadId} sessionId={sessionId} session={s ?? null} />}
         {data && view === 'replay'   && <ReplayView packets={data.packets} />}
         {data && view === 'analysis' && <ConnAnalysisView packets={data.packets} session={s ?? null} />}
+        {data && view === 'tls' && data.tls && <TlsView tls={data.tls} />}
       </div>
     </div>
   )

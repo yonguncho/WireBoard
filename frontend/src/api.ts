@@ -175,11 +175,22 @@ export interface FlowSession {
   packet_count: number; bytes_sent: number; bytes_recv: number
   start_ts: number; end_ts: number; duration_s: number; rst: boolean
 }
+export interface TlsInfo {
+  sni: string | null
+  alpn: string | null
+  ja4: string | null
+  client_version: string | null
+  negotiated_version: string | null
+  chosen_cipher: string | null
+  offered_ciphers: string[]
+  offered_cipher_count: number
+}
 export interface FlowData {
   session: FlowSession
   packets: FlowPacket[]
   packet_count: number
   truncated: boolean
+  tls?: TlsInfo | null
 }
 
 export interface StreamSegment {
