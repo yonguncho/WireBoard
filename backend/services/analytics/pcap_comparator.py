@@ -12,6 +12,7 @@ class CompareResult:
     only_in_b: set = field(default_factory=set)
     protocol_diff: dict = field(default_factory=dict)
     byte_ratio: dict = field(default_factory=dict)
+    conversations: list = field(default_factory=list)
 
 
 def _get_ips(sessions: list[SessionModel]) -> set[str]:
@@ -27,6 +28,62 @@ def _protocol_counts(sessions: list[SessionModel]) -> dict[str, int]:
     for s in sessions:
         counts[s.protocol] += 1
     return dict(counts)
+
+
+def _conversation_stats(sessions: list[SessionModel]) -> dict[str, dict]:
+    """대화 단위 집계. 키 = 방향 무관 IP쌍 + dst_port + protocol.
+
+    같은 통신(예: client↔server:443/TCP)이 서로 다른 캡처에서 출발 포트만
+    달라도 동일 대화로 묶이도록 IP쌍을 정렬해 방향성을 제거한다.
+    """
+    stats: dict[str, dict] = {}
+    for s in sessions:
+        ip_a, ip_b = sorted((s.src_ip, s.dst_ip))
+        key = f"{ip_a}|{ip_b}|{s.dst_port}|{s.protocol}"
+        st = stats.get(key)
+        if st is None:
+            st = {
+                "key": key,
+                "ip_a": ip_a, "ip_b": ip_b,
+                "port": s.dst_port, "protocol": s.protocol,
+                "sessions": 0, "packets": 0, "bytes": 0,
+            }
+            stats[key] = st
+        st["sessions"] += 1
+        st["packets"] += s.packet_count
+        st["bytes"] += s.bytes_sent + s.bytes_recv
+    return stats
+
+
+def _build_conversations(
+    sessions_a: list[SessionModel],
+    sessions_b: list[SessionModel],
+) -> list[dict]:
+    """A·B 대화 집계를 키 기준으로 병합해 통계 차이를 산출."""
+    conv_a = _conversation_stats(sessions_a)
+    conv_b = _conversation_stats(sessions_b)
+    conversations: list[dict] = []
+    for key in set(conv_a) | set(conv_b):
+        a = conv_a.get(key)
+        b = conv_b.get(key)
+        meta = a or b
+        a_bytes = a["bytes"] if a else 0
+        b_bytes = b["bytes"] if b else 0
+        status = "both" if (a and b) else ("only_a" if a else "only_b")
+        conversations.append({
+            "key": key,
+            "ip_a": meta["ip_a"], "ip_b": meta["ip_b"],
+            "port": meta["port"], "protocol": meta["protocol"],
+            "a_sessions": a["sessions"] if a else 0,
+            "a_packets":  a["packets"]  if a else 0,
+            "a_bytes":    a_bytes,
+            "b_sessions": b["sessions"] if b else 0,
+            "b_packets":  b["packets"]  if b else 0,
+            "b_bytes":    b_bytes,
+            "byte_delta": b_bytes - a_bytes,
+            "status":     status,
+        })
+    return conversations
 
 
 class PcapComparator:
@@ -64,4 +121,5 @@ class PcapComparator:
             only_in_b=only_b,
             protocol_diff=protocol_diff,
             byte_ratio={"a_total": a_total, "b_total": b_total, "ratio": ratio},
+            conversations=_build_conversations(sessions_a, sessions_b),
         )

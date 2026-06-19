@@ -13,7 +13,8 @@ from utils.capture_auth import check_capture_token
 router = APIRouter()
 _comparator = PcapComparator()
 
-_MAX_SESSIONS = 300  # 응답에 포함할 최대 세션 수 (각 캡처별)
+_MAX_SESSIONS = 300       # 응답에 포함할 최대 세션 수 (각 캡처별)
+_MAX_CONVERSATIONS = 500  # 응답에 포함할 최대 대화 수
 
 
 class CompareRequest(BaseModel):
@@ -97,6 +98,18 @@ async def compare_captures(
     base_sorted = sorted(base_capture.sessions, key=lambda s: s.start_ts)
     cur_sorted  = sorted(current_capture.sessions, key=lambda s: s.start_ts)
 
+    # 대화 단위 비교: 통계 변화가 큰 순(양쪽 최대 바이트)으로 정렬 후 상한 적용
+    conv_all = result.conversations
+    conv_summary = {
+        "total":        len(conv_all),
+        "both":         sum(1 for c in conv_all if c["status"] == "both"),
+        "only_base":    sum(1 for c in conv_all if c["status"] == "only_a"),
+        "only_compare": sum(1 for c in conv_all if c["status"] == "only_b"),
+        # both 중 트래픽이 실제로 달라진(동일 통신·다른 상황) 대화 수
+        "changed":      sum(1 for c in conv_all if c["status"] == "both" and c["byte_delta"] != 0),
+    }
+    conv_sorted = sorted(conv_all, key=lambda c: max(c["a_bytes"], c["b_bytes"]), reverse=True)
+
     return {
         "new_ips":           sorted(result.only_in_b),
         "removed_ips":       sorted(result.only_in_a),
@@ -109,4 +122,7 @@ async def compare_captures(
         "compare_sessions":  [_serialize_session(s) for s in cur_sorted[:_MAX_SESSIONS]],
         "base_session_total":    len(base_capture.sessions),
         "compare_session_total": len(current_capture.sessions),
+        "conversations":         conv_sorted[:_MAX_CONVERSATIONS],
+        "conversation_summary":  conv_summary,
+        "conversation_total":    len(conv_all),
     }

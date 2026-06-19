@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { uploadPcap, analyzePcap, compareCaptures } from '../api'
-import type { CompareResult, CompareSession } from '../api'
+import type { CompareResult, CompareSession, ConversationDiff } from '../api'
 
 const ALLOWED = /\.(pcap|pcapng|cap|har|log|txt|tcpdump)$/i
 
@@ -28,7 +28,9 @@ function fmtTs(ts: number, baseTs: number): string {
 }
 
 type SessionFilter = 'all' | 'new' | 'removed' | 'common'
-type InnerTab = 'sessions' | 'ips' | 'protocols'
+type InnerTab = 'conversations' | 'sessions' | 'ips' | 'protocols'
+type ConvFilter = 'all' | 'changed' | 'both' | 'only_base' | 'only_compare'
+type ConvSort = 'traffic' | 'delta'
 
 // Modal state type
 type ModalState =
@@ -277,13 +279,156 @@ function SessionRow({
   )
 }
 
+// ── Conversation statistical diff ─────────────────────────────────────────
+// 같은 통신(IP쌍·포트·프로토콜)을 두 캡처에서 짝지어 통계 차이를 보여준다.
+// "서로 다른 상황에서 동일한 통신을 비교"하는 핵심 화면.
+function ConvBytesDelta({ delta }: { delta: number }) {
+  if (delta === 0) return <span className="cmp-conv-delta zero">±0</span>
+  const up = delta > 0
+  return (
+    <span className={`cmp-conv-delta ${up ? 'up' : 'down'}`}>
+      {up ? '+' : '−'}{fmtBytes(Math.abs(delta))} {up ? '▲' : '▼'}
+    </span>
+  )
+}
+
+function Conversations({
+  result, baseFilename, compareFilename,
+}: {
+  result: CompareResult
+  baseFilename: string
+  compareFilename: string
+}) {
+  const [filter, setFilter] = useState<ConvFilter>('all')
+  const [sort, setSort]     = useState<ConvSort>('traffic')
+
+  const summary = result.conversation_summary
+
+  const rows = useMemo(() => {
+    let list = result.conversations
+    if (filter === 'changed')      list = list.filter(c => c.status === 'both' && c.byte_delta !== 0)
+    else if (filter === 'both')    list = list.filter(c => c.status === 'both')
+    else if (filter === 'only_base')    list = list.filter(c => c.status === 'only_a')
+    else if (filter === 'only_compare') list = list.filter(c => c.status === 'only_b')
+    const sorted = [...list]
+    if (sort === 'delta') sorted.sort((a, b) => Math.abs(b.byte_delta) - Math.abs(a.byte_delta))
+    else sorted.sort((a, b) => Math.max(b.a_bytes, b.b_bytes) - Math.max(a.a_bytes, a.b_bytes))
+    return sorted
+  }, [result.conversations, filter, sort])
+
+  const FILTERS: { key: ConvFilter; label: string; count: number }[] = [
+    { key: 'all',          label: 'All',          count: summary.total },
+    { key: 'changed',      label: 'Changed',      count: summary.changed },
+    { key: 'both',         label: 'In both',      count: summary.both },
+    { key: 'only_base',    label: 'Base only',    count: summary.only_base },
+    { key: 'only_compare', label: 'Compare only', count: summary.only_compare },
+  ]
+
+  function statusBadge(c: ConversationDiff) {
+    if (c.status === 'only_a') return <span className="cmp-badge cmp-badge-removed">Base only</span>
+    if (c.status === 'only_b') return <span className="cmp-badge cmp-badge-new">Compare only</span>
+    if (c.byte_delta !== 0)    return <span className="cmp-badge cmp-badge-changed">Changed</span>
+    return <span className="cmp-badge cmp-badge-common">Same</span>
+  }
+
+  return (
+    <div className="cmp-conv-wrap">
+      <p className="cmp-conv-intro">
+        Pairs the same communication (endpoint pair · port · protocol) across both captures,
+        so you can see how identical conversations behaved under different situations.
+      </p>
+
+      {/* Summary line */}
+      <div className="cmp-conv-summary">
+        <span><b>{summary.total}</b> conversations</span>
+        <span className="dot">·</span>
+        <span className="txt-warn"><b>{summary.changed}</b> changed</span>
+        <span className="dot">·</span>
+        <span><b>{summary.both}</b> in both</span>
+        <span className="dot">·</span>
+        <span className="txt-ok"><b>{summary.only_base}</b> base only</span>
+        <span className="dot">·</span>
+        <span className="txt-danger"><b>{summary.only_compare}</b> compare only</span>
+      </div>
+
+      {/* Controls */}
+      <div className="cmp-filter-bar">
+        {FILTERS.map(f => (
+          <button
+            key={f.key}
+            className={`cmp-filter-btn${filter === f.key ? ' active' : ''}`}
+            onClick={() => setFilter(f.key)}
+          >
+            {f.label} <span className="cmp-filter-cnt">{f.count}</span>
+          </button>
+        ))}
+        <span className="cmp-conv-sort">
+          Sort:
+          <button className={`cmp-sort-btn${sort === 'traffic' ? ' active' : ''}`} onClick={() => setSort('traffic')}>Traffic</button>
+          <button className={`cmp-sort-btn${sort === 'delta' ? ' active' : ''}`} onClick={() => setSort('delta')}>Δ Bytes</button>
+        </span>
+      </div>
+
+      {/* Table */}
+      {rows.length === 0
+        ? <div className="no-data">No conversations match this filter</div>
+        : (
+          <div className="cmp-conv-table-wrap">
+            <table className="cmp-conv-table">
+              <thead>
+                <tr>
+                  <th rowSpan={2}>Status</th>
+                  <th rowSpan={2}>Conversation</th>
+                  <th rowSpan={2}>Proto</th>
+                  <th colSpan={3} className="cmp-conv-grp base" title={baseFilename}>Base</th>
+                  <th colSpan={3} className="cmp-conv-grp compare" title={compareFilename}>Compare</th>
+                  <th rowSpan={2}>Δ Bytes</th>
+                </tr>
+                <tr>
+                  <th>Sess</th><th>Pkts</th><th>Bytes</th>
+                  <th>Sess</th><th>Pkts</th><th>Bytes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(c => (
+                  <tr key={c.key} className={c.status === 'both' && c.byte_delta !== 0 ? 'cmp-conv-changed' : ''}>
+                    <td>{statusBadge(c)}</td>
+                    <td className="mono cmp-conv-pair">
+                      {c.ip_a} <span className="arrow">⇄</span> {c.ip_b}
+                      <span className="cmp-conv-port">:{c.port}</span>
+                    </td>
+                    <td><span className="proto-chip">{c.protocol}</span></td>
+                    <td className="cmp-conv-num">{c.a_sessions || '—'}</td>
+                    <td className="cmp-conv-num">{c.a_packets || '—'}</td>
+                    <td className="cmp-conv-num">{c.a_bytes ? fmtBytes(c.a_bytes) : '—'}</td>
+                    <td className="cmp-conv-num">{c.b_sessions || '—'}</td>
+                    <td className="cmp-conv-num">{c.b_packets || '—'}</td>
+                    <td className="cmp-conv-num">{c.b_bytes ? fmtBytes(c.b_bytes) : '—'}</td>
+                    <td className="cmp-conv-num"><ConvBytesDelta delta={c.byte_delta} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+
+      {result.conversation_total > result.conversations.length && (
+        <div className="cmp-truncate-notice">
+          ⚠ Showing top {result.conversations.length} of {result.conversation_total} conversations (by traffic)
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────
 export function ComparePanel({ baseUploadId, baseFilename }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [compareFilename, setCompareFilename] = useState<string | null>(null)
   const [result, setResult]   = useState<CompareResult | null>(null)
-  const [innerTab, setInnerTab] = useState<InnerTab>('sessions')
+  const [innerTab, setInnerTab] = useState<InnerTab>('conversations')
   const [modal, setModal]     = useState<ModalState | null>(null)
 
   const handleFile = useCallback(async (file: File) => {
@@ -300,7 +445,7 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
       const r = await compareCaptures(baseUploadId, up.upload_id)
       setCompareFilename(file.name)
       setResult(r)
-      setInnerTab('sessions')
+      setInnerTab('conversations')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -435,16 +580,25 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
 
           {/* ── Inner tabs ── */}
           <div className="cmp-inner-tabs">
-            {(['sessions', 'ips', 'protocols'] as InnerTab[]).map(t => (
+            {(['conversations', 'sessions', 'ips', 'protocols'] as InnerTab[]).map(t => (
               <button
                 key={t}
                 className={`cmp-inner-tab${innerTab === t ? ' active' : ''}`}
                 onClick={() => setInnerTab(t)}
               >
-                {{ sessions: '⇄ Session compare', ips: '⊕ IP / Port', protocols: '◎ Protocol' }[t]}
+                {{ conversations: '⇆ Conversation diff', sessions: '⇄ Session compare', ips: '⊕ IP / Port', protocols: '◎ Protocol' }[t]}
               </button>
             ))}
           </div>
+
+          {/* ── Conversation statistical diff tab ── */}
+          {innerTab === 'conversations' && (
+            <Conversations
+              result={result}
+              baseFilename={baseFilename}
+              compareFilename={compareFilename}
+            />
+          )}
 
           {/* ── Session side-by-side tab ── */}
           {innerTab === 'sessions' && (

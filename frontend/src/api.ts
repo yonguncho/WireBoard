@@ -311,6 +311,24 @@ export interface CompareSession {
   rst: boolean
 }
 
+export interface ConversationDiff {
+  key: string
+  ip_a: string; ip_b: string
+  port: number; protocol: string
+  a_sessions: number; a_packets: number; a_bytes: number
+  b_sessions: number; b_packets: number; b_bytes: number
+  byte_delta: number
+  status: 'both' | 'only_a' | 'only_b'
+}
+
+export interface ConversationSummary {
+  total: number
+  both: number
+  only_base: number
+  only_compare: number
+  changed: number
+}
+
 export interface CompareResult {
   new_ips: string[]
   removed_ips: string[]
@@ -323,6 +341,9 @@ export interface CompareResult {
   compare_sessions: CompareSession[]
   base_session_total: number
   compare_session_total: number
+  conversations: ConversationDiff[]
+  conversation_summary: ConversationSummary
+  conversation_total: number
 }
 
 export async function compareCaptures(

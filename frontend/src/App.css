@@ -1237,6 +1237,9 @@ button.stat-card:focus-visible { outline: 2px solid var(--blue); outline-offset:
 .to-arrow { color:var(--txt-muted); text-align:center; }
 .to-proto { color:#7dd3fc; font-weight:600; }
 .to-cause { color:var(--txt-secondary); }
+.to-preview-tag { display:inline-block; margin-left:6px; padding:1px 6px; border-radius:4px; background:#ffffff12; color:var(--txt-muted); text-transform:uppercase; letter-spacing:.04em; font-size:9px; font-weight:600; vertical-align:middle; }
+.to-seeall { margin-top:8px; width:100%; padding:7px 10px; border:1px dashed var(--card-border); border-radius:6px; background:0 0; color:var(--blue,#4f8ef7); cursor:pointer; font-size:12px; font-weight:600; }
+.to-seeall:hover { background:var(--hover); border-style:solid; }
 
 /* ── v6.3 래더(Flow Sequence) 다이어그램 ─────────────────────── */
 .ladder-wrap { padding: 4px 0 12px; overflow-x: auto; }
@@ -1381,6 +1384,7 @@ button.stat-card:focus-visible { outline: 2px solid var(--blue); outline-offset:
 .cmp-badge-new { color:var(--red); background:#ef44441f }
 .cmp-badge-removed { color:var(--yellow); background:#f59e0b1f }
 .cmp-badge-common { color:var(--txt-secondary); background:#ffffff12 }
+.cmp-badge-changed { color:var(--blue); background:#3b82f61f }
 .cmp-row-ts { color:var(--txt-muted); flex-shrink:0 }
 .cmp-row-pair { color:var(--txt-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1 }
 .cmp-row-pair .arrow { color:var(--txt-muted) }
@@ -1396,6 +1400,33 @@ button.stat-card:focus-visible { outline: 2px solid var(--blue); outline-offset:
 .cmp-truncate-notice { color:var(--yellow); font-size:11px; padding:6px 10px; background:#f59e0b14; border:1px solid #f59e0b33; border-radius:var(--radius-sm) }
 .cmp-list-detail-btn { margin-left:8px; padding:1px 8px; border:1px solid var(--card-border); background:var(--surface); color:var(--blue); font-size:10px; border-radius:var(--radius-sm); cursor:pointer }
 .cmp-list-detail-btn:hover { background:var(--hover) }
+
+/* Conversation statistical diff */
+.cmp-conv-wrap { display:flex; flex-direction:column; gap:10px }
+.cmp-conv-intro { color:var(--txt-muted); font-size:11px; margin:0; line-height:1.5 }
+.cmp-conv-summary { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; color:var(--txt-secondary); padding:8px 12px; background:var(--surface); border:1px solid var(--card-border); border-radius:var(--radius-sm) }
+.cmp-conv-summary .dot { color:var(--txt-muted) }
+.cmp-conv-summary b { color:var(--txt-primary) }
+.cmp-filter-cnt { font-size:9px; color:var(--txt-muted); margin-left:2px }
+.cmp-conv-sort { margin-left:auto; display:flex; align-items:center; gap:6px; font-size:11px; color:var(--txt-muted) }
+.cmp-sort-btn { padding:3px 10px; border:1px solid var(--card-border); background:var(--surface); color:var(--txt-secondary); font-size:11px; border-radius:var(--radius-sm); cursor:pointer }
+.cmp-sort-btn.active { color:var(--blue); border-color:var(--blue); font-weight:600 }
+.cmp-conv-table-wrap { overflow:auto; max-height:520px; border:1px solid var(--card-border); border-radius:var(--radius-sm) }
+.cmp-conv-table { width:100%; border-collapse:collapse; font-size:11px }
+.cmp-conv-table thead th { position:sticky; top:0; background:var(--card); color:var(--txt-muted); font-weight:600; text-align:center; padding:5px 8px; border-bottom:1px solid var(--card-border); white-space:nowrap; z-index:1 }
+.cmp-conv-grp.base { color:var(--txt-secondary); border-left:1px solid var(--card-border) }
+.cmp-conv-grp.compare { color:var(--blue); border-left:1px solid var(--card-border) }
+.cmp-conv-table tbody td { padding:5px 8px; border-bottom:1px solid #ffffff08; text-align:center; vertical-align:middle }
+.cmp-conv-table tbody tr:hover { background:var(--hover) }
+.cmp-conv-changed { background:#3b82f60a }
+.cmp-conv-pair { text-align:left !important; white-space:nowrap; color:var(--txt-primary) }
+.cmp-conv-pair .arrow { color:var(--txt-muted); margin:0 3px }
+.cmp-conv-port { color:var(--txt-muted) }
+.cmp-conv-num { font-family:var(--mono); color:var(--txt-secondary) }
+.cmp-conv-delta { font-family:var(--mono); font-weight:600 }
+.cmp-conv-delta.up { color:var(--red) }
+.cmp-conv-delta.down { color:var(--green) }
+.cmp-conv-delta.zero { color:var(--txt-muted) }
 
 /* Compare session detail modal — fixed overlay, never clipped */
 .cmp-modal-overlay { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; padding:24px }

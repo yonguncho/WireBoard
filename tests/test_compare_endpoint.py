@@ -99,6 +99,38 @@ class TestCompareEndpointSuccess:
         assert "a_total" in br
         assert "b_total" in br
 
+    def test_compare_has_conversation_keys(self, pcap_bytes):
+        client = _make_app()
+        uid_a, token_a = _upload_and_analyze(client, pcap_bytes)
+        uid_b, token_b = _upload_and_analyze(client, pcap_bytes)
+        body = client.post("/api/compare", json={"base_upload_id": uid_a, "current_upload_id": uid_b},
+                           headers={"X-Upload-Token-Base": token_a, "X-Upload-Token-Current": token_b}).json()
+        for key in ("conversations", "conversation_summary", "conversation_total"):
+            assert key in body, f"키 누락: {key}"
+        assert isinstance(body["conversations"], list)
+        summary = body["conversation_summary"]
+        for key in ("total", "both", "only_base", "only_compare", "changed"):
+            assert key in summary, f"summary 키 누락: {key}"
+
+    def test_compare_same_capture_all_both_zero_delta(self, pcap_bytes):
+        # 동일 캡처 비교 시 모든 대화는 양쪽에 존재(both)하고 바이트 차이는 0이어야 한다.
+        client = _make_app()
+        uid_a, token_a = _upload_and_analyze(client, pcap_bytes)
+        uid_b, token_b = _upload_and_analyze(client, pcap_bytes)
+        body = client.post("/api/compare", json={"base_upload_id": uid_a, "current_upload_id": uid_b},
+                           headers={"X-Upload-Token-Base": token_a, "X-Upload-Token-Current": token_b}).json()
+        convs = body["conversations"]
+        assert len(convs) > 0
+        for c in convs:
+            assert c["status"] == "both", f"동일 캡처인데 status={c['status']}"
+            assert c["byte_delta"] == 0
+            assert c["a_bytes"] == c["b_bytes"]
+        summary = body["conversation_summary"]
+        assert summary["both"] == summary["total"]
+        assert summary["only_base"] == 0
+        assert summary["only_compare"] == 0
+        assert summary["changed"] == 0
+
 
 class TestCompareEndpointErrors:
     def test_invalid_base_uuid_returns_400(self, pcap_bytes):

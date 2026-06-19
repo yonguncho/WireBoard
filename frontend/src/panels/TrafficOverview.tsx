@@ -35,8 +35,13 @@ function scoreColor(s: number) {
   return s >= 80 ? '#22c55e' : s >= 50 ? '#f59e0b' : '#ef4444'
 }
 
-function ProblemSessions({ sessions, onFlowSelect }: { sessions: SessionHealth[]; onFlowSelect: (id: string) => void }) {
-  if (sessions.length === 0) {
+function ProblemSessions({ sessions, total, onFlowSelect, onSeeAll }: {
+  sessions: SessionHealth[]
+  total: number
+  onFlowSelect: (id: string) => void
+  onSeeAll: () => void
+}) {
+  if (total === 0) {
     return <div className="to-clean">✓ No sessions with connection delays or anomalies detected.</div>
   }
   return (
@@ -45,7 +50,7 @@ function ProblemSessions({ sessions, onFlowSelect }: { sessions: SessionHealth[]
         <thead>
           <tr>
             <th>Score</th><th>Source</th><th></th><th>Destination</th>
-            <th>Proto</th><th>Handshake</th><th>RTT</th><th>Retransmit</th><th>Cause</th>
+            <th>Proto</th><th>RTT</th><th>Cause</th>
           </tr>
         </thead>
         <tbody>
@@ -56,14 +61,15 @@ function ProblemSessions({ sessions, onFlowSelect }: { sessions: SessionHealth[]
               <td className="mono to-arrow">→</td>
               <td className="mono to-addr">{s.dst_ip}:{s.dst_port}</td>
               <td><span className="to-proto">{s.protocol}</span></td>
-              <td className="mono">{s.handshake}</td>
               <td className="mono">{s.rtt_ms !== null ? `${s.rtt_ms.toFixed(1)} ms` : '—'}</td>
-              <td className="mono">{s.retransmit_count > 0 ? <span style={{ color: '#f59e0b' }}>{s.retransmit_count}</span> : '—'}</td>
               <td className="to-cause">{s.root_cause}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      <button className="to-seeall" onClick={onSeeAll}>
+        View all {total} problem session{total === 1 ? '' : 's'} in Investigate →
+      </button>
     </div>
   )
 }
@@ -126,11 +132,12 @@ export function TrafficOverview({ uploadId, panels, sessionCount, onGoTab, onFlo
   const noResponse = health?.failure_summary?.no_response ?? 0
   const slowResponse = health?.failure_summary?.slow_response ?? 0
 
-  // 문제 세션: 점수 낮은 순(통신 지연·핸드셰이크 실패·재전송 과다) 상위 10개
-  const problemSessions = (health?.sessions ?? [])
+  // 문제 세션: 점수 낮은 순(통신 지연·핸드셰이크 실패·재전송 과다)
+  // Overview는 미리보기(top 5)만 — 전체 인터랙티브 목록은 Investigate › Sessions(SessionExplorer)
+  const problemAll = (health?.sessions ?? [])
     .filter(s => s.status !== 'Healthy')
     .sort((a, b) => a.score - b.score)
-    .slice(0, 10)
+  const problemTop = problemAll.slice(0, 5)
 
   const cards: StatCard[] = [
     { label: 'Total Sessions', value: health?.total_sessions ?? sessionCount, tone: 'ok', tab: 'sessions', hint: 'All observed TCP/UDP sessions' },
@@ -147,14 +154,19 @@ export function TrafficOverview({ uploadId, panels, sessionCount, onGoTab, onFlo
 
       <div className="panel-card wide">
         <div className="panel-card-title">
-          Sessions with Delays or Connection Problems
+          Top Problem Sessions <span className="to-preview-tag">preview</span>
           {health && <span className="to-overall"> · overall health {health.overall_score}/100</span>}
         </div>
         <div className="panel-card-body">
           {loading ? (
             <div className="to-loading"><div className="spinner sm" /> Diagnosing connection health (RTT · handshake · retransmit)...</div>
           ) : (
-            <ProblemSessions sessions={problemSessions} onFlowSelect={onFlowSelect} />
+            <ProblemSessions
+              sessions={problemTop}
+              total={problemAll.length}
+              onFlowSelect={onFlowSelect}
+              onSeeAll={() => onGoTab('sessions')}
+            />
           )}
         </div>
       </div>
