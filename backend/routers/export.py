@@ -1,4 +1,5 @@
 """GET /api/export/{upload_id} + POST /api/export/{upload_id}/pdf + GET /api/export/{upload_id}/ioc — 데이터 내보내기."""
+import asyncio
 import csv
 import io
 import ipaddress
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 from services.export.state_exporter import StateExporter
 from services.export_service import ExportService
 from services.report.pdf_exporter import PdfExporter
+from services.narrative.capture_summary import summarize_capture
 from models.attack import AttackDetectionResult
 from models.session import SessionModel
 from utils.constants import UUID_RE
@@ -144,11 +146,30 @@ async def export_pdf(
     check_capture_token(capture, x_upload_token)
 
     annotations = list(request.app.state.annotations_store.get(upload_id, []))
+
+    # Risk grade + evidence-based diagnosis for the report's Executive Summary.
+    # Pure-CPU work — run off the event loop; failure must not block the report.
+    risk_block = None
+    try:
+        loop = asyncio.get_running_loop()
+        sr = await loop.run_in_executor(None, summarize_capture, capture)
+        risk_block = {
+            "risk_level": sr.risk_level,
+            "risk_score": sr.risk_score,
+            "headline": sr.headline,
+            "risk_factors": sr.risk_factors,
+            "diagnosis": sr.diagnosis,
+            "recommendations": sr.recommendations,
+        }
+    except Exception as exc:  # report must still generate without the risk block
+        logger.warning("PDF 위험요약 생성 실패 (리포트는 계속): %s", exc)
+
     analysis_result = {
         "target_ip": capture.target_ip or "unknown",
         "sessions": capture.sessions,
         "attacks": capture.attacks,
         "annotations": annotations,
+        "risk": risk_block,
         "summary": {
             "total_sessions": len(capture.sessions),
             "total_bytes": sum(s.bytes_sent + s.bytes_recv for s in capture.sessions),

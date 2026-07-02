@@ -1,6 +1,8 @@
 """공유 상수 — 여러 모듈에서 참조하는 값은 여기서 단일 정의."""
 import re
 
+APP_VERSION = "7.3.0"  # 단일 버전 정의 — main.py/PDF 리포트 등에서 참조
+
 MAX_UPLOAD_BYTES = 52_428_800  # 50 MB — 바이너리 pcap/pcapng 한도
 # 텍스트 로그(FortiGate/tcpdump hex 덤프·HAR JSON)는 같은 정보를 바이너리보다
 # 3~4배 크게 표현하므로 별도의 상향 한도를 적용한다(디코딩 후 ~1/4로 축소).

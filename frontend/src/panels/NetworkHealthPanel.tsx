@@ -63,7 +63,11 @@ function SessionDetail({ s }: { s: SessionHealth }) {
         <div className="nh-detail-card">
           <div className="nh-detail-card-title">Connection info</div>
           <div className="nh-detail-row"><span>Handshake</span><span className="mono">{s.handshake}</span></div>
-          <div className="nh-detail-row"><span>RTT</span><span className="mono">{s.rtt_ms !== null ? `${s.rtt_ms.toFixed(2)} ms` : '—'}</span></div>
+          <div className="nh-detail-row"><span>RTT (network)</span><span className="mono">{s.rtt_ms !== null ? `${s.rtt_ms.toFixed(2)} ms` : '—'}</span></div>
+          <div className="nh-detail-row"><span>Server delay</span><span className="mono">{s.server_delay_ms != null ? `${s.server_delay_ms.toFixed(1)} ms` : '—'}</span></div>
+          {s.bottleneck && s.bottleneck !== 'none' && (
+            <div className="nh-detail-row"><span>Bottleneck</span><span className="mono" style={{ color: s.bottleneck === 'application' ? '#f59e0b' : '#fc4343', fontWeight: 700 }}>{s.bottleneck.toUpperCase()}</span></div>
+          )}
           <div className="nh-detail-row"><span>Close type</span><span className="mono">{s.close_type}</span></div>
           <div className="nh-detail-row"><span>RST type</span><span className="mono">{s.rst_type}</span></div>
         </div>
@@ -154,6 +158,26 @@ export function NetworkHealthPanel({ uploadId }: Props) {
 
   return (
     <div className="nh-panel">
+      {/* NOC verdict: network problem vs application problem — decides who to page */}
+      {data.verdict && data.verdict.side !== 'none' && (
+        <div className={`nh-verdict nh-verdict-${data.verdict.side}`}>
+          <span className="nh-verdict-badge">
+            {data.verdict.side === 'network' ? '🌐 NETWORK' :
+             data.verdict.side === 'application' ? '🖥 APPLICATION' : '🔌 SERVER'}
+          </span>
+          <span className="nh-verdict-text">{data.verdict.headline}</span>
+        </div>
+      )}
+
+      {/* Capture-quality caveats — prevents over-trusting partial captures */}
+      {(data.capture_quality?.warnings?.length ?? 0) > 0 && (
+        <div className="nh-quality">
+          {data.capture_quality!.warnings.map((w, i) => (
+            <div key={i} className="nh-quality-item">⚠ {w}</div>
+          ))}
+        </div>
+      )}
+
       <div className="nh-summary-bar">
         <div className="nh-overall">
           <ScoreCircle

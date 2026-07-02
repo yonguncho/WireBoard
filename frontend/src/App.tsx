@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+﻿import { useState, useCallback, useEffect, useRef } from 'react'
 import { uploadPcap, analyzePcap, getPanels, getSummary, exportJson, exportPdf, exportIoc, downloadConvertedPcap } from './api'
 import type { PanelData, SummaryData } from './api'
 import { subscribeToast } from './toast'
@@ -31,6 +31,7 @@ interface UploadMeta {
   sessionCount: number
   sourceType: string
   pcapAvailable: boolean
+  convertHint?: string
 }
 
 interface RecentEntry {
@@ -349,7 +350,12 @@ export default function App() {
         getSummary(up.upload_id),
       ])
 
-      setMeta({ uploadId: up.upload_id, filename: file.name, sessionCount: up.session_count, sourceType: up.source_type, pcapAvailable: !!up.pcap_available })
+      // FortiGate/tcpdump text logs convert to a downloadable .pcap only when they
+      // contain a hex packet dump (verbose 6). Explain when conversion wasn't possible.
+      const convertHint = (!up.pcap_available && (up.source_type === 'fortigate' || up.source_type === 'tcpdump'))
+        ? "This log was parsed for analysis, but it has no hex packet dump, so a .pcap file could not be produced. To enable .pcap conversion & download, re-capture with verbose 6 — e.g. 'diagnose sniffer packet <interface> \"<filter>\" 6 0 l' on FortiGate, or 'tcpdump -XX ...'."
+        : undefined
+      setMeta({ uploadId: up.upload_id, filename: file.name, sessionCount: up.session_count, sourceType: up.source_type, pcapAvailable: !!up.pcap_available, convertHint })
       setPanels(data)
       setSummary(sum)
       // HAR 입력은 Waterfall 이 가장 유용하므로 해당 뷰를 먼저 보여준다.
@@ -479,7 +485,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v7.2.5</span>
+          <span className="header-ver">v7.3.0</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -498,7 +504,7 @@ export default function App() {
               } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
             }}>↓ IOC</button>
             {meta.pcapAvailable && (
-              <button className="btn-export" title="Download log converted to PCAP" onClick={() => downloadConvertedPcap(meta.uploadId).catch(e => setError(e instanceof Error ? e.message : String(e)))}>↓ PCAP</button>
+              <button className="btn-export btn-pcap" title="Download this log converted to a Wireshark-openable .pcap file" onClick={() => downloadConvertedPcap(meta.uploadId).catch(e => setError(e instanceof Error ? e.message : String(e)))}>↓ PCAP</button>
             )}
             <button className="btn-new-file" title="Shortcut N" onClick={resetToUpload}>New File</button>
           </div>
@@ -513,6 +519,14 @@ export default function App() {
 
       {/* Top loading progress bar */}
       {loading && <div className="top-progress" />}
+
+      {/* FortiGate/tcpdump verbose-3 → no hex dump → explain why .pcap download is unavailable */}
+      {meta?.convertHint && (
+        <div className="convert-hint" role="status">
+          <span className="convert-hint-icon">ℹ</span>
+          <span>{meta.convertHint}</span>
+        </div>
+      )}
 
       {/* Global drop overlay — dropping a file in the dashboard state starts a new analysis */}
       {globalDrag && (

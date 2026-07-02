@@ -532,6 +532,20 @@ export function ComparePanel({ baseUploadId, baseFilename }: Props) {
 
       {result && compareFilename && (
         <>
+          {/* ── At-a-glance verdict: normal vs failure ── */}
+          {result.verdict && (
+            <div className={`compare-verdict verdict-${result.verdict.verdict.toLowerCase()}`}>
+              <span className="compare-verdict-badge">{result.verdict.verdict}</span>
+              <span className="compare-verdict-headline">{result.verdict.headline}</span>
+              {(result.verdict.newly_failing > 0 || result.verdict.recovered > 0) && (
+                <span className="compare-verdict-meta">
+                  {result.verdict.newly_failing > 0 && <>▼ {result.verdict.newly_failing} newly failing </>}
+                  {result.verdict.recovered > 0 && <>▲ {result.verdict.recovered} recovered</>}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* ── Summary metrics (counts are clickable) ── */}
           <div className="compare-summary-row">
             <div className="compare-metric">

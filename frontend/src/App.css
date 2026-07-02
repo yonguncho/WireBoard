@@ -640,6 +640,47 @@ body {
 .btn-new-file:hover { border-color:var(--blue);color:var(--blue) }
 .btn-export { border:1px solid var(--card-border);border-radius:var(--radius-sm);color:var(--txt-secondary);cursor:pointer;background:0 0;padding:5px 12px;font-size:11px;transition:all .15s }
 .btn-export:hover { border-color:var(--green);color:var(--green) }
+.btn-export.btn-pcap { border-color:var(--green);color:var(--green);font-weight:600 }
+/* Risk score + evidence + diagnosis in the summary card */
+.risk-score { font-size:22px;font-weight:800;margin-left:4px }
+.risk-score-max { font-size:12px;font-weight:600;opacity:.6 }
+.why-section { margin:8px 0 4px }
+.why-toggle { border:1px solid var(--card-border);border-radius:var(--radius-sm);background:0 0;color:var(--txt-secondary);cursor:pointer;padding:5px 10px;font-size:12px }
+.why-toggle:hover { border-color:var(--txt-secondary) }
+.why-list { list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px }
+.why-list li { display:flex;align-items:baseline;gap:8px;font-size:12px }
+.why-points { font-weight:700;min-width:38px }
+.why-factor { font-weight:600 }
+.why-detail { color:var(--txt-secondary) }
+.diagnosis-box { margin:10px 0;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm) }
+.diagnosis-label { font-weight:600;font-size:12px;color:#f59e0b }
+.diagnosis-list { margin:6px 0 0;padding-left:18px;font-size:12px;line-height:1.6 }
+/* Compare verdict banner */
+.compare-verdict { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding:12px 16px;border-radius:var(--radius-sm);border:1px solid var(--card-border);background:var(--surface) }
+.compare-verdict-badge { font-weight:800;font-size:13px;letter-spacing:.05em;padding:3px 10px;border-radius:var(--radius-sm) }
+.compare-verdict-headline { font-size:13px }
+.compare-verdict-meta { margin-left:auto;font-size:12px;color:var(--txt-secondary) }
+.verdict-degraded { border-color:rgba(252,67,67,.45);background:rgba(252,67,67,.08) }
+.verdict-degraded .compare-verdict-badge { background:rgba(252,67,67,.18);color:#fc4343 }
+.verdict-improved { border-color:rgba(34,197,94,.45);background:rgba(34,197,94,.08) }
+.verdict-improved .compare-verdict-badge { background:rgba(34,197,94,.18);color:#22c55e }
+.verdict-different { border-color:rgba(245,158,11,.45);background:rgba(245,158,11,.08) }
+.verdict-different .compare-verdict-badge { background:rgba(245,158,11,.18);color:#f59e0b }
+.verdict-similar .compare-verdict-badge { background:rgba(160,174,192,.18);color:var(--txt-secondary) }
+/* NOC verdict banner (network vs application) + capture quality */
+.nh-verdict { display:flex;align-items:center;gap:12px;margin-bottom:10px;padding:12px 16px;border-radius:var(--radius-sm);border:1px solid var(--card-border);background:var(--surface) }
+.nh-verdict-badge { font-weight:800;font-size:12px;letter-spacing:.06em;padding:4px 10px;border-radius:var(--radius-sm);flex-shrink:0 }
+.nh-verdict-text { font-size:13px }
+.nh-verdict-network { border-color:rgba(252,67,67,.45);background:rgba(252,67,67,.08) }
+.nh-verdict-network .nh-verdict-badge { background:rgba(252,67,67,.18);color:#fc4343 }
+.nh-verdict-application { border-color:rgba(245,158,11,.45);background:rgba(245,158,11,.08) }
+.nh-verdict-application .nh-verdict-badge { background:rgba(245,158,11,.18);color:#f59e0b }
+.nh-verdict-server { border-color:rgba(168,85,247,.45);background:rgba(168,85,247,.08) }
+.nh-verdict-server .nh-verdict-badge { background:rgba(168,85,247,.18);color:#a855f7 }
+.nh-quality { margin-bottom:10px;padding:8px 14px;background:rgba(160,174,192,.07);border:1px dashed var(--card-border);border-radius:var(--radius-sm) }
+.nh-quality-item { font-size:11.5px;color:var(--txt-secondary);line-height:1.6 }
+.convert-hint { display:flex;align-items:flex-start;gap:8px;margin:10px 16px 0;padding:10px 14px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.35);border-radius:var(--radius-sm);color:var(--txt-secondary);font-size:12px;line-height:1.5 }
+.convert-hint-icon { color:#38bdf8;font-weight:700;flex-shrink:0 }
 .upload-page { flex-direction:column;flex:1;justify-content:center;align-items:center;gap:24px;padding:60px 24px;display:flex }
 .drop-zone { background:var(--surface);border:2px dashed var(--card-border);border-radius:var(--radius-lg);cursor:pointer;width:100%;max-width:560px;transition:border-color .2s,background .2s,transform .15s }
 .drop-zone:hover,.drop-zone.dragging { border-color:var(--blue);background:#3b82f60a;transform:translateY(-1px) }

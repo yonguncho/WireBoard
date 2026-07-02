@@ -4,6 +4,8 @@ import time
 import unicodedata
 from pathlib import Path
 
+from utils.constants import APP_VERSION
+
 _UNICODE_ASCII_MAP = {
     "→": "->", "←": "<-", "↑": "^", "↓": "v", "⇒": "=>", "⇐": "<=",
     "…": "...", "–": "-", "—": "--", "•": "*", "·": ".", "×": "x",
@@ -17,52 +19,58 @@ def _pdf_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
+_LINES_PER_PAGE = 50  # y: 750 → 50, 14pt 간격
+_MAX_PAGES = 20       # 안전 상한 (세션 수천 개 덤프 방지)
+
+
 def _build_pdf(lines: list[str]) -> tuple[bytes, bool]:
-    """최소한의 유효한 PDF (PDF 1.4, Type1 Helvetica 폰트) 를 생성한다.
+    """최소한의 유효한 PDF (PDF 1.4, Type1 Helvetica) — 멀티페이지 지원.
 
-    Returns (pdf_bytes, truncated) — truncated=True 이면 1페이지 용량 초과로 잘렸음.
+    Returns (pdf_bytes, truncated) — truncated=True 이면 _MAX_PAGES 초과로 잘렸음.
+    (기존 단일 페이지 51줄 절단 → 페이지네이션으로 교체: 위험 요약 블록이
+    THREAT ASSESSMENT / TOP 10 SESSIONS 를 밀어내지 않는다.)
     """
-    text_ops = []
-    y = 750
-    truncated = False
-    for line in lines:
-        safe = _pdf_escape(line[:100])
-        text_ops.append(f"BT /F1 10 Tf 50 {y} Td ({safe}) Tj ET")
-        y -= 14
-        if y < 50:
-            truncated = True
-            break
+    # 줄들을 페이지 단위로 분할
+    pages_lines = [lines[i:i + _LINES_PER_PAGE]
+                   for i in range(0, max(len(lines), 1), _LINES_PER_PAGE)]
+    truncated = len(pages_lines) > _MAX_PAGES
+    pages_lines = pages_lines[:_MAX_PAGES]
 
-    stream_content = "\n".join(text_ops)
-    stream_bytes = stream_content.encode("latin-1", errors="replace")
+    # 오브젝트 번호: 1=Catalog, 2=Pages, 3=Font, 이후 페이지당 (Page, Contents) 쌍
+    n_pages = len(pages_lines)
+    page_ids = [4 + 2 * i for i in range(n_pages)]
 
     objects: list[bytes] = []
-
-    # obj 1: Catalog
     objects.append(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
-    # obj 2: Pages
-    objects.append(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
-    # obj 3: Page
+    kids = " ".join(f"{pid} 0 R" for pid in page_ids)
     objects.append(
-        b"3 0 obj\n"
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]\n"
-        b"   /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\n"
-        b"endobj\n"
+        f"2 0 obj\n<< /Type /Pages /Kids [{kids}] /Count {n_pages} >>\nendobj\n".encode()
     )
-    # obj 4: Content stream
     objects.append(
-        b"4 0 obj\n<< /Length "
-        + str(len(stream_bytes)).encode()
-        + b" >>\nstream\n"
-        + stream_bytes
-        + b"\nendstream\nendobj\n"
+        b"3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n"
     )
-    # obj 5: Font
-    objects.append(
-        b"5 0 obj\n"
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\n"
-        b"endobj\n"
-    )
+
+    for i, page in enumerate(pages_lines):
+        pid = page_ids[i]
+        cid = pid + 1
+        text_ops = []
+        y = 750
+        for line in page:
+            safe = _pdf_escape(line[:100])
+            text_ops.append(f"BT /F1 10 Tf 50 {y} Td ({safe}) Tj ET")
+            y -= 14
+        stream_bytes = "\n".join(text_ops).encode("latin-1", errors="replace")
+        objects.append(
+            (f"{pid} 0 obj\n"
+             f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]\n"
+             f"   /Contents {cid} 0 R /Resources << /Font << /F1 3 0 R >> >> >>\n"
+             f"endobj\n").encode()
+        )
+        objects.append(
+            f"{cid} 0 obj\n<< /Length {len(stream_bytes)} >>\nstream\n".encode()
+            + stream_bytes
+            + b"\nendstream\nendobj\n"
+        )
 
     header = b"%PDF-1.4\n"
     body = b""
@@ -160,14 +168,42 @@ class PdfExporter:
         attacks = analysis_result.get("attacks", [])
         annotations = analysis_result.get("annotations", [])
 
+        risk = analysis_result.get("risk") or {}
+
         # Executive Summary — 자동 내러티브
         lines = [
-            "WireBoard v5.0 — Analysis Report",
+            f"WireBoard {APP_VERSION} - Analysis Report",
             f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}",
             "=" * 60,
             "",
             "=== EXECUTIVE SUMMARY ===",
         ]
+
+        # Risk grade block (English) — driven by the summary builder when available
+        if risk:
+            grade = risk.get("risk_level", "UNKNOWN")
+            score = risk.get("risk_score", 0)
+            lines.append(f"Risk Grade: {grade}  (score {score}/100)")
+            headline = risk.get("headline", "")
+            if headline:
+                lines.append(f"Verdict: {headline}")
+            factors = risk.get("risk_factors", [])
+            if factors:
+                lines.append("Why this grade:")
+                for f in factors[:6]:
+                    lines.append(f"  - {f.get('factor', '')} (+{f.get('points', 0)}): {f.get('detail', '')}")
+            diagnosis = risk.get("diagnosis", [])
+            if diagnosis:
+                lines.append("Connectivity diagnosis:")
+                for d in diagnosis[:8]:
+                    lines.append(f"  - {d}")
+            recs = risk.get("recommendations", [])
+            if recs:
+                lines.append("Recommended actions:")
+                for rec in recs[:6]:
+                    lines.append(f"  - {rec}")
+            lines.append("")
+
         lines += _build_narrative(target_ip, sessions, attacks, annotations)
 
         # 기술 상세 — 세션 TOP 10

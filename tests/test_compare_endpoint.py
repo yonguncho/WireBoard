@@ -112,6 +112,22 @@ class TestCompareEndpointSuccess:
         for key in ("total", "both", "only_base", "only_compare", "changed"):
             assert key in summary, f"summary 키 누락: {key}"
 
+    def test_compare_has_verdict(self, pcap_bytes):
+        client = _make_app()
+        uid_a, token_a = _upload_and_analyze(client, pcap_bytes)
+        uid_b, token_b = _upload_and_analyze(client, pcap_bytes)
+        body = client.post("/api/compare", json={"base_upload_id": uid_a, "current_upload_id": uid_b},
+                           headers={"X-Upload-Token-Base": token_a, "X-Upload-Token-Current": token_b}).json()
+        assert "verdict" in body
+        v = body["verdict"]
+        assert v["verdict"] in ("SIMILAR", "DEGRADED", "IMPROVED", "DIFFERENT")
+        assert "headline" in v and "counts" in v
+        # identical captures → SIMILAR
+        assert v["verdict"] == "SIMILAR"
+        # each conversation carries an at-a-glance change_type
+        for c in body["conversations"]:
+            assert "change_type" in c
+
     def test_compare_same_capture_all_both_zero_delta(self, pcap_bytes):
         # 동일 캡처 비교 시 모든 대화는 양쪽에 존재(both)하고 바이트 차이는 0이어야 한다.
         client = _make_app()

@@ -16,7 +16,12 @@ function fmtBytes(b: number) {
 }
 
 export function Panel9Conversations({ data, uploadId, onFlowSelect }: Props) {
-  const rows = (data ?? []).slice(0, 20)
+  const [sortBy, setSortBy] = useState<'bytes' | 'issues'>('bytes')
+  const rows = [...(data ?? [])]
+    .sort((a, b) => sortBy === 'issues'
+      ? ((b.issue_rate ?? 0) - (a.issue_rate ?? 0)) || (b.bytes - a.bytes)
+      : b.bytes - a.bytes)
+    .slice(0, 20)
   const [drill, setDrill] = useState<DrillState | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -41,13 +46,22 @@ export function Panel9Conversations({ data, uploadId, onFlowSelect }: Props) {
   if (!rows.length) return <div className="no-data">No data</div>
   return (
     <div style={{ position: 'relative' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+        <select className="pkt-filter-input" style={{ width: 130, fontSize: 11 }}
+          value={sortBy} onChange={e => setSortBy(e.target.value as 'bytes' | 'issues')}>
+          <option value="bytes">Sort: traffic</option>
+          <option value="issues">Sort: issue rate</option>
+        </select>
+      </div>
       <table className="mini-table full-width">
         <thead>
-          <tr><th>SRC</th><th>DST</th><th>Packets</th><th>Bytes</th><th>Duration(s)</th></tr>
+          <tr><th>SRC</th><th>DST</th><th>Packets</th><th>Bytes</th><th>Duration(s)</th><th>RST</th><th>No-reply</th></tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="conv-row"
+          {rows.map((r, i) => {
+            const hasIssue = (r.rst ?? 0) + (r.no_reply ?? 0) > 0
+            return (
+            <tr key={i} className={`conv-row${hasIssue ? ' row-error' : ''}`}
               style={uploadId ? { cursor: 'pointer' } : {}}
               onClick={() => openDrill(r.src, r.dst)}>
               <td className="mono">{r.src}</td>
@@ -55,8 +69,11 @@ export function Panel9Conversations({ data, uploadId, onFlowSelect }: Props) {
               <td>{r.packets.toLocaleString()}</td>
               <td>{fmtBytes(r.bytes)}</td>
               <td>{r.duration_s.toFixed(1)}</td>
+              <td>{(r.rst ?? 0) > 0 ? <span style={{ color: '#fc4343' }}>{r.rst}</span> : '—'}</td>
+              <td>{(r.no_reply ?? 0) > 0 ? <span style={{ color: '#f59e0b' }}>{r.no_reply}</span> : '—'}</td>
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
       {loading && <div style={{ textAlign: 'center', color: '#a0aec0', fontSize: 12, marginTop: 4 }}>Loading...</div>}

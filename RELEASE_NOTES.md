@@ -1,3 +1,38 @@
+## WireBoard v7.3.0 (2026-07-02)
+
+NOC triage release — trustworthy risk grading and "network vs application" verdicts.
+
+### New
+- **Network vs Application verdict**: compares pure network RTT (SYN↔SYN/ACK) against
+  server response delay per TCP session and tells you which team to escalate to.
+  Shown as a banner in Health Diagnostics and in the summary diagnosis.
+- **Evidence-based risk grade**: risk score (0-100) with an explicit factor breakdown
+  ("Why this grade") — no more unexplained HIGH/MEDIUM.
+- **Failure diagnosis without an attack**: captures full of refused/timed-out
+  connections are diagnosed as network problems instead of "normal traffic".
+- **Capture-quality warnings**: flags connections that started before the capture,
+  summary-only text logs, and flows hitting the per-flow packet cap — so partial
+  captures aren't over-trusted.
+- **Conversations panel**: RST / no-reply columns + sort by issue rate.
+- **Compare verdict**: two-capture diff now classifies each conversation
+  (NEW / GONE / SURGE / DROP / DEGRADED / RECOVERED) and rolls them into a single
+  DEGRADED / IMPROVED / SIMILAR verdict.
+- **English PDF report** with risk grade, evidence factors, and connectivity
+  diagnosis; multi-page (no more silent truncation).
+
+### Fixed
+- False DEGRADED verdicts on healthy captures (normal RST teardown and one-way UDP
+  such as syslog/mDNS/broadcast are no longer counted as failures).
+- False MEDIUM/HIGH risk on broadcast-heavy LANs and summary-only text logs.
+- Detector crashes no longer surface as attack findings.
+- FortiGate verbose-3 logs now explain why .pcap conversion is unavailable
+  (and how to re-capture with verbose 6).
+
+### Tests
+- 809 passed (pytest), TypeScript build clean.
+
+---
+
 ## WireBoard v5.4.0
 
 Zero external-dependency network capture analysis tool.

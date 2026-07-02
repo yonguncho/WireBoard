@@ -48,12 +48,114 @@ def _make_session(src_ip: str, dst_ip: str, protocol: str = "TCP", bytes_sent: i
     )
 
 
+def _make_session_fail(src_ip: str, dst_ip: str, rst: bool = True):
+    from models.session import SessionModel
+    return SessionModel(
+        session_id=str(uuid.uuid4()),
+        src_ip=src_ip, dst_ip=dst_ip,
+        src_port=50000, dst_port=443, protocol="TCP",
+        start_ts=1_748_000_000.0, end_ts=1_748_000_002.0,
+        bytes_sent=200, bytes_recv=0, packet_count=3,
+        payload_length=0, confidence="normal", rst=rst,
+    )
+
+
 def _load_comparator():
     try:
         from services.analytics.pcap_comparator import PcapComparator
         return PcapComparator()
     except ImportError:
         pytest.skip("pcap_comparator 미구현")
+
+
+class TestVerdict:
+    """정상 vs 장애 한눈 판정 (verdict + change_type)."""
+
+    def test_identical_captures_similar(self):
+        cmp = _load_comparator()
+        a = [_make_session("10.0.0.1", "10.0.0.2")]
+        b = [_make_session("10.0.0.1", "10.0.0.2")]
+        res = cmp.compare(a, b)
+        assert res.verdict["verdict"] == "SIMILAR"
+        for c in res.conversations:
+            assert c["change_type"] == "STABLE"
+
+    def test_healthy_to_failing_is_degraded(self):
+        cmp = _load_comparator()
+        # base: healthy conversation; current: same pair now resetting
+        a = [_make_session("10.0.0.1", "10.0.0.2") for _ in range(4)]
+        b = [_make_session_fail("10.0.0.1", "10.0.0.2") for _ in range(4)]
+        res = cmp.compare(a, b)
+        assert res.verdict["verdict"] == "DEGRADED"
+        assert res.verdict["newly_failing"] >= 1
+        degraded = [c for c in res.conversations if c["change_type"] == "DEGRADED"]
+        assert len(degraded) >= 1
+
+    def test_new_failing_conversation_degraded(self):
+        cmp = _load_comparator()
+        a = [_make_session("10.0.0.1", "10.0.0.2")]
+        b = [_make_session("10.0.0.1", "10.0.0.2"),
+             _make_session_fail("10.0.0.9", "10.0.0.2")]
+        res = cmp.compare(a, b)
+        types = {c["change_type"] for c in res.conversations}
+        assert "NEW_FAILING" in types
+        assert res.verdict["verdict"] == "DEGRADED"
+
+    def test_failing_to_healthy_is_improved(self):
+        cmp = _load_comparator()
+        a = [_make_session_fail("10.0.0.1", "10.0.0.2") for _ in range(4)]
+        b = [_make_session("10.0.0.1", "10.0.0.2") for _ in range(4)]
+        res = cmp.compare(a, b)
+        assert res.verdict["verdict"] == "IMPROVED"
+        assert res.verdict["recovered"] >= 1
+
+    def test_verdict_always_present(self):
+        cmp = _load_comparator()
+        res = cmp.compare([], [])
+        assert "verdict" in res.verdict
+        assert res.verdict["verdict"] in ("SIMILAR", "DEGRADED", "IMPROVED", "DIFFERENT")
+
+    def test_normal_rst_teardown_not_failure(self):
+        """데이터 교환 후 RST 종료(브라우저/LB 통상 동작)는 장애가 아니다."""
+        from models.session import SessionModel
+        cmp = _load_comparator()
+
+        def _rst_close():
+            return SessionModel(
+                session_id=str(uuid.uuid4()),
+                src_ip="10.0.0.1", dst_ip="10.0.0.2",
+                src_port=50000, dst_port=443, protocol="TCP",
+                start_ts=1_748_000_000.0, end_ts=1_748_000_002.0,
+                bytes_sent=2048, bytes_recv=8192,  # 정상 데이터 교환
+                packet_count=30, payload_length=2048,
+                confidence="normal", rst=True,      # RST로 닫혔을 뿐
+            )
+        a = [_rst_close() for _ in range(4)]
+        b = [_rst_close() for _ in range(4)]
+        res = cmp.compare(a, b)
+        assert res.verdict["verdict"] == "SIMILAR"
+        assert res.verdict["newly_failing"] == 0
+
+    def test_one_way_udp_not_failure(self):
+        """단방향 UDP(syslog/브로드캐스트)는 응답이 없어도 장애가 아니다."""
+        from models.session import SessionModel
+        cmp = _load_comparator()
+
+        def _syslog():
+            return SessionModel(
+                session_id=str(uuid.uuid4()),
+                src_ip="10.0.0.1", dst_ip="10.0.0.9",
+                src_port=50000, dst_port=514, protocol="UDP",
+                start_ts=1_748_000_000.0, end_ts=1_748_000_002.0,
+                bytes_sent=500, bytes_recv=0,
+                packet_count=5, payload_length=500,
+                confidence="normal",
+            )
+        a = [_syslog()]
+        b = [_syslog(), _syslog()]
+        res = cmp.compare(a, b)
+        assert res.verdict["newly_failing"] == 0
+        assert res.verdict["verdict"] != "DEGRADED"
 
 
 class TestIpDiff:

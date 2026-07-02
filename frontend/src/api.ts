@@ -125,7 +125,10 @@ export interface ErrorEntry { status_code: number; count: number; path?: string 
 export interface IpRankEntry { ip: string; bytes: number; is_internal: boolean }
 export interface TlsEntry { sni: string; version: string; dst_ip: string }
 export interface DnsEntry { domain: string; type: string; response?: string; nxdomain: boolean }
-export interface ConvEntry { src: string; dst: string; packets: number; bytes: number; duration_s: number }
+export interface ConvEntry {
+  src: string; dst: string; packets: number; bytes: number; duration_s: number
+  sessions?: number; rst?: number; no_reply?: number; issue_rate?: number
+}
 export interface AttackEntry { attack_type: string; severity: string; mitre_id: string; description: string; src_ip?: string }
 
 export async function getSummary(upload_id: string, capture_token?: string): Promise<SummaryData> {
@@ -136,10 +139,21 @@ export async function getSummary(upload_id: string, capture_token?: string): Pro
   return r.json()
 }
 
+export interface RiskFactor {
+  factor: string
+  detail: string
+  points: number
+}
+
 export interface SummaryData {
   headline: string
   narrative: string
   risk_level: 'HIGH' | 'MEDIUM' | 'LOW' | 'CLEAN'
+  risk_score?: number
+  risk_factors?: RiskFactor[]
+  diagnosis?: string[]
+  key_findings?: string[]
+  health_overview?: Record<string, unknown>
   attacker_ips: string[]
   victim_ips: string[]
   recommendations: string[]
@@ -319,6 +333,19 @@ export interface ConversationDiff {
   b_sessions: number; b_packets: number; b_bytes: number
   byte_delta: number
   status: 'both' | 'only_a' | 'only_b'
+  change_type?: string
+  a_fail?: number
+  b_fail?: number
+}
+
+export interface CompareVerdict {
+  verdict: 'SIMILAR' | 'DEGRADED' | 'IMPROVED' | 'DIFFERENT'
+  headline: string
+  traffic_delta_pct: number | null
+  counts: Record<string, number>
+  newly_failing: number
+  recovered: number
+  top_changes: ConversationDiff[]
 }
 
 export interface ConversationSummary {
@@ -344,6 +371,7 @@ export interface CompareResult {
   conversations: ConversationDiff[]
   conversation_summary: ConversationSummary
   conversation_total: number
+  verdict?: CompareVerdict
 }
 
 export async function compareCaptures(
@@ -404,6 +432,22 @@ export interface SessionHealth {
   failure_type: string    // none | connection_refused | no_response | path_issue | slow_response
   icmp_label?: string     // ICMP label on path_issue (ttl_expired | host_unreachable | ...)
   icmp_src_ip?: string    // Router IP that sent the ICMP response on path_issue
+  server_delay_ms?: number | null  // first request payload → first response payload
+  bottleneck?: string     // none | network | server | application | indeterminate
+}
+
+export interface HealthVerdict {
+  side: 'network' | 'application' | 'server' | 'none'
+  headline: string
+  counts: Record<string, number>
+}
+
+export interface CaptureQuality {
+  tcp_sessions_with_packets: number
+  handshake_not_captured: number
+  packetless_sessions: number
+  truncated_flows: number
+  warnings: string[]
 }
 
 export interface NetworkHealthData {
@@ -414,6 +458,8 @@ export interface NetworkHealthData {
   overall_score: number
   top_issues: { issue: string; count: number }[]
   failure_summary: Record<string, number>
+  verdict?: HealthVerdict
+  capture_quality?: CaptureQuality
   sessions: SessionHealth[]
 }
 

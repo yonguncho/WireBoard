@@ -139,7 +139,9 @@ class StructuredLoggingMiddleware(BaseHTTPMiddleware):
             raise
 
 
-app = FastAPI(title="WireBoard", version="7.2.5")
+from utils.constants import APP_VERSION
+
+app = FastAPI(title="WireBoard", version=APP_VERSION)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(StructuredLoggingMiddleware)
 

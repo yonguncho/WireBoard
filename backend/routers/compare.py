@@ -125,4 +125,5 @@ async def compare_captures(
         "conversations":         conv_sorted[:_MAX_CONVERSATIONS],
         "conversation_summary":  conv_summary,
         "conversation_total":    len(conv_all),
+        "verdict":               result.verdict,
     }

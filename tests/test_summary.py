@@ -224,6 +224,126 @@ class TestTimeline:
         assert r.attack_timeline[0]["src_ip"] == "192.168.1.10"
 
 
+class TestRiskScoreAndFactors:
+    """근거 기반 risk_score + risk_factors 검증."""
+
+    def _a(self, sev, mitre="T1046", src="1.2.3.4"):
+        return {"attack_type": "PortScan", "severity": sev,
+                "mitre_id": mitre, "description": "", "src_ip": src}
+
+    def test_risk_score_present_and_bounded(self):
+        from services.narrative.summary_builder import build_summary
+        r = build_summary([self._a("high")], [])
+        assert 0 <= r.risk_score <= 100
+        assert r.risk_score > 0
+
+    def test_risk_factors_explain_the_grade(self):
+        from services.narrative.summary_builder import build_summary
+        r = build_summary([self._a("high")], [])
+        assert len(r.risk_factors) >= 1
+        assert any("high-severity" in f["factor"] for f in r.risk_factors)
+        assert all("points" in f for f in r.risk_factors)
+
+    def test_more_detections_score_higher(self):
+        from services.narrative.summary_builder import build_summary
+        one = build_summary([self._a("high")], [])
+        many = build_summary([self._a("high"), self._a("high", src="1.2.3.5"),
+                              self._a("medium", src="1.2.3.6")], [])
+        assert many.risk_score > one.risk_score
+
+    def test_clean_has_zero_score(self):
+        from services.narrative.summary_builder import build_summary
+        r = build_summary([], [])
+        assert r.risk_score == 0
+        assert r.risk_factors == []
+
+
+class TestHealthAwareDiagnosis:
+    """공격이 없어도 네트워크 장애를 진단/등급에 반영하는지 검증."""
+
+    def _health(self, total, refused=0, no_response=0, critical=0, warning=0):
+        fs = {}
+        if refused:
+            fs["connection_refused"] = refused
+        if no_response:
+            fs["no_response"] = no_response
+        return {
+            "total_sessions": total,
+            "healthy": total - critical - warning,
+            "warning": warning,
+            "critical": critical,
+            "overall_score": 40,
+            "failure_summary": fs,
+            "top_issues": [],
+        }
+
+    def test_no_attack_but_failures_not_clean(self):
+        from services.narrative.summary_builder import build_summary
+        h = self._health(20, refused=15, critical=15)
+        r = build_summary([], [], health=h)
+        assert r.risk_level in ("MEDIUM", "HIGH")
+        assert r.risk_level != "CLEAN"
+        assert len(r.diagnosis) >= 1
+        assert "refused" in " ".join(r.diagnosis)
+
+    def test_no_attack_but_failures_headline_mentions_issues(self):
+        from services.narrative.summary_builder import build_summary
+        h = self._health(20, no_response=18, critical=18)
+        r = build_summary([], [], health=h)
+        assert "issue" in r.headline.lower() or "network" in r.headline.lower()
+        assert len(r.recommendations) >= 1
+
+    def test_tiny_capture_does_not_elevate(self):
+        """세션 8개 미만이면 health로 등급 상향 금지 (합성 캡처 회귀 방지)."""
+        from services.narrative.summary_builder import build_summary
+        h = self._health(3, no_response=3, critical=3)
+        r = build_summary([], [], health=h)
+        assert r.risk_level == "CLEAN"
+
+    def test_healthy_capture_stays_clean(self):
+        from services.narrative.summary_builder import build_summary
+        h = self._health(50, critical=0, warning=0)
+        r = build_summary([], [], health=h)
+        assert r.risk_level == "CLEAN"
+
+    def test_health_elevates_attack_grade(self):
+        """medium 공격 + 심각한 장애 → 등급이 HIGH로 상향될 수 있어야."""
+        from services.narrative.summary_builder import build_summary
+        h = self._health(30, refused=25, critical=25)
+        attacks = [{"attack_type": "CommFailure", "severity": "medium",
+                    "mitre_id": "T1499", "description": "", "src_ip": ""}]
+        r = build_summary(attacks, [], health=h)
+        assert r.risk_level == "HIGH"
+
+    def test_packetless_capture_failure_counts_ignored(self):
+        """텍스트 로그(패킷맵 없음)의 RST 기반 refused 집계는 등급에 반영 금지."""
+        from services.narrative.summary_builder import build_summary
+        h = self._health(20, refused=12)  # critical=0, warning=0
+        h["packetless_sessions"] = 20     # 전 세션 패킷 없음 (FortiGate v3 등)
+        r = build_summary([], [], health=h)
+        assert r.risk_level == "CLEAN"
+
+    def test_detector_error_not_counted_as_attack(self):
+        """탐지기 크래시(ERROR 의사공격)는 위험 점수/등급에서 제외."""
+        from services.narrative.summary_builder import build_summary
+        attacks = [{"attack_type": "ERROR", "severity": "unknown",
+                    "mitre_id": "", "description": "XDetector failed: boom",
+                    "detector_error": True}]
+        r = build_summary(attacks, [])
+        assert r.risk_level == "CLEAN"
+        assert r.risk_score == 0
+        assert "ERROR" not in r.headline
+
+    def test_tiny_failing_capture_headline_not_contradictory(self):
+        """소형 장애 캡처: 등급은 CLEAN 유지하되 'Normal traffic' 헤드라인 금지."""
+        from services.narrative.summary_builder import build_summary
+        h = self._health(3, refused=3, critical=3)
+        r = build_summary([], [], health=h)
+        assert r.risk_level == "CLEAN"          # 표본 부족 — 등급 상향 안 함
+        assert "Normal traffic" not in r.headline  # 그러나 '정상'이라 말하지 않음
+        assert len(r.diagnosis) >= 1
+
+
 class TestNarrativeFormatting:
     def test_narrative_contains_newlines_when_detail_present(self):
         """불릿 포인트가 별도 줄에 있어야 함 (B4 fix 검증)."""
@@ -422,6 +542,11 @@ class TestSummaryEndpoint:
         assert isinstance(body["recommendations"], list)
         assert isinstance(body["attack_timeline"], list)
         assert isinstance(body["attack_explanations"], dict)
+        # new evidence-based fields
+        for key in ("risk_score", "risk_factors", "diagnosis", "key_findings", "health_overview"):
+            assert key in body, f"응답에 '{key}' 키 누락"
+        assert isinstance(body["risk_score"], int)
+        assert 0 <= body["risk_score"] <= 100
 
     def test_summary_before_analyze_returns_clean(self, api_client):
         """analyze 미실행 시 summary는 CLEAN을 반환해야 함."""

@@ -74,8 +74,10 @@ async def get_panels(
     ]
 
     # panel9_conversations: ConvEntry[] — top pairs by bytes with packets + duration
+    # + NOC 트리아지용 오류 지표(rst/no-reply 세션 수) — 오류율 정렬을 지원한다
     pair_data: dict[tuple[str, str], dict] = defaultdict(
-        lambda: {"bytes": 0, "packets": 0, "start": float("inf"), "end": float("-inf")}
+        lambda: {"bytes": 0, "packets": 0, "start": float("inf"), "end": float("-inf"),
+                 "sessions": 0, "rst": 0, "no_reply": 0}
     )
     for s in sessions:
         key = (s.src_ip, s.dst_ip)
@@ -83,6 +85,12 @@ async def get_panels(
         pair_data[key]["packets"] += s.packet_count
         pair_data[key]["start"] = min(pair_data[key]["start"], s.start_ts)
         pair_data[key]["end"] = max(pair_data[key]["end"], s.end_ts)
+        pair_data[key]["sessions"] += 1
+        if s.rst:
+            pair_data[key]["rst"] += 1
+        # 요청은 보냈는데 응답 0바이트 — TCP에서만 의미(단방향 UDP는 정상)
+        if (s.protocol or "").upper() == "TCP" and s.bytes_sent > 0 and s.bytes_recv == 0:
+            pair_data[key]["no_reply"] += 1
     panel9_conversations = [
         {
             "src": k[0],
@@ -90,6 +98,10 @@ async def get_panels(
             "packets": v["packets"],
             "bytes": v["bytes"],
             "duration_s": max(0.0, v["end"] - v["start"]) if v["start"] != float("inf") else 0.0,
+            "sessions": v["sessions"],
+            "rst": v["rst"],
+            "no_reply": v["no_reply"],
+            "issue_rate": round((v["rst"] + v["no_reply"]) / v["sessions"], 4) if v["sessions"] else 0.0,
         }
         for k, v in sorted(pair_data.items(), key=lambda x: -x[1]["bytes"])[:20]
     ]
