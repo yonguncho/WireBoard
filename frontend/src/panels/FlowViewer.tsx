@@ -3,6 +3,28 @@ import type { ReactNode } from 'react'
 import { getFlow, getStream } from '../api'
 import type { FlowData, FlowPacket, StreamData, TlsInfo } from '../api'
 
+// ── TCP Expert Info (backend tags) ─────────────────────────────────────────────
+const EXPERT_SHORT: Record<string, string> = {
+  retransmission: 'RETX', out_of_order: 'OOO', lost_segment: 'LOST',
+  duplicate_ack: 'DUP-ACK', zero_window: 'ZWIN', window_full: 'WUPD',
+  keep_alive: 'KA', reset: 'RST',
+}
+const EXPERT_LABEL: Record<string, string> = {
+  retransmission: 'Retransmission (previously-seen sequence)',
+  out_of_order: 'Out-of-order segment',
+  lost_segment: 'Previous segment not captured (sequence gap)',
+  duplicate_ack: 'Duplicate ACK',
+  zero_window: 'Zero window — receiver buffer full',
+  window_full: 'Window update after zero window',
+  keep_alive: 'Keep-alive probe',
+  reset: 'Connection reset (RST)',
+}
+const EXPERT_SEV: Record<string, string> = {
+  zero_window: 'warn', out_of_order: 'warn', lost_segment: 'warn', reset: 'warn',
+  retransmission: 'note', duplicate_ack: 'note', window_full: 'note', keep_alive: 'note',
+}
+function expertSev(tag: string): string { return EXPERT_SEV[tag] ?? 'note' }
+
 // ── HEX utils ─────────────────────────────────────────────────────────────────
 
 function hexToBytes(hex: string): number[] {
@@ -161,11 +183,16 @@ function PacketRow({ pkt, idx, base }: { pkt: FlowPacket; idx: number; base: str
         <td className="mono">{pkt.proto === 'TCP' && pkt.ack != null ? pkt.ack.toLocaleString() : '—'}</td>
         <td className="mono">{pkt.length}</td>
         <td className="mono">{pkt.payload_len > 0 ? pkt.payload_len : '—'}</td>
+        <td className="pkt-expert-cell">
+          {(pkt.expert ?? []).map(t => (
+            <span key={t} className={`pkt-expert-tag exp-${expertSev(t)}`} title={EXPERT_LABEL[t] ?? t}>{EXPERT_SHORT[t] ?? t}</span>
+          ))}
+        </td>
         <td className="pkt-info-cell">{info}{hasHex && <span className="hex-expand-hint">{expanded ? ' ▲' : ' ▼'}</span>}</td>
       </tr>
       {expanded && pkt.payload_hex && (
         <tr className="pkt-hex-row">
-          <td colSpan={9}>
+          <td colSpan={10}>
             <pre className="hex-dump-wireshark">{formatHexDump(pkt.payload_hex)}</pre>
           </td>
         </tr>
@@ -554,6 +581,16 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
             {analysis?.rttMs !== null && analysis?.rttMs !== undefined && (
               <span style={{ color: (analysis.rttMs > 150 ? '#f59e0b' : '#22c55e') }}>RTT {analysis.rttMs.toFixed(1)} ms</span>
             )}
+            {s.ip_badge && (
+              <span title={`Observed TTL ${s.ip_badge.ttl}, assuming initial ${s.ip_badge.assumed_initial}`}>
+                🛰 ~{s.ip_badge.estimated_hops} hops (TTL {s.ip_badge.ttl})
+              </span>
+            )}
+            {data.expert_summary && Object.keys(data.expert_summary).length > 0 && (
+              <span style={{ color: '#f59e0b' }} title="TCP Expert Info events in this flow">
+                ⚑ {Object.entries(data.expert_summary).map(([k, v]) => `${EXPERT_SHORT[k] ?? k}:${v}`).join(' ')}
+              </span>
+            )}
             <div className="flow-view-tabs">
               <button className={`flow-tab${view === 'ladder'   ? ' active' : ''}`} onClick={() => setView('ladder')}>Ladder</button>
               <button className={`flow-tab${view === 'packets'  ? ' active' : ''}`} onClick={() => setView('packets')}>Packets</button>
@@ -575,7 +612,7 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
             <div className="flow-table-wrap">
               <table className="flow-table">
                 <thead>
-                  <tr><th>#</th><th>Time</th><th>Direction</th><th>Flags</th><th>Seq</th><th>Ack</th><th>Size</th><th>Payload</th><th>Info</th></tr>
+                  <tr><th>#</th><th>Time</th><th>Direction</th><th>Flags</th><th>Seq</th><th>Ack</th><th>Size</th><th>Payload</th><th>Expert</th><th>Info</th></tr>
                 </thead>
                 <tbody>
                   {data.packets.map((p, i) => <PacketRow key={i} pkt={p} idx={i} base={`${s.dst_ip}:${s.dst_port}`} />)}

@@ -1,3 +1,24 @@
+## WireBoard v7.4.0 (2026-07-02)
+
+Wireshark-grade TCP analysis — Expert Info and layer-level packet detail.
+
+### New
+- **TCP Expert Info**: per-packet flags reproduced from a sequence/ack/window state
+  machine — retransmission, out-of-order, previous-segment-lost, duplicate ACK,
+  zero-window, window-update. Shown as colored tags in the packet table, a per-flow
+  event summary, and an aggregate Expert Info card (grouped by severity like Wireshark).
+- **Layer fields exposed**: parser now keeps TCP window, IP TTL, IP ID, and the
+  Don't-Fragment flag (previously discarded).
+- **IP hop badge**: estimates hop count from the observed TTL vs the assumed initial
+  TTL (64/128/255) — a quick "did the path change?" hint.
+- **Per-packet delta time** column for latency triage.
+
+### Notes
+- 820 tests passed. Window-scale option is not yet parsed, so zero-window is based on
+  the raw advertised window.
+
+---
+
 ## WireBoard v7.3.0 (2026-07-02)
 
 NOC triage release — trustworthy risk grading and "network vs application" verdicts.

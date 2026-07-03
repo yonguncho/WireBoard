@@ -13,6 +13,7 @@ from services.analytics.http_status_analyzer import HttpStatusAnalyzer
 from services.analytics.rst_analyzer import RstAnalyzer
 from services.analytics.tls_analyzer import TlsAnalyzer
 from services.analytics.dns_analyzer import DnsAnalyzer
+from services.analytics import tcp_expert
 from utils.constants import UUID_RE
 from utils.capture_auth import check_capture_token
 from utils.net_utils import is_private as _is_private
@@ -109,6 +110,9 @@ async def get_panels(
     # panel10_attacks: AttackEntry[] — populated by analyze endpoint
     panel10_attacks = capture.attacks
 
+    # TCP Expert Info — Wireshark식 흐름 이상 집계 (재전송·dup-ack·zero-window)
+    expert_info = tcp_expert.aggregate(getattr(capture, "packet_map", {}) or {})
+
     return {
         "panel1_ip": {"top_src": ip_result.top_src, "top_dst": ip_result.top_dst},
         "panel2_protocol": {
@@ -127,4 +131,5 @@ async def get_panels(
         "panel8_dns": dns_result.entries,
         "panel9_conversations": panel9_conversations,
         "panel10_attacks": panel10_attacks,
+        "expert_info": expert_info,
     }

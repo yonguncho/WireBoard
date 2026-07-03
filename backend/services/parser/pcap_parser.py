@@ -176,6 +176,7 @@ class PcapParser:
                     flags_s = _tcp_flags_str(t.flags)
                     payload = bytes(t.data)
                     sport, dport = t.sport, t.dport
+                    win     = int(t.win)
                 elif isinstance(ip.data, dpkt.udp.UDP):
                     t       = ip.data
                     proto   = "UDP"
@@ -185,6 +186,7 @@ class PcapParser:
                     flags_s = ""
                     payload = bytes(t.data)
                     sport, dport = t.sport, t.dport
+                    win     = 0
                 elif isinstance(ip.data, dpkt.icmp.ICMP):
                     t       = ip.data
                     proto   = "ICMP"
@@ -195,6 +197,7 @@ class PcapParser:
                     payload = bytes(t.data) if hasattr(t, "data") else b""
                     # sport/dport=0 고정: _update_flow 양방향 매칭이 Request↔Reply를 같은 flow로 묶음
                     sport, dport = 0, 0
+                    win     = 0
                     # ICMP 에러 메시지 이벤트 수집 (type 3/11: 임베디드 IP 헤더 파싱)
                     if t.type in (3, 11) and hasattr(t, "data"):
                         try:
@@ -235,6 +238,10 @@ class PcapParser:
                         seq=seq, ack=ack_num, flags=flags_s,
                         length=pkt_len, payload_len=len(payload),
                         payload_hex=_capture_payload_hex(payload),
+                        window=win,
+                        ttl=int(ip.ttl),
+                        ip_id=int(ip.id),
+                        df=bool(getattr(ip, "df", 0)),
                     ),
                 )
             except Exception as exc:
@@ -276,12 +283,14 @@ class PcapParser:
                     seq, ack_num = t.seq, t.ack
                     flags_s = _tcp_flags_str(int(t.flags))
                     payload = bytes(t.payload)
+                    win = int(t.window)
                 elif pkt.haslayer(scapy.UDP):
                     t = pkt[scapy.UDP]
                     proto, rst = "UDP", False
                     sport, dport = t.sport, t.dport
                     seq, ack_num, flags_s = 0, 0, ""
                     payload = bytes(t.payload)
+                    win = 0
                 elif pkt.haslayer(scapy.ICMP):
                     t = pkt[scapy.ICMP]
                     proto, rst = "ICMP", False
@@ -289,6 +298,7 @@ class PcapParser:
                     seq, ack_num = 0, 0
                     flags_s = f"{t.type}/{t.code}"
                     payload = bytes(t.payload) if hasattr(t, "payload") else b""
+                    win = 0
                     # ICMP 에러 이벤트 수집 (type 3/11: payload = 임베디드 IP 헤더)
                     if t.type in (3, 11):
                         try:
@@ -325,6 +335,10 @@ class PcapParser:
                         seq=seq, ack=ack_num, flags=flags_s,
                         length=pkt_len, payload_len=len(payload),
                         payload_hex=_capture_payload_hex(payload),
+                        window=win,
+                        ttl=int(ip.ttl),
+                        ip_id=int(ip.id),
+                        df=bool(int(ip.flags) & 0x2),  # scapy IP.flags bit1 = DF
                     ),
                 )
             except Exception as exc:

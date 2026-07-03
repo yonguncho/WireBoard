@@ -116,6 +116,7 @@ export interface PanelData {
   panel8_dns: DnsEntry[]
   panel9_conversations: ConvEntry[]
   panel10_attacks: AttackEntry[]
+  expert_info?: ExpertInfo
 }
 
 export interface IpEntry { ip: string; bytes: number; is_private?: boolean }
@@ -179,15 +180,19 @@ export interface DrilldownSession {
 export interface DrilldownResult { ip: string; session_count: number; sessions: DrilldownSession[]; truncated: boolean }
 
 export interface FlowPacket {
-  ts: number; rel_ts: number; direction: 'fwd' | 'rev'
+  ts: number; rel_ts: number; delta_ts?: number; direction: 'fwd' | 'rev'
   proto: string; seq: number; ack: number; flags: string
   length: number; payload_len: number; payload_hex: string
+  window?: number; ttl?: number
+  expert?: string[]; expert_top?: string
 }
+export interface IpBadge { ttl: number; assumed_initial: number; estimated_hops: number }
 export interface FlowSession {
   session_id: string; src_ip: string; dst_ip: string
   src_port: number; dst_port: number; protocol: string
   packet_count: number; bytes_sent: number; bytes_recv: number
   start_ts: number; end_ts: number; duration_s: number; rst: boolean
+  ip_badge?: IpBadge | null
 }
 export interface TlsInfo {
   sni: string | null
@@ -205,6 +210,20 @@ export interface FlowData {
   packet_count: number
   truncated: boolean
   tls?: TlsInfo | null
+  expert_summary?: Record<string, number>
+  expert_worst?: string
+}
+
+export interface ExpertInfoItem { tag: string; count: number; description: string }
+export interface ExpertInfo {
+  totals: Record<string, number>
+  by_severity: { error: ExpertInfoItem[]; warn: ExpertInfoItem[]; note: ExpertInfoItem[]; chat: ExpertInfoItem[] }
+  flows_with_issues: number
+  retransmission: number
+  duplicate_ack: number
+  zero_window: number
+  out_of_order: number
+  lost_segment: number
 }
 
 export interface StreamSegment {

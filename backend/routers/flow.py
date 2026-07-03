@@ -4,11 +4,28 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from utils.constants import UUID_RE
 from utils.capture_auth import check_capture_token
 from services.payload_extractor.tls_extractor import TLSExtractor, cipher_name
+from services.analytics import tcp_expert
 
 router = APIRouter()
 
 _PARSER_MAX = 200  # pcap_parser._MAX_PKTS_PER_FLOW 와 동기화
 _tls_extractor = TLSExtractor()
+
+
+def _guess_initial_ttl(ttl: int) -> int:
+    """관측 TTL로부터 발신 OS의 초기 TTL(64/128/255)을 역추정."""
+    for init in (64, 128, 255):
+        if ttl <= init:
+            return init
+    return 255
+
+
+def _ip_badge(ttl: int) -> dict | None:
+    """TTL 기반 홉 수 추정 배지 (Wireshark엔 없는 트리아지 힌트)."""
+    if not ttl:
+        return None
+    init = _guess_initial_ttl(ttl)
+    return {"ttl": ttl, "assumed_initial": init, "estimated_hops": init - ttl}
 
 
 def _reassemble(pkts, direction: str, cap: int = 8192) -> bytes:
@@ -89,11 +106,20 @@ async def get_flow(
     raw_pkts = raw_pkts_all[:_PARSER_MAX]
     base_ts  = raw_pkts[0].ts if raw_pkts else 0.0
 
+    # Wireshark식 TCP Expert Info — 패킷별 태그 + 세션 요약
+    expert = tcp_expert.analyze_flow(raw_pkts)
+    expert_events = expert["events"]
+
+    # 패킷 간 delta time — 지연 트리아지의 핵심 컬럼
+    prev_ts = None
     packets_out = []
-    for p in raw_pkts:
+    for idx, p in enumerate(raw_pkts):
+        delta = 0.0 if prev_ts is None else round(p.ts - prev_ts, 6)
+        prev_ts = p.ts
         packets_out.append({
             "ts":          round(p.ts, 6),
             "rel_ts":      round(p.ts - base_ts, 6),
+            "delta_ts":    delta,
             "direction":   p.direction,
             "proto":       p.proto,
             "seq":         p.seq,
@@ -102,7 +128,14 @@ async def get_flow(
             "length":      p.length,
             "payload_len": p.payload_len,
             "payload_hex": p.payload_hex,
+            "window":      getattr(p, "window", 0),
+            "ttl":         getattr(p, "ttl", 0),
+            "expert":      expert_events[idx]["tags"] if idx < len(expert_events) else [],
+            "expert_top":  expert_events[idx]["top"] if idx < len(expert_events) else "",
         })
+
+    # 세션 헤더용 IP 배지 — 목적지행(fwd) 첫 패킷 TTL로 홉 추정
+    fwd_ttl = next((p.ttl for p in raw_pkts if p.direction == "fwd" and getattr(p, "ttl", 0)), 0)
 
     return {
         "session": {
@@ -119,9 +152,12 @@ async def get_flow(
             "end_ts":     session.end_ts,
             "duration_s": round(session.end_ts - session.start_ts, 3),
             "rst":        session.rst,
+            "ip_badge":   _ip_badge(fwd_ttl),
         },
         "packets":       packets_out,
         "packet_count":  len(raw_pkts_all),
         "truncated":     truncated,
         "tls":           _extract_tls(session, raw_pkts_all),
+        "expert_summary": expert["summary"],
+        "expert_worst":   expert["worst"],
     }
