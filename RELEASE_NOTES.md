@@ -1,3 +1,20 @@
+## WireBoard v7.6.0 (2026-07-04)
+
+DNS triage — query↔response matching with latency and failure analysis.
+
+### New
+- **DNS query↔response matching** by transaction ID with per-query response time.
+  The DNS panel now leads with the signals NOC checks first: **no-response count,
+  SERVFAIL/NXDOMAIN/REFUSED errors, and response-time p50/p95/max** — plus a table
+  of unanswered queries and the slowest lookups (color-coded).
+- Works entirely from the existing captured DNS payloads (UDP/53); the DNS header
+  (txid/rcode) is always within the captured bytes.
+
+### Tests
+- 831 passed (incl. new DNS matcher tests).
+
+---
+
 ## WireBoard v7.5.0 (2026-07-04)
 
 Correctness release — IPv6 support and parser hardening.

@@ -485,7 +485,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v7.5.0</span>
+          <span className="header-ver">v7.6.0</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -748,7 +748,7 @@ export default function App() {
                   <Panel4Http data={panels.panel4_http} />
                 </PCard>
                 <PCard title="DNS Queries">
-                  <Panel8Dns data={panels.panel8_dns} />
+                  <Panel8Dns data={panels.panel8_dns} timing={panels.dns_timing} />
                 </PCard>
                 <PCard title="TLS Sessions">
                   <Panel7Tls data={panels.panel7_tls} />

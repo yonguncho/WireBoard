@@ -14,6 +14,7 @@ from services.analytics.rst_analyzer import RstAnalyzer
 from services.analytics.tls_analyzer import TlsAnalyzer
 from services.analytics.dns_analyzer import DnsAnalyzer
 from services.analytics import tcp_expert
+from services.analytics import dns_matcher
 from utils.constants import UUID_RE
 from utils.capture_auth import check_capture_token
 from utils.net_utils import is_private as _is_private
@@ -111,7 +112,11 @@ async def get_panels(
     panel10_attacks = capture.attacks
 
     # TCP Expert Info — Wireshark식 흐름 이상 집계 (재전송·dup-ack·zero-window)
-    expert_info = tcp_expert.aggregate(getattr(capture, "packet_map", {}) or {})
+    _pkt_map = getattr(capture, "packet_map", {}) or {}
+    expert_info = tcp_expert.aggregate(_pkt_map)
+
+    # DNS 쿼리↔응답 매칭 — 응답시간(p95)·무응답·rcode 분포
+    dns_timing = dns_matcher.match(sessions, _pkt_map)
 
     return {
         "panel1_ip": {"top_src": ip_result.top_src, "top_dst": ip_result.top_dst},
@@ -132,4 +137,5 @@ async def get_panels(
         "panel9_conversations": panel9_conversations,
         "panel10_attacks": panel10_attacks,
         "expert_info": expert_info,
+        "dns_timing": dns_timing,
     }

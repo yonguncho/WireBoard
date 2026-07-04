@@ -117,6 +117,7 @@ export interface PanelData {
   panel9_conversations: ConvEntry[]
   panel10_attacks: AttackEntry[]
   expert_info?: ExpertInfo
+  dns_timing?: DnsTiming
 }
 
 export interface IpEntry { ip: string; bytes: number; is_private?: boolean }
@@ -126,6 +127,17 @@ export interface ErrorEntry { status_code: number; count: number; path?: string 
 export interface IpRankEntry { ip: string; bytes: number; is_internal: boolean }
 export interface TlsEntry { sni: string; version: string; dst_ip: string }
 export interface DnsEntry { domain: string; type: string; response?: string; nxdomain: boolean }
+
+export interface DnsPair {
+  name: string; type: string; rcode: string | null
+  response_time_ms: number | null; answered: boolean; answers: string[]
+}
+export interface DnsTiming {
+  total: number; answered: number; unanswered: number; errors: number
+  rcode_dist: Record<string, number>
+  avg_ms: number; p50_ms: number; p95_ms: number; max_ms: number
+  slowest: DnsPair[]; unanswered_queries: DnsPair[]
+}
 export interface ConvEntry {
   src: string; dst: string; packets: number; bytes: number; duration_s: number
   sessions?: number; rst?: number; no_reply?: number; issue_rate?: number
