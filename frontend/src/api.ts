@@ -122,7 +122,7 @@ export interface PanelData {
 
 export interface IpEntry { ip: string; bytes: number; is_private?: boolean }
 export interface PortEntry { port: number; count: number }
-export interface BucketEntry { ts: number; bytes: number }
+export interface BucketEntry { ts: number; bytes: number; count?: number; rst?: number; no_reply?: number; errors?: number }
 export interface ErrorEntry { status_code: number; count: number; path?: string }
 export interface IpRankEntry { ip: string; bytes: number; is_internal: boolean }
 export interface TlsEntry { sni: string; version: string; dst_ip: string }
@@ -206,6 +206,7 @@ export interface FlowSession {
   start_ts: number; end_ts: number; duration_s: number; rst: boolean
   ip_badge?: IpBadge | null
 }
+export interface TlsAlert { level: string; description: string; code: number; from: string }
 export interface TlsInfo {
   sni: string | null
   alpn: string | null
@@ -215,6 +216,9 @@ export interface TlsInfo {
   chosen_cipher: string | null
   offered_ciphers: string[]
   offered_cipher_count: number
+  handshake_stages?: string[]
+  alerts?: TlsAlert[]
+  handshake_complete?: boolean
 }
 export interface FlowData {
   session: FlowSession

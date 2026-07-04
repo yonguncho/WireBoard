@@ -3,7 +3,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 
 from utils.constants import UUID_RE
 from utils.capture_auth import check_capture_token
-from services.payload_extractor.tls_extractor import TLSExtractor, cipher_name
+from services.payload_extractor.tls_extractor import TLSExtractor, cipher_name, scan_tls_records
 from services.analytics import tcp_expert
 
 router = APIRouter()
@@ -57,8 +57,19 @@ def _extract_tls(session, pkts) -> dict | None:
     ch = _tls_extractor.extract(client_bytes)
     sh_cipher, sh_version = _tls_extractor.extract_server_hello(server_bytes)
 
-    if not (ch.sni or ch.cipher_suites or sh_cipher):
+    # handshake 단계 + Alert 스캔 (양방향) — "TLS에서 끊김" 장애 진단
+    c_scan = scan_tls_records(client_bytes)
+    s_scan = scan_tls_records(server_bytes)
+    stages = c_scan["handshake"] + [h for h in s_scan["handshake"] if h not in c_scan["handshake"]]
+    alerts = ([{**a, "from": "client"} for a in c_scan["alerts"]]
+              + [{**a, "from": "server"} for a in s_scan["alerts"]])
+
+    if not (ch.sni or ch.cipher_suites or sh_cipher or alerts):
         return None
+
+    # 핸드셰이크 완료 여부: Finished 또는 ServerHelloDone 관측
+    completed = "Finished" in stages or ("ServerHello" in stages and sh_cipher is not None)
+    fatal = any(a["level"] == "fatal" for a in alerts)
 
     return {
         "sni": ch.sni,
@@ -69,6 +80,9 @@ def _extract_tls(session, pkts) -> dict | None:
         "chosen_cipher": cipher_name(sh_cipher) if sh_cipher is not None else None,
         "offered_ciphers": [cipher_name(c) for c in ch.cipher_suites[:16]],
         "offered_cipher_count": len(ch.cipher_suites),
+        "handshake_stages": stages,
+        "alerts": alerts,
+        "handshake_complete": bool(completed and not fatal),
     }
 
 

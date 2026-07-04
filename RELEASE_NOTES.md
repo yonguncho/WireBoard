@@ -1,3 +1,21 @@
+## WireBoard v7.7.0 (2026-07-04)
+
+TLS failure diagnosis + time-based error overlay.
+
+### New
+- **TLS Alert decode + handshake stages**: the flow's TLS tab now shows the
+  handshake result (Completed / FAILED on a fatal alert / Incomplete), the stages
+  seen (ClientHello → ServerHello → …), and any Alert messages decoded by name
+  (handshake_failure, certificate_expired, unknown_ca, protocol_version, …) — the
+  classic "TCP connects but TLS drops" pattern is now visible.
+- **Timeline error overlay**: the traffic timeline overlays a red per-bucket error
+  series (RST + no-reply) on a second axis, answering "when did errors spike?".
+
+### Tests
+- 838 passed.
+
+---
+
 ## WireBoard v7.6.0 (2026-07-04)
 
 DNS triage — query↔response matching with latency and failure analysis.

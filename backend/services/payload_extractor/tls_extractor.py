@@ -48,6 +48,71 @@ def cipher_name(code: int) -> str:
     return _CIPHER_NAMES.get(code, f"0x{code:04x}")
 
 
+# TLS record content types
+_TLS_CT_ALERT = 0x15
+_TLS_CT_HANDSHAKE = 0x16
+_TLS_CT_APPDATA = 0x17
+_TLS_CT_CCS = 0x14
+_TLS_CONTENT_TYPES = {0x14, 0x15, 0x16, 0x17}
+
+# handshake message types (record 0x16 첫 바이트)
+_HS_NAMES = {1: "ClientHello", 2: "ServerHello", 11: "Certificate",
+             12: "ServerKeyExchange", 13: "CertificateRequest",
+             14: "ServerHelloDone", 16: "ClientKeyExchange", 20: "Finished"}
+
+# alert description 코드 → 이름 (RFC 5246/8446)
+_ALERT_DESC = {
+    0: "close_notify", 10: "unexpected_message", 20: "bad_record_mac",
+    21: "decryption_failed", 22: "record_overflow", 30: "decompression_failure",
+    40: "handshake_failure", 41: "no_certificate", 42: "bad_certificate",
+    43: "unsupported_certificate", 44: "certificate_revoked", 45: "certificate_expired",
+    46: "certificate_unknown", 47: "illegal_parameter", 48: "unknown_ca",
+    49: "access_denied", 50: "decode_error", 51: "decrypt_error",
+    70: "protocol_version", 71: "insufficient_security", 80: "internal_error",
+    86: "inappropriate_fallback", 90: "user_canceled", 100: "no_renegotiation",
+    110: "unsupported_extension", 112: "unrecognized_name",
+    113: "bad_certificate_status_response", 115: "unknown_psk_identity",
+    116: "certificate_required", 120: "no_application_protocol",
+}
+_ALERT_LEVEL = {1: "warning", 2: "fatal"}
+
+
+def scan_tls_records(data: bytes) -> dict:
+    """재조립 바이트에서 TLS 레코드를 훑어 handshake 단계와 alert를 수집한다.
+
+    Returns {"handshake": [메시지명...], "alerts": [{level, description, code}...]}
+    caplen(128~1024B) 내 레코드만 보이지만 초기 핸드셰이크/Alert는 대개 앞쪽에 있다.
+    """
+    handshake: list[str] = []
+    alerts: list[dict] = []
+    if len(data) < 5 or data[0] not in _TLS_CONTENT_TYPES:
+        return {"handshake": handshake, "alerts": alerts}
+    offset = 0
+    guard = 0
+    while offset + 5 <= len(data) and guard < 64:
+        guard += 1
+        ct = data[offset]
+        ver_hi = data[offset + 1]
+        if ct not in _TLS_CONTENT_TYPES or ver_hi != 0x03:
+            break
+        rec_len = struct.unpack_from("!H", data, offset + 3)[0]
+        body = data[offset + 5: offset + 5 + rec_len]
+        if ct == _TLS_CT_HANDSHAKE and body:
+            name = _HS_NAMES.get(body[0])
+            if name and name not in handshake:
+                handshake.append(name)
+        elif ct == _TLS_CT_ALERT and len(body) >= 2:
+            alerts.append({
+                "level": _ALERT_LEVEL.get(body[0], str(body[0])),
+                "description": _ALERT_DESC.get(body[1], f"alert_{body[1]}"),
+                "code": body[1],
+            })
+        if rec_len == 0:
+            break
+        offset += 5 + rec_len
+    return {"handshake": handshake, "alerts": alerts}
+
+
 @dataclass
 class TLSResult:
     sni: Optional[str] = None

@@ -495,8 +495,33 @@ function TlsRow({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function TlsView({ tls }: { tls: TlsInfo }) {
+  const alerts = tls.alerts ?? []
+  const stages = tls.handshake_stages ?? []
   return (
     <div className="tls-view">
+      {/* Handshake outcome + Alerts — "TLS에서 끊김" 진단 */}
+      {(alerts.length > 0 || tls.handshake_complete !== undefined) && (
+        <div className="tls-card">
+          <div className="tls-card-title">Handshake Result</div>
+          <TlsRow label="Status" value={
+            alerts.some(a => a.level === 'fatal')
+              ? <span className="badge badge-err">FAILED (fatal alert)</span>
+              : tls.handshake_complete
+                ? <span className="badge badge-ok">Completed</span>
+                : <span className="badge" style={{ background: 'rgba(245,158,11,.2)', color: '#f59e0b' }}>Incomplete / not captured</span>
+          } />
+          {stages.length > 0 && (
+            <TlsRow label="Stages seen" value={<span className="mono" style={{ fontSize: 11 }}>{stages.join(' → ')}</span>} />
+          )}
+          {alerts.map((a, i) => (
+            <TlsRow key={i} label={`Alert (${a.from})`} value={
+              <span className={a.level === 'fatal' ? 'badge badge-err' : 'badge'} style={a.level !== 'fatal' ? { background: 'rgba(245,158,11,.2)', color: '#f59e0b' } : undefined}>
+                {a.level}: {a.description}
+              </span>
+            } />
+          ))}
+        </div>
+      )}
       <div className="tls-card">
         <div className="tls-card-title">TLS Handshake</div>
         <TlsRow label="Server Name (SNI)" value={tls.sni && <span className="mono tls-sni">{tls.sni}</span>} />

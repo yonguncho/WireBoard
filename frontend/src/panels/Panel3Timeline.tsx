@@ -26,10 +26,13 @@ export function Panel3Timeline({ data, uploadId }: Props) {
 
   const xs: string[] = []
   const ys: number[] = []
+  const errs: number[] = []
   for (const b of buckets) {
     xs.push(new Date(b.ts * 1000).toISOString())
     ys.push(b.bytes)
+    errs.push(b.errors ?? 0)
   }
+  const hasErrors = errs.some(e => e > 0)
 
   const shapes = markers.flatMap((m) => [
     {
@@ -87,17 +90,31 @@ export function Panel3Timeline({ data, uploadId }: Props) {
   return (
     <div style={{ position: 'relative' }}>
       <PlotlyChart
-        data={[{
-          type: 'scatter' as const,
-          mode: 'lines' as const,
-          x: xs, y: ys,
-          fill: 'tozeroy' as const,
-          line: { color: '#4299e1', width: 1.5 },
-          fillcolor: 'rgba(66,153,225,0.15)',
-        }]}
+        data={[
+          {
+            type: 'scatter' as const,
+            mode: 'lines' as const,
+            name: 'Traffic',
+            x: xs, y: ys,
+            fill: 'tozeroy' as const,
+            line: { color: '#4299e1', width: 1.5 },
+            fillcolor: 'rgba(66,153,225,0.15)',
+          },
+          // 오류 오버레이 — "언제부터 RST/무응답이 급증했나" (2차 y축)
+          ...(hasErrors ? [{
+            type: 'bar' as const,
+            name: 'Errors (RST + no-reply)',
+            x: xs, y: errs,
+            yaxis: 'y2' as const,
+            marker: { color: 'rgba(252,67,67,0.55)' },
+          }] : []),
+        ]}
         layout={{
           xaxis: { title: { text: 'Time' }, type: 'date' },
           yaxis: { title: { text: 'bytes' } },
+          ...(hasErrors ? { yaxis2: { title: { text: 'errors' }, overlaying: 'y' as const, side: 'right' as const, showgrid: false, rangemode: 'tozero' as const } } : {}),
+          showlegend: hasErrors,
+          legend: { orientation: 'h' as const, y: 1.12, font: { size: 10 } },
           shapes,
           annotations: chartAnnotations,
           dragmode: 'zoom' as const,
