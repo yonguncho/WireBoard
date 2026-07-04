@@ -149,6 +149,11 @@ class PcapParser:
         parse_warnings: list[str] | None,
     ) -> tuple[list[SessionModel], dict[str, list]]:
         import dpkt  # noqa: PLC0415
+        import dpkt.ip6  # noqa: PLC0415  — IPv6 지원
+        try:
+            import dpkt.icmp6  # noqa: PLC0415
+        except Exception:
+            dpkt.icmp6 = None  # type: ignore
 
         f = io.BytesIO(data)
         try:
@@ -163,12 +168,28 @@ class PcapParser:
         for ts, buf in pcap:
             try:
                 eth = dpkt.ethernet.Ethernet(buf)
-                if not isinstance(eth.data, dpkt.ip.IP):
+                l3 = eth.data
+                # L3: IPv4 또는 IPv6 (둘 다 지원 — 듀얼스택 캡처 손실 방지)
+                if isinstance(l3, dpkt.ip.IP):
+                    ip = l3
+                    ip_ttl = int(ip.ttl)
+                    ip_id  = int(ip.id)
+                    ip_df  = bool(getattr(ip, "df", 0))
+                    src_ip = socket.inet_ntoa(ip.src)
+                    dst_ip = socket.inet_ntoa(ip.dst)
+                elif isinstance(l3, dpkt.ip6.IP6):
+                    ip = l3
+                    ip_ttl = int(getattr(ip, "hlim", 0))  # IPv6 hop limit
+                    ip_id  = 0                              # IPv6에는 IP ID 없음
+                    ip_df  = True                           # IPv6은 라우터 단편화 없음(항상 DF)
+                    src_ip = socket.inet_ntop(socket.AF_INET6, ip.src)
+                    dst_ip = socket.inet_ntop(socket.AF_INET6, ip.dst)
+                else:
                     continue
-                ip = eth.data
 
-                if isinstance(ip.data, dpkt.tcp.TCP):
-                    t       = ip.data
+                l4 = ip.data
+                if isinstance(l4, dpkt.tcp.TCP):
+                    t       = l4
                     proto   = "TCP"
                     rst     = bool(t.flags & dpkt.tcp.TH_RST)
                     seq     = t.seq
@@ -177,8 +198,8 @@ class PcapParser:
                     payload = bytes(t.data)
                     sport, dport = t.sport, t.dport
                     win     = int(t.win)
-                elif isinstance(ip.data, dpkt.udp.UDP):
-                    t       = ip.data
+                elif isinstance(l4, dpkt.udp.UDP):
+                    t       = l4
                     proto   = "UDP"
                     rst     = False
                     seq     = 0
@@ -187,8 +208,8 @@ class PcapParser:
                     payload = bytes(t.data)
                     sport, dport = t.sport, t.dport
                     win     = 0
-                elif isinstance(ip.data, dpkt.icmp.ICMP):
-                    t       = ip.data
+                elif isinstance(l4, dpkt.icmp.ICMP):
+                    t       = l4
                     proto   = "ICMP"
                     rst     = False
                     seq     = 0
@@ -207,8 +228,8 @@ class PcapParser:
                             if orig_dst:
                                 self._icmp_events.append({
                                     "ts": float(ts),
-                                    "src_ip": socket.inet_ntoa(ip.src),
-                                    "dst_ip": socket.inet_ntoa(ip.dst),
+                                    "src_ip": src_ip,
+                                    "dst_ip": dst_ip,
                                     "orig_dst": orig_dst,
                                     "orig_dst_port": orig_dst_port,
                                     "icmp_type": t.type,
@@ -217,11 +238,19 @@ class PcapParser:
                                 })
                         except Exception:
                             pass
+                elif dpkt.icmp6 is not None and isinstance(l4, dpkt.icmp6.ICMP6):
+                    t       = l4
+                    proto   = "ICMP6"
+                    rst     = False
+                    seq     = 0
+                    ack_num = 0
+                    flags_s = f"{t.type}/{t.code}"
+                    payload = bytes(t.data) if hasattr(t, "data") else b""
+                    sport, dport = 0, 0
+                    win     = 0
                 else:
                     continue
 
-                src_ip  = socket.inet_ntoa(ip.src)
-                dst_ip  = socket.inet_ntoa(ip.dst)
                 pkt_len = len(buf)
                 fts     = float(ts)
 
@@ -239,9 +268,9 @@ class PcapParser:
                         length=pkt_len, payload_len=len(payload),
                         payload_hex=_capture_payload_hex(payload),
                         window=win,
-                        ttl=int(ip.ttl),
-                        ip_id=int(ip.id),
-                        df=bool(getattr(ip, "df", 0)),
+                        ttl=ip_ttl,
+                        ip_id=ip_id,
+                        df=ip_df,
                     ),
                 )
             except Exception as exc:
@@ -273,9 +302,15 @@ class PcapParser:
 
         for pkt in packets:
             try:
-                if not pkt.haslayer(scapy.IP):
+                # L3: IPv4 또는 IPv6
+                if pkt.haslayer(scapy.IP):
+                    ip = pkt[scapy.IP]
+                    ip_ver = 4
+                elif pkt.haslayer(scapy.IPv6):
+                    ip = pkt[scapy.IPv6]
+                    ip_ver = 6
+                else:
                     continue
-                ip = pkt[scapy.IP]
                 if pkt.haslayer(scapy.TCP):
                     t = pkt[scapy.TCP]
                     proto, rst = "TCP", bool(t.flags & 0x04)
@@ -336,9 +371,9 @@ class PcapParser:
                         length=pkt_len, payload_len=len(payload),
                         payload_hex=_capture_payload_hex(payload),
                         window=win,
-                        ttl=int(ip.ttl),
-                        ip_id=int(ip.id),
-                        df=bool(int(ip.flags) & 0x2),  # scapy IP.flags bit1 = DF
+                        ttl=int(ip.hlim if ip_ver == 6 else ip.ttl),
+                        ip_id=int(0 if ip_ver == 6 else ip.id),
+                        df=bool(True if ip_ver == 6 else (int(ip.flags) & 0x2)),
                     ),
                 )
             except Exception as exc:
@@ -390,11 +425,13 @@ class PcapParser:
                     continue
                 eth_type = struct.unpack_from("!H", pkt, 12)[0]
                 l3_off   = 14
-                while eth_type in _VLAN_ETHERTYPES:
+                _vlan_depth = 0
+                while eth_type in _VLAN_ETHERTYPES and _vlan_depth < 4:  # QinQ 최대 4중 상한
                     if len(pkt) < l3_off + 4:
                         break
                     eth_type = struct.unpack_from("!H", pkt, l3_off + 2)[0]
                     l3_off  += 4
+                    _vlan_depth += 1
                 if eth_type != 0x0800 or len(pkt) < l3_off + 20:
                     continue
                 ip_proto = pkt[l3_off + 9]
@@ -408,6 +445,12 @@ class PcapParser:
                 t_off    = l3_off + ihl
                 pkt_len  = len(pkt)
 
+                # 공통 IP 헤더 필드 (IPv4)
+                ip_ttl = pkt[l3_off + 8]
+                ip_id  = struct.unpack_from("!H", pkt, l3_off + 4)[0]
+                ip_df  = bool(pkt[l3_off + 6] & 0x40)
+                win    = 0
+
                 if ip_proto == 6:  # TCP
                     sport  = struct.unpack_from("!H", pkt, t_off)[0]
                     dport  = struct.unpack_from("!H", pkt, t_off + 2)[0]
@@ -419,6 +462,7 @@ class PcapParser:
                         flags_byte  = pkt[t_off + 13]
                         flags_s     = _tcp_flags_str(flags_byte)
                         tcp_hdr_len = ((pkt[t_off + 12] >> 4) & 0xF) * 4
+                        win         = struct.unpack_from("!H", pkt, t_off + 14)[0]
                         p_start     = t_off + tcp_hdr_len
                         payload     = pkt[p_start:] if len(pkt) > p_start else b""
                     else:
@@ -471,6 +515,7 @@ class PcapParser:
                         seq=seq, ack=ack_num, flags=flags_s,
                         length=pkt_len, payload_len=len(payload),
                         payload_hex=_capture_payload_hex(payload),
+                        window=win, ttl=ip_ttl, ip_id=ip_id, df=ip_df,
                     ),
                 )
             except (struct.error, IndexError) as exc:

@@ -1,13 +1,23 @@
 """FortigateParser — FortiGate sniffer verbose 3/6 파서."""
 import ipaddress
 import logging
+import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from models.session import SessionModel
 
 logger = logging.getLogger(__name__)
+
+# FortiGate sniffer 타임스탬프는 장비 로컬 타임존으로 찍힌다(로그에 TZ 정보 없음).
+# 기본은 UTC 가정이지만, WIREBOARD_LOG_TZ_OFFSET(시간 단위, 예: 9 또는 -5)로
+# 장비 타임존을 지정하면 UTC로 정규화한다. 파싱 실패는 무시(UTC 유지).
+try:
+    _LOG_TZ_OFFSET_H = float(os.environ.get("WIREBOARD_LOG_TZ_OFFSET", "0") or "0")
+except ValueError:
+    _LOG_TZ_OFFSET_H = 0.0
+_LOG_TZ = timezone(timedelta(hours=_LOG_TZ_OFFSET_H))
 
 _LINE_RE = re.compile(
     r"^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)"              # timestamp
@@ -78,7 +88,8 @@ class FortigateParser:
                     continue
 
                 try:
-                    dt = datetime.strptime(ts_str.strip(), "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=timezone.utc)
+                    # 로그 시각을 장비 타임존으로 해석 후 UTC epoch로 변환
+                    dt = datetime.strptime(ts_str.strip(), "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=_LOG_TZ)
                     start_ts = dt.timestamp()
                 except ValueError:
                     start_ts = now_ts
