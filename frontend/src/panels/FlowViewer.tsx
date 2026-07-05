@@ -611,6 +611,16 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
                 🛰 ~{s.ip_badge.estimated_hops} hops (TTL {s.ip_badge.ttl})
               </span>
             )}
+            {s.wscale && (s.wscale.fwd > 0 || s.wscale.rev > 0) && (
+              <span title="TCP window scale negotiated in SYN; true window = raw × factor">
+                ⇅ WScale ×{s.wscale.fwd_factor}/×{s.wscale.rev_factor}
+              </span>
+            )}
+            {s.l2 && (s.l2.src_vendor || s.l2.dst_vendor) && (
+              <span title={`Src MAC ${s.l2.src_mac} · Dst MAC ${s.l2.dst_mac}`}>
+                🖧 {s.l2.src_vendor ?? '?'} → {s.l2.dst_vendor ?? '?'}
+              </span>
+            )}
             {data.expert_summary && Object.keys(data.expert_summary).length > 0 && (
               <span style={{ color: '#f59e0b' }} title="TCP Expert Info events in this flow">
                 ⚑ {Object.entries(data.expert_summary).map(([k, v]) => `${EXPERT_SHORT[k] ?? k}:${v}`).join(' ')}

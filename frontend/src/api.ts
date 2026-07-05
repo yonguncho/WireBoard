@@ -195,16 +195,20 @@ export interface FlowPacket {
   ts: number; rel_ts: number; delta_ts?: number; direction: 'fwd' | 'rev'
   proto: string; seq: number; ack: number; flags: string
   length: number; payload_len: number; payload_hex: string
-  window?: number; ttl?: number
+  window?: number; window_scaled?: number; ttl?: number
   expert?: string[]; expert_top?: string
 }
 export interface IpBadge { ttl: number; assumed_initial: number; estimated_hops: number }
+export interface WScale { fwd: number; rev: number; fwd_factor: number; rev_factor: number }
+export interface L2Info { src_mac: string; dst_mac: string; src_vendor: string | null; dst_vendor: string | null }
 export interface FlowSession {
   session_id: string; src_ip: string; dst_ip: string
   src_port: number; dst_port: number; protocol: string
   packet_count: number; bytes_sent: number; bytes_recv: number
   start_ts: number; end_ts: number; duration_s: number; rst: boolean
   ip_badge?: IpBadge | null
+  wscale?: WScale
+  l2?: L2Info | null
 }
 export interface TlsAlert { level: string; description: string; code: number; from: string }
 export interface TlsInfo {

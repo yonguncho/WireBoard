@@ -1,3 +1,20 @@
+## WireBoard v7.8.0 (2026-07-04)
+
+Protocol-detail polish — window scale and L2 vendor identification.
+
+### New
+- **TCP window scale**: the SYN window-scale option is parsed per direction, so the
+  flow view shows the true receive window (raw × factor) instead of the raw 16-bit
+  value, and the negotiated scale (e.g. ×128/×64) appears in the flow header.
+- **MAC OUI vendor**: the flow header now identifies the L2 device vendor from the
+  MAC prefix (Cisco → Dell, VMware, Fortinet, Juniper, …) using a bundled offline
+  OUI table, plus locally-administered / multicast detection.
+
+### Tests
+- 848 passed.
+
+---
+
 ## WireBoard v7.7.0 (2026-07-04)
 
 TLS failure diagnosis + time-based error overlay.

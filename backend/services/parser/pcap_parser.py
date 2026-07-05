@@ -65,6 +65,13 @@ def _icmp_label(icmp_type: int, icmp_code: int) -> str:
     )
 
 
+def _fmt_mac(mac: bytes) -> str:
+    """이더넷 MAC 바이트 → 'aa:bb:cc:dd:ee:ff'. 유효하지 않으면 빈 문자열."""
+    if not mac or len(mac) != 6:
+        return ""
+    return ":".join(f"{b:02x}" for b in mac)
+
+
 def _parse_icmp_embedded(payload: bytes) -> tuple[str, int]:
     """ICMP 에러 페이로드(임베디드 IP 헤더)에서 (orig_dst_ip, orig_dst_port) 추출."""
     if len(payload) < 20:
@@ -168,6 +175,7 @@ class PcapParser:
         for ts, buf in pcap:
             try:
                 eth = dpkt.ethernet.Ethernet(buf)
+                eth_src_mac = _fmt_mac(eth.src)
                 l3 = eth.data
                 # L3: IPv4 또는 IPv6 (둘 다 지원 — 듀얼스택 캡처 손실 방지)
                 if isinstance(l3, dpkt.ip.IP):
@@ -188,6 +196,7 @@ class PcapParser:
                     continue
 
                 l4 = ip.data
+                syn_wscale = None
                 if isinstance(l4, dpkt.tcp.TCP):
                     t       = l4
                     proto   = "TCP"
@@ -198,6 +207,15 @@ class PcapParser:
                     payload = bytes(t.data)
                     sport, dport = t.sport, t.dport
                     win     = int(t.win)
+                    # SYN 옵션에서 window scale shift 추출 (실제 window 계산용)
+                    if (t.flags & dpkt.tcp.TH_SYN) and t.opts:
+                        try:
+                            for otype, odata in dpkt.tcp.parse_opts(t.opts):
+                                if otype == dpkt.tcp.TCP_OPT_WSCALE and odata:
+                                    syn_wscale = odata[0]
+                                    break
+                        except Exception:
+                            pass
                 elif isinstance(l4, dpkt.udp.UDP):
                     t       = l4
                     proto   = "UDP"
@@ -260,6 +278,12 @@ class PcapParser:
                 if flow_result is None:
                     continue
                 canonical, direction = flow_result
+                # window scale는 방향별 SYN에서만 협상됨 → flow에 기록
+                if syn_wscale is not None:
+                    flow_map[canonical][f"wscale_{direction}"] = syn_wscale
+                # 방향별 첫 관측 소스 MAC (L2 장비 식별용)
+                if eth_src_mac:
+                    flow_map[canonical].setdefault(f"mac_{direction}", eth_src_mac)
                 self._record_packet(
                     pkt_map, canonical,
                     PacketRecord(
@@ -591,6 +615,15 @@ class PcapParser:
 
         for (src_ip, dst_ip, src_port, dst_port, proto), v in flow_map.items():
             sid = str(uuid.uuid4())
+            meta: dict = {}
+            if "wscale_fwd" in v:
+                meta["wscale_fwd"] = v["wscale_fwd"]
+            if "wscale_rev" in v:
+                meta["wscale_rev"] = v["wscale_rev"]
+            if "mac_fwd" in v:
+                meta["mac_src"] = v["mac_fwd"]
+            if "mac_rev" in v:
+                meta["mac_dst"] = v["mac_rev"]
             sessions.append(SessionModel(
                 session_id=sid,
                 src_ip=src_ip,
@@ -606,6 +639,7 @@ class PcapParser:
                 payload_length=0,
                 confidence="normal",
                 rst=v["rst"],
+                meta=meta or None,
             ))
             key = (src_ip, dst_ip, src_port, dst_port, proto)
             session_pkt_map[sid] = pkt_map.get(key, [])

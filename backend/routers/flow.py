@@ -5,6 +5,7 @@ from utils.constants import UUID_RE
 from utils.capture_auth import check_capture_token
 from services.payload_extractor.tls_extractor import TLSExtractor, cipher_name, scan_tls_records
 from services.analytics import tcp_expert
+from services.analytics import oui
 
 router = APIRouter()
 
@@ -124,12 +125,29 @@ async def get_flow(
     expert = tcp_expert.analyze_flow(raw_pkts)
     expert_events = expert["events"]
 
+    # window scale shift (SYN 옵션에서 협상) — 실제 window = raw << shift
+    meta = session.meta or {}
+    wscale = {"fwd": int(meta.get("wscale_fwd", 0)), "rev": int(meta.get("wscale_rev", 0))}
+    mac_src, mac_dst = meta.get("mac_src", ""), meta.get("mac_dst", "")
+    l2 = None
+    if mac_src or mac_dst:
+        l2 = {
+            "src_mac": mac_src, "dst_mac": mac_dst,
+            "src_vendor": (oui.lookup(mac_src) or {}).get("vendor") if mac_src else None,
+            "dst_vendor": (oui.lookup(mac_dst) or {}).get("vendor") if mac_dst else None,
+        }
+
     # 패킷 간 delta time — 지연 트리아지의 핵심 컬럼
     prev_ts = None
     packets_out = []
     for idx, p in enumerate(raw_pkts):
         delta = 0.0 if prev_ts is None else round(p.ts - prev_ts, 6)
         prev_ts = p.ts
+        raw_win = getattr(p, "window", 0)
+        # SYN 패킷은 scale 적용 전(협상 자체) → raw 표시, 이후 패킷만 scale 적용
+        is_syn = "SYN" in (p.flags or "").upper()
+        shift = wscale.get(p.direction, 0)
+        win_scaled = raw_win if is_syn else (raw_win << shift if shift else raw_win)
         packets_out.append({
             "ts":          round(p.ts, 6),
             "rel_ts":      round(p.ts - base_ts, 6),
@@ -142,7 +160,8 @@ async def get_flow(
             "length":      p.length,
             "payload_len": p.payload_len,
             "payload_hex": p.payload_hex,
-            "window":      getattr(p, "window", 0),
+            "window":      raw_win,
+            "window_scaled": win_scaled,
             "ttl":         getattr(p, "ttl", 0),
             "expert":      expert_events[idx]["tags"] if idx < len(expert_events) else [],
             "expert_top":  expert_events[idx]["top"] if idx < len(expert_events) else "",
@@ -167,6 +186,9 @@ async def get_flow(
             "duration_s": round(session.end_ts - session.start_ts, 3),
             "rst":        session.rst,
             "ip_badge":   _ip_badge(fwd_ttl),
+            "wscale":     {"fwd": wscale["fwd"], "rev": wscale["rev"],
+                           "fwd_factor": 1 << wscale["fwd"], "rev_factor": 1 << wscale["rev"]},
+            "l2":         l2,
         },
         "packets":       packets_out,
         "packet_count":  len(raw_pkts_all),
