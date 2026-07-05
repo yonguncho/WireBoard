@@ -1,3 +1,27 @@
+## WireBoard v7.9.0 (2026-07-05)
+
+Live capture — record packets directly on the PC (optional).
+
+### New
+- **Live Capture (beta)**: pick a network interface (shown with its IP), optionally
+  enter a source IP / destination IP / port / host filter, and capture packets
+  straight into the analysis pipeline — no external tool needed. Capture is 100%
+  local (never leaves the PC), auto-stops at a packet or time limit, and the result
+  flows into the normal analysis views. The captured file is also downloadable.
+- Filters compile to a BPF (e.g. `src host … and dst host … and port …`);
+  inputs are validated as IPs/ports.
+
+### Requirements / notes
+- Live capture needs the **Npcap** driver (npcap.com) and the app must run as
+  **Administrator**. When either is missing, the UI explains it and offline pcap
+  analysis is unaffected — the single-EXE, no-install analysis story is unchanged.
+
+### Tests
+- 861 passed. (Live sniff path verified manually on a machine with Npcap; capture
+  endpoints, BPF builder, and graceful degradation are covered by tests.)
+
+---
+
 ## WireBoard v7.8.0 (2026-07-04)
 
 Protocol-detail polish — window scale and L2 vendor identification.

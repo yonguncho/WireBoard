@@ -1,6 +1,7 @@
 ﻿import { useState, useCallback, useEffect, useRef } from 'react'
 import { uploadPcap, analyzePcap, getPanels, getSummary, exportJson, exportPdf, exportIoc, downloadConvertedPcap } from './api'
-import type { PanelData, SummaryData } from './api'
+import type { PanelData, SummaryData, CaptureResult } from './api'
+import { LiveCapture } from './panels/LiveCapture'
 import { subscribeToast } from './toast'
 import { FlowViewer } from './panels/FlowViewer'
 import { PacketList } from './panels/PacketList'
@@ -309,6 +310,7 @@ export default function App() {
   const [loadStep, setLoadStep] = useState(0)
   const [recent, setRecent] = useState<RecentEntry[]>(loadRecent)
   const [globalDrag, setGlobalDrag] = useState(false)
+  const [showCapture, setShowCapture] = useState(false)
   const toastTimer = useRef<number | undefined>(undefined)
   const dragDepth = useRef(0)
 
@@ -377,6 +379,27 @@ export default function App() {
     } finally {
       setLoading(false)
       setLoadingMsg('')
+    }
+  }, [targetIp])
+
+  // 라이브 캡처 결과(upload_id)를 기존 분석 로딩 흐름으로 넘김
+  const handleCaptureResult = useCallback(async (res: CaptureResult) => {
+    setShowCapture(false)
+    setLoading(true); setLoadStep(1); setError(null)
+    setPanels(null); setMeta(null); setSummary(null)
+    setLoadingMsg(`Analyzing ${res.session_count.toLocaleString()} captured sessions...`)
+    try {
+      await analyzePcap(res.upload_id, targetIp.trim() || undefined)
+      setLoadStep(2); setLoadingMsg('Generating analysis summary...')
+      const [data, sum] = await Promise.all([getPanels(res.upload_id), getSummary(res.upload_id)])
+      const fname = `Live capture (${res.packet_count.toLocaleString()} pkts)`
+      setMeta({ uploadId: res.upload_id, filename: fname, sessionCount: res.session_count, sourceType: 'live', pcapAvailable: !!res.pcap_available })
+      setPanels(data); setSummary(sum); setLayer('overview')
+      setRecent(saveRecent({ filename: fname, sessionCount: res.session_count, riskLevel: sum.risk_level, attackCount: data.panel10_attacks.length, analyzedAt: Date.now() }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false); setLoadingMsg('')
     }
   }, [targetIp])
 
@@ -485,7 +508,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v7.8.0</span>
+          <span className="header-ver">v7.9.0</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -547,6 +570,9 @@ export default function App() {
       {/* Command palette */}
       {showPalette && <CommandPalette items={paletteItems} onClose={() => setShowPalette(false)} />}
 
+      {/* Live capture */}
+      {showCapture && <LiveCapture onCaptured={handleCaptureResult} onClose={() => setShowCapture(false)} />}
+
       {/* Upload Page */}
       {!meta && !loading && (
         <main className="upload-page">
@@ -568,6 +594,12 @@ export default function App() {
               <p className="drop-hint">.pcap / .pcapng &nbsp;·&nbsp; up to 50 MB &nbsp;|&nbsp; .har / .log / .txt &nbsp;·&nbsp; up to 200 MB</p>
             </label>
           </div>
+          <div className="upload-or">
+            <span>or capture live from this PC</span>
+          </div>
+          <button className="live-capture-btn" onClick={() => setShowCapture(true)}>
+            🎙 Live Capture <span className="lc-beta">beta</span>
+          </button>
           <div className="feature-cards">
             <div className="feature-card">
               <span className="feature-icon">🔒</span>

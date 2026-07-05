@@ -43,6 +43,7 @@ from routers.yara_scan import router as yara_router
 from routers.network_health import router as health_router
 from routers.stream import router as stream_router
 from routers.har import router as har_router
+from routers.capture import router as capture_router
 from store.session_store import SessionStore
 from services.analytics.geoip_analyzer import GeoIpAnalyzer
 from services.attack_detector.yara_detector import YaraDetector
@@ -180,6 +181,7 @@ app.include_router(yara_router)
 app.include_router(health_router)
 app.include_router(stream_router)
 app.include_router(har_router)
+app.include_router(capture_router)
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(_STATIC_DIR):

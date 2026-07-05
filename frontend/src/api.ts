@@ -55,6 +55,52 @@ export async function uploadPcap(file: File): Promise<{ upload_id: string; captu
   return data
 }
 
+// ── Live capture (optional — requires Npcap + admin) ───────────────────────────
+export interface CaptureIface { name: string; description: string; ip: string | null; mac: string | null; has_ip: boolean }
+export interface CaptureCapability { available: boolean; message: string; admin_note: string }
+export interface CaptureStatus {
+  capture_id: string; running: boolean; stopped: boolean
+  packet_count: number; elapsed: number; max_packets: number; max_seconds: number; bpf: string
+}
+export interface CaptureResult {
+  upload_id: string; capture_token: string; source_type: string
+  session_count: number; packet_count: number; parse_warnings: string[]; pcap_available: boolean
+}
+export interface CaptureStartBody {
+  iface: string; src?: string; dst?: string; port?: number; host?: string
+  max_packets?: number; max_seconds?: number
+}
+
+export async function getCaptureCapability(): Promise<CaptureCapability> {
+  const r = await fetch(`${BASE}/api/capture/capability`)
+  if (!r.ok) return handleError(r, 'Capability check failed')
+  return r.json()
+}
+export async function getCaptureInterfaces(): Promise<CaptureIface[]> {
+  const r = await fetch(`${BASE}/api/capture/interfaces`)
+  if (!r.ok) return handleError(r, 'Interface list failed')
+  return (await r.json()).interfaces
+}
+export async function startCapture(body: CaptureStartBody): Promise<{ capture_id: string; bpf: string; max_packets: number; max_seconds: number }> {
+  const r = await fetch(`${BASE}/api/capture/start`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+  if (!r.ok) return handleError(r, 'Capture start failed')
+  return r.json()
+}
+export async function getCaptureStatus(id: string): Promise<CaptureStatus> {
+  const r = await fetch(`${BASE}/api/capture/${id}/status`)
+  if (!r.ok) return handleError(r, 'Capture status failed')
+  return r.json()
+}
+export async function stopCapture(id: string): Promise<CaptureResult> {
+  const r = await fetch(`${BASE}/api/capture/${id}/stop`, { method: 'POST' })
+  if (!r.ok) return handleError(r, 'Capture stop failed')
+  const data = await r.json()
+  if (data.upload_id && data.capture_token) setCaptureToken(data.upload_id, data.capture_token)
+  return data
+}
+
 export async function analyzePcap(upload_id: string, target_ip?: string, capture_token?: string): Promise<Record<string, unknown>> {
   const body: Record<string, string> = { upload_id }
   if (target_ip) body.target_ip = target_ip
