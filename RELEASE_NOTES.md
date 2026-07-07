@@ -1,3 +1,21 @@
+## WireBoard v7.9.1 (2026-07-07)
+
+Fix — HAR upload robustness.
+
+### Fixed
+- **HAR files with a UTF-8 BOM** (added by some tools/proxies/editors) were rejected
+  as "unsupported format". Now decoded with utf-8-sig and accepted.
+- **A single malformed entry no longer fails the whole HAR.** Browser HAR exports
+  often include aborted requests / WebSocket / entries without a request URL — these
+  are now skipped with a warning while the valid entries parse normally.
+- Non-list `entries`, non-dict entries, bad `time`/`timings`, and out-of-range URL
+  ports are handled defensively instead of raising.
+
+### Tests
+- 870 passed (incl. new HAR robustness/upload tests).
+
+---
+
 ## WireBoard v7.9.0 (2026-07-05)
 
 Live capture — record packets directly on the PC (optional).

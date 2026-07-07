@@ -25,98 +25,130 @@ class HarParser:
     def __init__(self) -> None:
         self.packet_map: dict[str, list[PacketRecord]] = {}
 
+    @staticmethod
+    def _decode(data: bytes) -> str:
+        """UTF-8(BOM 포함) 디코딩. 일부 도구가 붙이는 BOM을 utf-8-sig로 제거한다."""
+        return data.decode("utf-8-sig", errors="replace")
+
     def detect(self, data: bytes) -> bool:
         try:
-            text = data.decode("utf-8", errors="replace")
-            if not text.strip().startswith("{"):
+            text = self._decode(data).lstrip("﻿ \t\r\n")
+            if not text.startswith("{"):
                 return False
             obj = json.loads(text)
             return isinstance(obj.get("log"), dict) and "entries" in obj["log"]
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
             return False
 
     def parse(self, data: bytes, parse_warnings: list[str] | None = None) -> list[SessionModel]:
+        text = self._decode(data)
         try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise ValueError(f"UTF-8 디코딩 실패: {exc}") from exc
+            obj = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"HAR JSON 파싱 실패: {exc}") from exc
 
-        obj = json.loads(text)
         log = obj.get("log") or {}
-        if "entries" not in log:
+        entries = log.get("entries")
+        if entries is None:
             raise KeyError("HAR log에 'entries' 키가 없습니다")
-        entries = log["entries"]
+        if not isinstance(entries, list):
+            raise ValueError("HAR 'entries'가 리스트가 아닙니다")
 
         self.packet_map = {}
         host_ip: dict[str, str] = {}  # hostname -> placeholder IP (호스트별 고유 배정)
         sessions: list[SessionModel] = []
+        skipped = 0
         for i, entry in enumerate(entries):
-            req = entry["request"]
-            url = req.get("url", "")
-            method = req.get("method", "GET")
-            parsed = urlparse(url)
-
-            host = parsed.hostname or ""
-            scheme = parsed.scheme or "http"
-            port = parsed.port or (443 if scheme == "https" else 80)
-
-            # hostname이 이미 IP면 dst_ip로 직접 사용, 아니면 호스트별 고유 placeholder 배정.
-            # (예전엔 모든 도메인을 203.0.113.1 하나로 합쳐 IP 순위·대화 분석이 무의미했음)
+            # 엔트리 하나가 비표준/손상돼도 전체 파일을 실패시키지 않는다.
+            # (브라우저 HAR엔 중단 요청·WebSocket 등 request/url 없는 엔트리가 섞임)
             try:
-                ipaddress.ip_address(host)
-                dst_ip = host
-                unresolved = False
-            except ValueError:
-                dst_ip = self._placeholder_ip(host, host_ip)
-                unresolved = True
+                if not isinstance(entry, dict):
+                    skipped += 1
+                    continue
+                req = entry.get("request") or {}
+                url = req.get("url", "") or ""
+                if not url:
+                    skipped += 1
+                    continue
+                method = req.get("method", "GET")
+                parsed = urlparse(url)
 
-            started = entry.get("startedDateTime", "")
-            time_ms = float(entry.get("time") or 0)
+                host = parsed.hostname or ""
+                scheme = parsed.scheme or "http"
+                port = parsed.port or (443 if scheme == "https" else 80)
 
-            try:
-                start_ts = datetime.fromisoformat(started.replace("Z", "+00:00")).timestamp()
-            except (ValueError, AttributeError):
-                start_ts = datetime.now().timestamp() + i * 0.001
-            end_ts = start_ts + time_ms / 1000.0
+                # hostname이 IP면 dst_ip로 직접 사용, 아니면 호스트별 고유 placeholder 배정.
+                try:
+                    ipaddress.ip_address(host)
+                    dst_ip = host
+                    unresolved = False
+                except ValueError:
+                    dst_ip = self._placeholder_ip(host or url, host_ip)
+                    unresolved = True
 
-            resp = entry.get("response") or {}
-            req_body = max(0, req.get("bodySize") or 0)
-            resp_body = max(0, resp.get("bodySize") or 0)
-            session_id = str(uuid.uuid4())
+                started = entry.get("startedDateTime", "") or ""
+                try:
+                    time_ms = float(entry.get("time") or 0)
+                except (TypeError, ValueError):
+                    time_ms = 0.0
 
-            packets = self._build_packets(req, resp, parsed, host, start_ts, end_ts)
-            if packets:
-                self.packet_map[session_id] = packets
+                try:
+                    start_ts = datetime.fromisoformat(started.replace("Z", "+00:00")).timestamp()
+                except (ValueError, AttributeError):
+                    start_ts = datetime.now().timestamp() + i * 0.001
+                end_ts = start_ts + max(0.0, time_ms) / 1000.0
 
-            timings_raw = entry.get("timings") or {}
-            timings = {p: timings_raw.get(p, -1) for p in _TIMING_PHASES}
-            mime = (resp.get("content") or {}).get("mimeType", "") or ""
+                resp = entry.get("response") or {}
+                req_body = max(0, req.get("bodySize") or 0)
+                resp_body = max(0, resp.get("bodySize") or 0)
+                session_id = str(uuid.uuid4())
 
-            sessions.append(SessionModel(
-                session_id=session_id,
-                src_ip="127.0.0.1",
-                dst_ip=dst_ip,
-                src_port=random.randint(49152, 65535),
-                dst_port=port,
-                protocol="TCP",
-                start_ts=start_ts,
-                end_ts=end_ts,
-                bytes_sent=req_body,
-                bytes_recv=resp_body,
-                packet_count=max(1, len(packets)),
-                payload_length=resp_body,
-                confidence="low" if unresolved else "normal",
-                meta={
-                    "method": method,
-                    "url": url,
-                    "status_code": resp.get("status") or 0,
-                    "hostname": host,
-                    "time_ms": round(time_ms, 1),
-                    "resp_size": resp_body,
-                    "mime": mime,
-                    "timings": timings,
-                },
-            ))
+                packets = self._build_packets(req, resp, parsed, host, start_ts, end_ts)
+                if packets:
+                    self.packet_map[session_id] = packets
+
+                timings_raw = entry.get("timings") or {}
+                if not isinstance(timings_raw, dict):
+                    timings_raw = {}
+                timings = {p: timings_raw.get(p, -1) for p in _TIMING_PHASES}
+                mime = (resp.get("content") or {}).get("mimeType", "") or ""
+
+                # dst_port는 0~65535로 클램프 (비정상 URL 포트 방어)
+                if not (0 <= port <= 65535):
+                    port = 443 if scheme == "https" else 80
+
+                sessions.append(SessionModel(
+                    session_id=session_id,
+                    src_ip="127.0.0.1",
+                    dst_ip=dst_ip,
+                    src_port=random.randint(49152, 65535),
+                    dst_port=port,
+                    protocol="TCP",
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                    bytes_sent=req_body,
+                    bytes_recv=resp_body,
+                    packet_count=max(1, len(packets)),
+                    payload_length=resp_body,
+                    confidence="low" if unresolved else "normal",
+                    meta={
+                        "method": method,
+                        "url": url,
+                        "status_code": resp.get("status") or 0,
+                        "hostname": host,
+                        "time_ms": round(time_ms, 1),
+                        "resp_size": resp_body,
+                        "mime": mime,
+                        "timings": timings,
+                    },
+                ))
+            except Exception as exc:  # 개별 엔트리 실패는 건너뛰고 계속
+                skipped += 1
+                if parse_warnings is not None and len(parse_warnings) < 500:
+                    parse_warnings.append(f"HAR entry {i} skipped: {type(exc).__name__}: {exc}")
+
+        if skipped and parse_warnings is not None:
+            parse_warnings.append(f"HAR: {skipped}/{len(entries)} entries skipped (non-standard/incomplete)")
 
         return sessions
 
