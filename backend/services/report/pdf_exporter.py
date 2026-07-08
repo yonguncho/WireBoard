@@ -206,6 +206,39 @@ class PdfExporter:
 
         lines += _build_narrative(target_ip, sessions, attacks, annotations)
 
+        # === 진단 상세 (네트워크 vs 앱 / 성능 / 프로토콜 / 캡처 품질) ===
+        diag = analysis_result.get("diagnostics") or {}
+        if diag:
+            lines += ["", "=== DIAGNOSTICS ==="]
+            v = diag.get("verdict") or {}
+            if v.get("headline"):
+                lines.append(f"Verdict: [{str(v.get('side', '')).upper()}] {v['headline']}")
+            ho = diag.get("health_overall")
+            if ho is not None:
+                lines.append(f"Connection health score: {ho}/100  "
+                             f"(critical {diag.get('critical', 0)}, warning {diag.get('warning', 0)})")
+            ex = diag.get("expert") or {}
+            if ex.get("totals"):
+                lines.append(
+                    f"TCP Expert: retransmit {ex.get('retransmission', 0)}, "
+                    f"dup-ack {ex.get('duplicate_ack', 0)}, zero-window {ex.get('zero_window', 0)}, "
+                    f"out-of-order {ex.get('out_of_order', 0)}, lost {ex.get('lost_segment', 0)}"
+                )
+            dns = diag.get("dns") or {}
+            if dns.get("total"):
+                lines.append(
+                    f"DNS: {dns['total']} queries, {dns.get('unanswered', 0)} no-response, "
+                    f"{dns.get('errors', 0)} errors; response p50 {dns.get('p50_ms', 0)} ms / "
+                    f"p95 {dns.get('p95_ms', 0)} ms"
+                )
+            apps = diag.get("app_protocols") or {}
+            if apps:
+                app_str = ", ".join(f"{k} ({n})" for k, n in
+                                    sorted(apps.items(), key=lambda x: -x[1])[:8])
+                lines.append(f"Application protocols: {app_str}")
+            for w in (diag.get("capture_quality") or {}).get("warnings", [])[:4]:
+                lines.append(f"  ! capture quality: {w}")
+
         # 기술 상세 — 세션 TOP 10
         lines += ["", "=== TOP 10 SESSIONS (by bytes) ==="]
         sorted_sessions = sorted(

@@ -1,4 +1,4 @@
-﻿"""WireBoard v7.10.0 — PyInstaller entry point."""
+﻿"""WireBoard v7.11.0 — PyInstaller entry point."""
 import asyncio
 import logging
 import os
@@ -10,7 +10,7 @@ import traceback
 import webbrowser
 from pathlib import Path
 
-_VERSION = "7.10.0"
+_VERSION = "7.11.0"
 _DEFAULT_PORT = 8764
 
 _BANNER = """
@@ -79,6 +79,17 @@ def main():
 
     backend_path = str(base / "backend")
     sys.path.insert(0, backend_path)
+
+    # ── 헤드리스 CLI 모드 (서버/브라우저 없이 분석) ──
+    # WireBoard.exe analyze <capture> [--json ...] [--pdf ...] [--target IP]
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("analyze", "--version", "-V", "--help", "-h", "help"):
+        try:
+            from cli import run_cli
+        except Exception as e:
+            print(f"[오류] CLI 모듈 로드 실패: {e}")
+            sys.exit(1)
+        sys.exit(run_cli(argv))
 
     # uvicorn 임포트 실패 시 원인 표시
     try:

@@ -17,6 +17,39 @@ from services.export.state_exporter import StateExporter
 from services.export_service import ExportService
 from services.report.pdf_exporter import PdfExporter
 from services.narrative.capture_summary import summarize_capture
+
+
+def _report_payload(capture):
+    """PDF 리포트용 (risk_block, diagnostics) 계산 — 순수 CPU, executor에서 실행."""
+    sr = summarize_capture(capture)
+    risk_block = {
+        "risk_level": sr.risk_level, "risk_score": sr.risk_score,
+        "headline": sr.headline, "risk_factors": sr.risk_factors,
+        "diagnosis": sr.diagnosis, "recommendations": sr.recommendations,
+    }
+    diagnostics = None
+    try:
+        from services.analytics import network_health, tcp_expert, dns_matcher
+        pm = getattr(capture, "packet_map", {}) or {}
+        health = network_health.analyze(capture.sessions, pm,
+                                        getattr(capture, "icmp_events", []) or [])
+        apps: dict[str, int] = {}
+        for s in capture.sessions:
+            ap = (s.meta or {}).get("app_proto")
+            if ap:
+                apps[ap] = apps.get(ap, 0) + 1
+        diagnostics = {
+            "verdict": health.get("verdict"),
+            "capture_quality": health.get("capture_quality"),
+            "health_overall": health.get("overall_score"),
+            "critical": health.get("critical"), "warning": health.get("warning"),
+            "expert": tcp_expert.aggregate(pm),
+            "dns": dns_matcher.match(capture.sessions, pm),
+            "app_protocols": apps,
+        }
+    except Exception:
+        diagnostics = None
+    return risk_block, diagnostics
 from models.attack import AttackDetectionResult
 from models.session import SessionModel
 from utils.constants import UUID_RE
@@ -147,22 +180,14 @@ async def export_pdf(
 
     annotations = list(request.app.state.annotations_store.get(upload_id, []))
 
-    # Risk grade + evidence-based diagnosis for the report's Executive Summary.
-    # Pure-CPU work — run off the event loop; failure must not block the report.
+    # Risk grade + full diagnostics for the report. Pure-CPU — run off the event loop.
     risk_block = None
+    diagnostics = None
     try:
         loop = asyncio.get_running_loop()
-        sr = await loop.run_in_executor(None, summarize_capture, capture)
-        risk_block = {
-            "risk_level": sr.risk_level,
-            "risk_score": sr.risk_score,
-            "headline": sr.headline,
-            "risk_factors": sr.risk_factors,
-            "diagnosis": sr.diagnosis,
-            "recommendations": sr.recommendations,
-        }
-    except Exception as exc:  # report must still generate without the risk block
-        logger.warning("PDF 위험요약 생성 실패 (리포트는 계속): %s", exc)
+        risk_block, diagnostics = await loop.run_in_executor(None, _report_payload, capture)
+    except Exception as exc:  # report must still generate without these blocks
+        logger.warning("PDF 진단 생성 실패 (리포트는 계속): %s", exc)
 
     analysis_result = {
         "target_ip": capture.target_ip or "unknown",
@@ -170,6 +195,7 @@ async def export_pdf(
         "attacks": capture.attacks,
         "annotations": annotations,
         "risk": risk_block,
+        "diagnostics": diagnostics,
         "summary": {
             "total_sessions": len(capture.sessions),
             "total_bytes": sum(s.bytes_sent + s.bytes_recv for s in capture.sessions),

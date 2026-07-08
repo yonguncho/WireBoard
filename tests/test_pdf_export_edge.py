@@ -124,6 +124,34 @@ class TestPdfContent:
         assert b"PortScan" in content or b"T1046" in content
 
 
+class TestPdfDiagnostics:
+    def test_diagnostics_section_rendered(self, tmp_path: Path):
+        exporter = _load_exporter()
+        result = _make_analysis_result()
+        result["diagnostics"] = {
+            "verdict": {"side": "application", "headline": "Server slowdown"},
+            "health_overall": 62, "critical": 1, "warning": 3,
+            "expert": {"totals": {"retransmission": 5}, "retransmission": 5,
+                       "duplicate_ack": 2, "zero_window": 1, "out_of_order": 0, "lost_segment": 0},
+            "dns": {"total": 10, "unanswered": 1, "errors": 2, "p50_ms": 12.0, "p95_ms": 210.0},
+            "app_protocols": {"QUIC v1 (RFC 9000)": 4, "HTTP/2 (h2c)": 1},
+            "capture_quality": {"warnings": ["Most sessions began before capture start"]},
+        }
+        out = tmp_path / "diag.pdf"
+        exporter.generate(result, output_path=out)
+        content = out.read_bytes()
+        assert b"DIAGNOSTICS" in content
+        assert b"APPLICATION" in content or b"application" in content
+        assert b"QUIC" in content
+        assert b"DNS" in content
+
+    def test_no_diagnostics_still_valid_pdf(self, tmp_path: Path):
+        exporter = _load_exporter()
+        out = tmp_path / "nodiag.pdf"
+        exporter.generate(_make_analysis_result(), output_path=out)
+        assert out.read_bytes()[:4] == b"%PDF"
+
+
 class TestPdfEdge:
     def test_empty_sessions_no_error(self, tmp_path: Path):
         """세션 없어도 PDF 생성 (에러 없음)."""

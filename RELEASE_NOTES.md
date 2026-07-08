@@ -1,3 +1,23 @@
+## WireBoard v7.11.0 (2026-07-08)
+
+Customer-ready reports + headless CLI (automation).
+
+### New
+- **Richer PDF report** — the Executive Summary now includes a full DIAGNOSTICS
+  section: network-vs-application verdict, connection health score, TCP Expert
+  Info counts (retransmit / dup-ack / zero-window / lost), DNS response p50/p95 and
+  error/no-response counts, detected application protocols (QUIC/HTTP2), and
+  capture-quality caveats — a report you can hand to a customer.
+- **Headless CLI mode** for automation / SOC pipelines:
+  `WireBoard.exe analyze <capture> [--json out.json] [--pdf out.pdf] [--target IP]`
+  Parses (incl. streaming for large pcap), runs detection + diagnosis, and emits
+  JSON and/or a PDF report with no server or browser.
+
+### Tests
+- 897 passed (incl. CLI + PDF-diagnostics tests).
+
+---
+
 ## WireBoard v7.10.0 (2026-07-08)
 
 Large captures + modern protocols (QUIC / HTTP/2).
