@@ -1,12 +1,27 @@
 """공유 상수 — 여러 모듈에서 참조하는 값은 여기서 단일 정의."""
+import os
 import re
 
-APP_VERSION = "7.9.1"  # 단일 버전 정의 — main.py/PDF 리포트 등에서 참조
+APP_VERSION = "7.10.0"  # 단일 버전 정의 — main.py/PDF 리포트 등에서 참조
 
-MAX_UPLOAD_BYTES = 52_428_800  # 50 MB — 바이너리 pcap/pcapng 한도
-# 텍스트 로그(FortiGate/tcpdump hex 덤프·HAR JSON)는 같은 정보를 바이너리보다
-# 3~4배 크게 표현하므로 별도의 상향 한도를 적용한다(디코딩 후 ~1/4로 축소).
-MAX_TEXT_UPLOAD_BYTES = 209_715_200  # 200 MB — .txt/.log/.tcpdump/.har
+
+def _env_bytes(name: str, default: int) -> int:
+    """환경변수(바이트 정수)로 상한 재정의. 잘못된 값은 기본값 사용."""
+    try:
+        v = int(os.environ.get(name, "") or default)
+        return v if v > 0 else default
+    except (ValueError, TypeError):
+        return default
+
+
+# 바이너리 pcap/pcapng 한도 — 스트리밍 파싱이라 파일 크기만큼 메모리를 쓰지 않는다.
+# 파싱 표현은 flow/packet 캡(_MAX_FLOW_COUNT×_MAX_PKTS_PER_FLOW)으로 별도 제한됨.
+# WIREBOARD_MAX_PCAP_MB 로 재정의 가능(기본 2048MB=2GB).
+MAX_UPLOAD_BYTES = _env_bytes("WIREBOARD_MAX_PCAP_MB", 2048) * 1024 * 1024 \
+    if os.environ.get("WIREBOARD_MAX_PCAP_MB") else 2_147_483_648  # 2 GB
+# 텍스트 로그(FortiGate/tcpdump hex 덤프·HAR JSON)는 전체를 메모리로 읽으므로 별도 한도.
+MAX_TEXT_UPLOAD_BYTES = _env_bytes("WIREBOARD_MAX_TEXT_MB", 300) * 1024 * 1024 \
+    if os.environ.get("WIREBOARD_MAX_TEXT_MB") else 314_572_800  # 300 MB
 
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",

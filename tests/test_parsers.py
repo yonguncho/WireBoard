@@ -67,15 +67,15 @@ class TestPcapParserParse:
         for s in sessions:
             assert UUID_RE.match(s.session_id), f"session_id 가 UUID 형식 아님: {s.session_id!r}"
 
-    def test_50mb_raises_value_error(self) -> None:
-        """50 MB 초과 입력 → ValueError (파일 read() 없이 차단, A-05)."""
+    def test_oversize_raises_value_error(self) -> None:
+        """max_bytes 초과 입력 → ValueError (거대 할당 없이 낮은 상한으로 가드 검증)."""
         from services.parser.pcap_parser import PcapParser
         import struct
 
         header = struct.pack("<IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, 1)
-        oversized = header + b"\x00" * (MAX_UPLOAD_BYTES + 1 - len(header))
-        with pytest.raises(ValueError, match="50"):
-            PcapParser().parse(oversized)
+        data = header + b"\x00" * 200
+        with pytest.raises(ValueError):
+            PcapParser().parse(data, max_bytes=50)
 
     def test_corrupted_packets_are_skipped(self) -> None:
         """손상된 패킷 헤더 → 예외 전파 없이 skip 후 빈 리스트 반환."""

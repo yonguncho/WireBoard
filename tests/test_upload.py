@@ -20,7 +20,7 @@ UUID_RE: re.Pattern[str] = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
-MAX_UPLOAD_BYTES = 52_428_800  # 50 MB
+from utils.constants import MAX_UPLOAD_BYTES  # 실제 상한(환경변수로 재정의 가능)을 추적
 
 
 # ─────────────────────────── 정상 케이스 ────────────────────────────

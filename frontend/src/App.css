@@ -691,6 +691,16 @@ body {
 .dns-stat-num { font-size:18px;font-weight:700 }
 .dns-stat-num small { font-size:10px;font-weight:600;opacity:.6 }
 .dns-stat-label { font-size:10px;color:var(--txt-secondary);text-align:center }
+/* Application protocol chips (QUIC/HTTP2) + flow app-proto badge */
+.ph-apps { margin-top:14px;padding-top:10px;border-top:1px dashed var(--card-border) }
+.ph-apps-title { font-size:11px;color:var(--txt-secondary);margin-bottom:6px }
+.ph-apps-chips { display:flex;flex-wrap:wrap;gap:6px }
+.ph-app-chip { font-size:11px;padding:3px 9px;border-radius:12px;background:rgba(56,189,248,.12);color:#38bdf8;border:1px solid rgba(56,189,248,.3) }
+.ph-app-chip b { font-weight:700 }
+.ph-quic-sni { margin-top:8px;display:flex;flex-direction:column;gap:3px }
+.ph-quic-sni-row { font-size:11px;display:flex;gap:8px }
+.ph-quic-sni-dst { color:var(--txt-secondary) }
+.flow-app-proto { color:#38bdf8 }
 /* Live capture */
 .upload-or { display:flex;align-items:center;gap:12px;color:var(--txt-secondary);font-size:12px;margin:6px 0 }
 .live-capture-btn { display:inline-flex;align-items:center;gap:8px;border:1px solid var(--card-border);background:var(--surface);color:var(--txt-primary);border-radius:var(--radius-md);padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s }

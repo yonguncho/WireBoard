@@ -164,6 +164,8 @@ export interface PanelData {
   panel10_attacks: AttackEntry[]
   expert_info?: ExpertInfo
   dns_timing?: DnsTiming
+  app_protocols?: Record<string, number>
+  quic_sni_hosts?: { sni: string; dst: string; version: string }[]
 }
 
 export interface IpEntry { ip: string; bytes: number; is_private?: boolean }
@@ -255,6 +257,9 @@ export interface FlowSession {
   ip_badge?: IpBadge | null
   wscale?: WScale
   l2?: L2Info | null
+  app_proto?: string | null
+  quic_sni?: string | null
+  quic_type?: string | null
 }
 export interface TlsAlert { level: string; description: string; code: number; from: string }
 export interface TlsInfo {

@@ -283,6 +283,28 @@ function ProtocolHierarchy({ data }: { data: PanelData }) {
           </div>
         )
       })}
+
+      {/* 애플리케이션 프로토콜 식별 (QUIC 버전·HTTP/2 등 — 포트 추정이 아닌 실제 감지) */}
+      {data.app_protocols && Object.keys(data.app_protocols).length > 0 && (
+        <div className="ph-apps">
+          <div className="ph-apps-title">Detected application protocols</div>
+          <div className="ph-apps-chips">
+            {Object.entries(data.app_protocols).sort(([, a], [, b]) => b - a).map(([name, n]) => (
+              <span key={name} className="ph-app-chip">{name} <b>{n}</b></span>
+            ))}
+          </div>
+          {(data.quic_sni_hosts?.length ?? 0) > 0 && (
+            <div className="ph-quic-sni">
+              {data.quic_sni_hosts!.slice(0, 8).map((h, i) => (
+                <div key={i} className="ph-quic-sni-row">
+                  <span className="mono">{h.sni}</span>
+                  <span className="ph-quic-sni-dst mono">→ {h.dst}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -508,7 +530,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v7.9.1</span>
+          <span className="header-ver">v7.10.0</span>
         </div>
         {meta && (
           <div className="header-file-info">

@@ -1,8 +1,10 @@
 """POST /api/upload — 파일 수신 + 파싱 + 세션 저장."""
 import json
 import logging
+import os
 import re
 import secrets
+import tempfile
 import uuid
 from fastapi import APIRouter, Header, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
@@ -24,24 +26,34 @@ router = APIRouter()
 _ALLOWED_EXTENSIONS = {".pcap", ".pcapng", ".har", ".log", ".tcpdump", ".txt"}
 # 텍스트 로그(hex 덤프·HAR JSON)는 바이너리보다 부피가 커 상향 한도 적용.
 _TEXT_EXTENSIONS = {".txt", ".log", ".tcpdump", ".har"}
-_PARSERS = [PcapParser(), HarParser(), FortigateParser(), TcpdumpParser()]
+# 텍스트 포맷 파서 (pcap 매직이 아닐 때만 사용; PcapParser는 스트리밍 경로에서 별도 처리)
+_TEXT_PARSERS = [HarParser(), FortigateParser(), TcpdumpParser()]
 _CHUNK_SIZE = 65_536  # 64 KB read chunks
 
 
-async def _read_stream_limited(file: UploadFile, max_bytes: int) -> bytes:
-    """Read file in chunks; raise 413 without buffering the full payload on overflow."""
-    chunks: list[bytes] = []
+async def _spool_to_temp(file: UploadFile, max_bytes: int) -> tuple[str, int]:
+    """업로드를 디스크 임시파일로 스풀 — 대용량도 전체를 메모리에 올리지 않는다.
+    상한 초과 시 임시파일 삭제 후 413."""
+    tmp = tempfile.NamedTemporaryFile(prefix="wb_up_", suffix=".bin", delete=False)
     total = 0
-    while True:
-        chunk = await file.read(_CHUNK_SIZE)
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > max_bytes:
-            limit_mb = max_bytes // (1024 * 1024)
-            raise HTTPException(status_code=413, detail=f"File size exceeds the {limit_mb} MB limit")
-        chunks.append(chunk)
-    return b"".join(chunks)
+    try:
+        while True:
+            chunk = await file.read(_CHUNK_SIZE)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                limit_mb = max_bytes // (1024 * 1024)
+                tmp.close()
+                os.unlink(tmp.name)
+                raise HTTPException(status_code=413, detail=f"File size exceeds the {limit_mb} MB limit")
+            tmp.write(chunk)
+    except HTTPException:
+        raise
+    finally:
+        if not tmp.closed:
+            tmp.close()
+    return tmp.name, total
 
 
 @router.post("/api/upload")
@@ -67,42 +79,76 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid Content-Length header")
 
-    raw = await _read_stream_limited(file, max_bytes)
+    tmp_path, size = await _spool_to_temp(file, max_bytes)
+    try:
+        if size == 0:
+            if ext in {".pcap", ".pcapng"}:
+                raise HTTPException(status_code=400, detail="Empty files are not allowed")
+            raise HTTPException(status_code=422, detail="Empty file: nothing to parse")
 
-    if len(raw) == 0:
-        # .pcap/.pcapng 빈 파일: 400 (bad request — 유효한 pcap이 아님)
-        # 나머지 확장자 빈 파일: 422 (파싱 불가)
-        if ext in {".pcap", ".pcapng"}:
-            raise HTTPException(status_code=400, detail="Empty files are not allowed")
-        raise HTTPException(status_code=422, detail="Empty file: nothing to parse")
+        parse_warnings: list[str] = []
+        sessions = None
+        pkt_map: dict = {}
+        icmp_events: list = []
+        source_type = None
+        raw = b""  # 텍스트 경로에서만 전체 바이트 로드
 
-    parse_warnings: list[str] = []
-    sessions = None
-    pkt_map: dict = {}
-    icmp_events: list = []
-    source_type = None
+        # 매직 바이트로 바이너리 pcap 여부 판정 (대용량 HAR/text를 PcapParser에 안 먹임)
+        with open(tmp_path, "rb") as f:
+            head = f.read(4)
+        is_pcap = PcapParser().detect(head)
 
-    for parser in _PARSERS:
-        if parser.detect(raw):
+        if is_pcap:
+            # ── 스트리밍 파싱 (GB급 pcap을 전체 메모리로 올리지 않음) ──
             try:
-                result = parser.parse(raw, parse_warnings=parse_warnings)
-                # PcapParser returns (sessions, pkt_map); legacy parsers return list
-                if isinstance(result, tuple):
-                    sessions, pkt_map = result
-                else:
-                    sessions, pkt_map = result, {}
-                # 레거시 파서가 self.packet_map 으로 합성 패킷을 노출하면 수용 (HAR 등)
-                if not pkt_map:
-                    pkt_map = getattr(parser, "packet_map", {}) or {}
-                icmp_events = list(getattr(parser, "icmp_events", []))
-                source_type = _source_type(parser)
-                logger.info("파일 파싱 완료: parser=%s sessions=%d icmp_events=%d warnings=%d",
-                            type(parser).__name__, len(sessions), len(icmp_events), len(parse_warnings))
-                break
-            except (ValueError, KeyError, TypeError, json.JSONDecodeError, ValidationError) as exc:
-                logger.warning("파서 예외: parser=%s error=%s", type(parser).__name__, exc)
+                p = PcapParser()
+                with open(tmp_path, "rb") as f:
+                    sessions, pkt_map = p.parse_stream(f, parse_warnings=parse_warnings,
+                                                       max_bytes=MAX_UPLOAD_BYTES, size=size)
+                icmp_events = list(p.icmp_events)
+                source_type = "pcap"
+                logger.info("pcap 스트리밍 파싱 완료: sessions=%d size=%d", len(sessions), size)
+            except (ValueError, KeyError, TypeError) as exc:
+                logger.warning("pcap 스트리밍 파싱 실패: %s", exc)
                 parse_warnings.append(f"{type(exc).__name__}: {exc}")
+        else:
+            # ── 텍스트 포맷(HAR/FortiGate/tcpdump) — 전체 바이트 로드(텍스트 한도 내) ──
+            if size > MAX_TEXT_UPLOAD_BYTES:
+                raise HTTPException(status_code=413,
+                                    detail=f"Text file size exceeds the {MAX_TEXT_UPLOAD_BYTES // (1024*1024)} MB limit")
+            with open(tmp_path, "rb") as f:
+                raw = f.read()
+            for parser in _TEXT_PARSERS:
+                if parser.detect(raw):
+                    try:
+                        result = parser.parse(raw, parse_warnings=parse_warnings)
+                        if isinstance(result, tuple):
+                            sessions, pkt_map = result
+                        else:
+                            sessions, pkt_map = result, {}
+                        if not pkt_map:
+                            pkt_map = getattr(parser, "packet_map", {}) or {}
+                        icmp_events = list(getattr(parser, "icmp_events", []))
+                        source_type = _source_type(parser)
+                        logger.info("텍스트 파싱 완료: parser=%s sessions=%d warnings=%d",
+                                    type(parser).__name__, len(sessions), len(parse_warnings))
+                        break
+                    except (ValueError, KeyError, TypeError, json.JSONDecodeError, ValidationError) as exc:
+                        logger.warning("파서 예외: parser=%s error=%s", type(parser).__name__, exc)
+                        parse_warnings.append(f"{type(exc).__name__}: {exc}")
 
+        return await _finalize_upload(
+            request, ext, sessions, pkt_map, icmp_events, source_type, parse_warnings, raw,
+        )
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
+async def _finalize_upload(request, ext, sessions, pkt_map, icmp_events, source_type,
+                           parse_warnings, raw):
     # FortiGate/tcpdump verbose 로그에 16진수 덤프가 있으면 pcap으로 변환 후 재파싱.
     # 변환 성공 시 실제 바이트 수·포트·플래그가 채워진 고품질 세션으로 교체한다.
     pcap_bytes: bytes | None = None

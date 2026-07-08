@@ -621,6 +621,14 @@ export function FlowViewer({ uploadId, sessionId, onClose }: Props) {
                 🖧 {s.l2.src_vendor ?? '?'} → {s.l2.dst_vendor ?? '?'}
               </span>
             )}
+            {s.app_proto && (
+              <span className="flow-app-proto" title="Application protocol">
+                🌐 {s.app_proto}{s.quic_type ? ` · ${s.quic_type}` : ''}
+              </span>
+            )}
+            {s.quic_sni && (
+              <span title="QUIC ClientHello SNI (decrypted from Initial)">🔑 SNI: {s.quic_sni}</span>
+            )}
             {data.expert_summary && Object.keys(data.expert_summary).length > 0 && (
               <span style={{ color: '#f59e0b' }} title="TCP Expert Info events in this flow">
                 ⚑ {Object.entries(data.expert_summary).map(([k, v]) => `${EXPERT_SHORT[k] ?? k}:${v}`).join(' ')}

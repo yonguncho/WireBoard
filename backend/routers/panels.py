@@ -118,6 +118,18 @@ async def get_panels(
     # DNS 쿼리↔응답 매칭 — 응답시간(p95)·무응답·rcode 분포
     dns_timing = dns_matcher.match(sessions, _pkt_map)
 
+    # 애플리케이션 프로토콜 분포 (QUIC 버전·HTTP/2 등 — meta 기반)
+    app_protocols: dict[str, int] = defaultdict(int)
+    quic_sni_hosts: list[dict] = []
+    for s in sessions:
+        ap = (s.meta or {}).get("app_proto")
+        if ap:
+            app_protocols[ap] += 1
+        sni = (s.meta or {}).get("quic_sni")
+        if sni:
+            quic_sni_hosts.append({"sni": sni, "dst": s.dst_ip,
+                                   "version": (s.meta or {}).get("app_proto", "QUIC")})
+
     return {
         "panel1_ip": {"top_src": ip_result.top_src, "top_dst": ip_result.top_dst},
         "panel2_protocol": {
@@ -138,4 +150,6 @@ async def get_panels(
         "panel10_attacks": panel10_attacks,
         "expert_info": expert_info,
         "dns_timing": dns_timing,
+        "app_protocols": dict(app_protocols),
+        "quic_sni_hosts": quic_sni_hosts[:50],
     }

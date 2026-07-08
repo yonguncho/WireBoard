@@ -82,8 +82,8 @@ class TestFileFormatDetection:
 # ── File size limits ────────────────────────────────────────────
 
 class TestFileSizeLimits:
-    MAX_BYTES = 52_428_800  # 50 MB — 바이너리 pcap/pcapng 한도
-    MAX_TEXT_BYTES = 209_715_200  # 200 MB — .txt/.log/.tcpdump/.har 한도
+    from utils.constants import MAX_UPLOAD_BYTES as MAX_BYTES  # 실제 상한 추적(스트리밍으로 상향됨)
+    from utils.constants import MAX_TEXT_UPLOAD_BYTES as MAX_TEXT_BYTES
 
     def test_content_length_exactly_at_limit_is_accepted(self):
         """Content-Length exactly equal to text MAX is not rejected by header check."""
@@ -113,14 +113,13 @@ class TestFileSizeLimits:
         )
         assert resp.status_code == 413
 
-    def test_text_content_length_above_binary_limit_accepted(self):
-        # 50 MB 초과지만 200 MB 텍스트 한도 이내인 .txt 는 헤더 검사 통과
+    def test_text_content_length_within_limit_accepted(self):
+        # 텍스트 한도 이내(절반)인 .txt 는 헤더 검사 통과 → 작은 본문 정상 파싱
         resp = client.post(
             "/api/upload",
             files={"file": ("capture.txt", VALID_FORTIGATE, "text/plain")},
-            headers={"content-length": str(self.MAX_BYTES + 8193)},
+            headers={"content-length": str(self.MAX_TEXT_BYTES // 2)},
         )
-        # 본문은 작으므로 파싱까지 가서 200
         assert resp.status_code == 200
 
     def test_invalid_content_length_string_returns_400(self):

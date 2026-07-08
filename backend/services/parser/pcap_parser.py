@@ -72,6 +72,12 @@ def _fmt_mac(mac: bytes) -> str:
     return ":".join(f"{b:02x}" for b in mac)
 
 
+def _quic_inspect(payload: bytes):
+    """QUIC long-header 분석(지연 import — 순환/비용 회피)."""
+    from services.analytics.quic_analyzer import inspect as _q  # noqa: PLC0415
+    return _q(payload)
+
+
 def _parse_icmp_embedded(payload: bytes) -> tuple[str, int]:
     """ICMP 에러 페이로드(임베디드 IP 헤더)에서 (orig_dst_ip, orig_dst_port) 추출."""
     if len(payload) < 20:
@@ -131,7 +137,7 @@ class PcapParser:
             raise ValueError("pcap 파일이 너무 짧습니다 (global header 없음)")
 
         try:
-            return self._parse_dpkt(data, parse_warnings)
+            return self._parse_dpkt(io.BytesIO(data), parse_warnings)
         except Exception as exc:
             msg = f"dpkt parse failed ({type(exc).__name__}: {exc}), trying scapy"
             logger.debug(msg)
@@ -148,13 +154,51 @@ class PcapParser:
 
         return self._parse_struct(data, parse_warnings)
 
+    def parse_stream(
+        self,
+        fileobj,
+        parse_warnings: list[str] | None = None,
+        max_bytes: int = MAX_UPLOAD_BYTES,
+        size: int | None = None,
+    ) -> tuple[list[SessionModel], dict[str, list]]:
+        """파일 핸들에서 스트리밍 파싱 — 대용량(GB) pcap을 전체 메모리로 올리지 않는다.
+
+        dpkt가 (ts, buf)를 지연 이터레이트하고, flow/packet 캡이 파싱 표현을
+        제한하므로 파일 크기와 무관하게 메모리가 유계다. dpkt 실패 시에만 바이트를
+        읽어 scapy/struct 폴백(드묾, 대용량이면 폴백 생략).
+        """
+        self._icmp_events = []
+        if size is not None and size > max_bytes:
+            raise ValueError(f"입력 크기 {size} 바이트가 {max_bytes // (1024 * 1024)} MB 제한 초과")
+        try:
+            fileobj.seek(0)
+            return self._parse_dpkt(fileobj, parse_warnings)
+        except Exception as exc:
+            msg = f"dpkt stream parse failed ({type(exc).__name__}: {exc})"
+            logger.debug(msg)
+            if parse_warnings is not None:
+                parse_warnings.append(msg)
+        # 폴백은 바이트가 필요 — 아주 큰 파일은 폴백을 생략(메모리 보호)
+        _FALLBACK_MAX = 209_715_200  # 200 MB 이하만 scapy/struct 폴백
+        if size is not None and size > _FALLBACK_MAX:
+            raise ValueError("대용량 pcap 파싱 실패(dpkt) — 손상되었거나 지원하지 않는 형식")
+        fileobj.seek(0)
+        data = fileobj.read()
+        try:
+            return self._parse_scapy(data, parse_warnings)
+        except Exception as exc:
+            if parse_warnings is not None:
+                parse_warnings.append(f"scapy parse failed ({type(exc).__name__}: {exc})")
+        return self._parse_struct(data, parse_warnings)
+
     # ─── dpkt ────────────────────────────────────────────────────────
 
     def _parse_dpkt(
         self,
-        data: bytes,
+        f,
         parse_warnings: list[str] | None,
     ) -> tuple[list[SessionModel], dict[str, list]]:
+        """f: 파일류 객체(BytesIO 또는 실제 파일 핸들). dpkt가 지연 이터레이트."""
         import dpkt  # noqa: PLC0415
         import dpkt.ip6  # noqa: PLC0415  — IPv6 지원
         try:
@@ -162,7 +206,6 @@ class PcapParser:
         except Exception:
             dpkt.icmp6 = None  # type: ignore
 
-        f = io.BytesIO(data)
         try:
             pcap = dpkt.pcap.Reader(f)
         except Exception:
@@ -197,6 +240,8 @@ class PcapParser:
 
                 l4 = ip.data
                 syn_wscale = None
+                quic_info = None
+                app_proto = None
                 if isinstance(l4, dpkt.tcp.TCP):
                     t       = l4
                     proto   = "TCP"
@@ -216,6 +261,9 @@ class PcapParser:
                                     break
                         except Exception:
                             pass
+                    # HTTP/2 cleartext(h2c) preface 감지
+                    if payload[:14] == b"PRI * HTTP/2.0":
+                        app_proto = "HTTP/2 (h2c)"
                 elif isinstance(l4, dpkt.udp.UDP):
                     t       = l4
                     proto   = "UDP"
@@ -226,6 +274,12 @@ class PcapParser:
                     payload = bytes(t.data)
                     sport, dport = t.sport, t.dport
                     win     = 0
+                    # QUIC long-header 감지(전체 payload 기준) → 버전/타입/SNI
+                    if payload and (payload[0] & 0x80):
+                        try:
+                            quic_info = _quic_inspect(payload)
+                        except Exception:
+                            quic_info = None
                 elif isinstance(l4, dpkt.icmp.ICMP):
                     t       = l4
                     proto   = "ICMP"
@@ -284,6 +338,11 @@ class PcapParser:
                 # 방향별 첫 관측 소스 MAC (L2 장비 식별용)
                 if eth_src_mac:
                     flow_map[canonical].setdefault(f"mac_{direction}", eth_src_mac)
+                # QUIC/HTTP2 애플리케이션 식별 (flow당 최초 1회)
+                if quic_info and "quic" not in flow_map[canonical]:
+                    flow_map[canonical]["quic"] = quic_info
+                if app_proto and "app_proto" not in flow_map[canonical]:
+                    flow_map[canonical]["app_proto"] = app_proto
                 self._record_packet(
                     pkt_map, canonical,
                     PacketRecord(
@@ -624,6 +683,15 @@ class PcapParser:
                 meta["mac_src"] = v["mac_fwd"]
             if "mac_rev" in v:
                 meta["mac_dst"] = v["mac_rev"]
+            if "quic" in v and v["quic"]:
+                q = v["quic"]
+                meta["app_proto"] = q.get("version_name", "QUIC")
+                if q.get("sni"):
+                    meta["quic_sni"] = q["sni"]
+                if q.get("packet_type"):
+                    meta["quic_type"] = q["packet_type"]
+            elif "app_proto" in v:
+                meta["app_proto"] = v["app_proto"]
             sessions.append(SessionModel(
                 session_id=sid,
                 src_ip=src_ip,

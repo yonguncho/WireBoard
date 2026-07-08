@@ -67,10 +67,13 @@ class TestPcapParse:
             pass
 
     def test_oversized_file_raises_value_error(self):
-        # Simulate over-limit check by creating a large enough fake data indicator
-        # (actual 50MB+ creation is too slow for unit tests, test the guard logic separately)
-        from services.parser.pcap_parser import MAX_BYTES
-        assert MAX_BYTES == 52_428_800
+        # 실제 상한은 크므로(스트리밍) 명시적 낮은 상한으로 가드 동작을 직접 검증한다.
+        import pytest
+        from services.parser.pcap_parser import PcapParser, MAX_BYTES
+        from utils.constants import MAX_UPLOAD_BYTES
+        assert MAX_BYTES == MAX_UPLOAD_BYTES  # 상수 일관성
+        with pytest.raises(ValueError):
+            PcapParser().parse(b"\xa1\xb2\xc3\xd4" + b"\x00" * 100, max_bytes=10)
 
 
 # ── HarParser.detect() ──────────────────────────────────────────

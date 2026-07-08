@@ -1,3 +1,29 @@
+## WireBoard v7.10.0 (2026-07-08)
+
+Large captures + modern protocols (QUIC / HTTP/2).
+
+### New — large-capture streaming
+- **File size limit raised from 50 MB to 2 GB** for pcap/pcapng. Uploads are spooled
+  to disk and parsed **streaming from the file handle** (dpkt yields packets lazily),
+  so memory stays bounded by the flow/packet caps regardless of file size — real
+  captures (hundreds of MB to GB) now open instead of being rejected as a "toy" limit.
+- Binary pcap routed by magic bytes to the streaming path; text formats
+  (HAR/FortiGate/tcpdump) read within the text cap (300 MB).
+- Limits configurable via `WIREBOARD_MAX_PCAP_MB` / `WIREBOARD_MAX_TEXT_MB`.
+
+### New — QUIC & HTTP/2
+- **QUIC** long-header identification (version: v1/v2/draft/gQUIC + packet type), and
+  **SNI decrypted from the QUIC Initial packet** (RFC 9001 initial keys) — you can see
+  which service an encrypted QUIC/UDP-443 connection is going to.
+- **HTTP/2** detection via TLS ALPN (`h2`) and cleartext h2c preface.
+- Detected application protocols are shown in the Protocol panel and the flow header
+  (with QUIC SNI), instead of guessing from the port alone.
+
+### Tests
+- 885 passed (streaming, QUIC identification/decrypt round-trip, HTTP/2).
+
+---
+
 ## WireBoard v7.9.1 (2026-07-07)
 
 Fix — HAR upload robustness.
