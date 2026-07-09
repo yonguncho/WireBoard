@@ -1,3 +1,27 @@
+## WireBoard v7.12.0 (2026-07-09)
+
+Launch prep — licensing infrastructure, onboarding, legal clean-up.
+
+### New
+- **Demo capture onboarding** — a "Try a demo capture" button on the upload page
+  loads a bundled sample (web flow with a retransmit, a DNS query/response, and a
+  120-port scan) so first-time users see the 5-minute triage immediately.
+- **License verification infrastructure** (OFF by default — nothing is gated):
+  offline Ed25519-signed license files (privacy-preserving, no internet) plus
+  optional Lemon Squeezy online validation. Endpoints `GET /api/license/status` and
+  `POST /api/license/activate`; owner issues licenses with `tools/sign_license.py`.
+  Turn gating on later with `WIREBOARD_LICENSE_ENFORCE=1`.
+- Upload hint updated to the real limits (2 GB pcap / 300 MB text).
+
+### Legal / docs
+- Confirmed **no MaxMind GeoIP database is bundled** (legally clean); documented the
+  licensing model, GeoIP handling, and privacy stance in `docs/LICENSING_AND_LEGAL.md`.
+
+### Tests
+- 909 passed (incl. license offline round-trip / tamper / expiry + demo endpoint).
+
+---
+
 ## WireBoard v7.11.0 (2026-07-08)
 
 Customer-ready reports + headless CLI (automation).

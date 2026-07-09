@@ -44,6 +44,7 @@ from routers.network_health import router as health_router
 from routers.stream import router as stream_router
 from routers.har import router as har_router
 from routers.capture import router as capture_router
+from routers.license import router as license_router
 from store.session_store import SessionStore
 from services.analytics.geoip_analyzer import GeoIpAnalyzer
 from services.attack_detector.yara_detector import YaraDetector
@@ -182,6 +183,7 @@ app.include_router(health_router)
 app.include_router(stream_router)
 app.include_router(har_router)
 app.include_router(capture_router)
+app.include_router(license_router)
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(_STATIC_DIR):
@@ -196,6 +198,14 @@ if os.path.isdir(_STATIC_DIR):
     @app.get("/icons.svg", include_in_schema=False)
     async def _icons():
         return FileResponse(os.path.join(_STATIC_DIR, "icons.svg"))
+
+    @app.get("/demo.pcap", include_in_schema=False)
+    async def _demo_pcap():
+        # 온보딩용 데모 캡처 (번들). SPA fallback보다 먼저 매칭되도록 명시 라우트.
+        path = os.path.join(_STATIC_DIR, "demo.pcap")
+        if not os.path.isfile(path):
+            raise HTTPException(status_code=404, detail="demo not available")
+        return FileResponse(path, media_type="application/vnd.tcpdump.pcap")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def _spa_fallback(full_path: str):

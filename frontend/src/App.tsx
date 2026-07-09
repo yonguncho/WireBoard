@@ -425,6 +425,18 @@ export default function App() {
     }
   }, [targetIp])
 
+  // 첫 실행 온보딩 — 번들된 데모 캡처를 1클릭 로드
+  const loadDemo = useCallback(async () => {
+    try {
+      const r = await fetch('/demo.pcap')
+      if (!r.ok) throw new Error('demo not found')
+      const blob = await r.blob()
+      await handleFile(new File([blob], 'demo.pcap', { type: 'application/octet-stream' }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Demo load failed')
+    }
+  }, [handleFile])
+
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
@@ -530,7 +542,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v7.11.0</span>
+          <span className="header-ver">v7.12.0</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -613,15 +625,16 @@ export default function App() {
             <label htmlFor="pcap-input" className="drop-label">
               <div className="drop-icon-wrap"><IconUpload /></div>
               <p className="drop-primary">Drag a file or click to upload</p>
-              <p className="drop-hint">.pcap / .pcapng &nbsp;·&nbsp; up to 50 MB &nbsp;|&nbsp; .har / .log / .txt &nbsp;·&nbsp; up to 200 MB</p>
+              <p className="drop-hint">.pcap / .pcapng &nbsp;·&nbsp; up to 2 GB &nbsp;|&nbsp; .har / .log / .txt &nbsp;·&nbsp; up to 300 MB</p>
             </label>
           </div>
-          <div className="upload-or">
-            <span>or capture live from this PC</span>
+          <div className="upload-actions-row">
+            <button className="demo-btn" onClick={loadDemo}>▶ Try a demo capture</button>
+            <button className="live-capture-btn" onClick={() => setShowCapture(true)}>
+              🎙 Live Capture <span className="lc-beta">beta</span>
+            </button>
           </div>
-          <button className="live-capture-btn" onClick={() => setShowCapture(true)}>
-            🎙 Live Capture <span className="lc-beta">beta</span>
-          </button>
+          <p className="upload-demo-hint">New here? Load a sample capture to see the 5-minute triage in action.</p>
           <div className="feature-cards">
             <div className="feature-card">
               <span className="feature-icon">🔒</span>

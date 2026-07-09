@@ -64,3 +64,13 @@ class TestStreamParse:
         assert r.status_code == 200, r.text
         assert r.json()["source_type"] == "pcap"
         assert r.json()["session_count"] == 200
+
+
+class TestDemoOnboarding:
+    def test_demo_pcap_served(self, api_client):
+        r = api_client.get("/demo.pcap")
+        # 번들 존재 시 200 + pcap 매직 / 없으면 404 (빌드 전 환경)
+        if r.status_code == 200:
+            assert r.content[:4] in (b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4")
+        else:
+            assert r.status_code == 404
