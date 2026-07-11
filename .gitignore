@@ -13,3 +13,4 @@ build/
 .venv/
 venv/
 test_results.json
+logs/
