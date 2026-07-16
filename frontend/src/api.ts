@@ -158,7 +158,7 @@ export interface PanelData {
   panel4_http: { counts: Record<string, number>; groups: Record<string, number>; top_errors: ErrorEntry[] }
   panel5_anomalies: { rst_count: number; malformed_count: number; retransmit_count: number }
   panel6_ip_ranking: IpRankEntry[]
-  panel7_tls: { entries: TlsEntry[]; no_meta_count: number }
+  panel7_tls: { entries: TlsEntry[]; no_meta_count: number; handshake_ok?: number; handshake_fail?: number }
   panel8_dns: DnsEntry[]
   panel9_conversations: ConvEntry[]
   panel10_attacks: AttackEntry[]
@@ -173,7 +173,10 @@ export interface PortEntry { port: number; count: number }
 export interface BucketEntry { ts: number; bytes: number; count?: number; rst?: number; no_reply?: number; errors?: number }
 export interface ErrorEntry { status_code: number; count: number; path?: string }
 export interface IpRankEntry { ip: string; bytes: number; is_internal: boolean }
-export interface TlsEntry { sni: string; version: string; dst_ip: string }
+export interface TlsEntry {
+  sni: string; version: string; dst_ip: string
+  handshake?: string; fail_reason?: string; count?: number
+}
 export interface DnsEntry { domain: string; type: string; response?: string; nxdomain: boolean }
 
 export interface DnsPair {

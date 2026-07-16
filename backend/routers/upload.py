@@ -181,6 +181,13 @@ async def _finalize_upload(request, ext, sessions, pkt_map, icmp_events, source_
 
     sessions, pkt_map = SessionNormalizer().normalize(sessions, pkt_map)
 
+    # TLS 메타 주입 — SNI(접속 시도 도메인) + 핸드셰이크 수립/실패 판정 (Panel 7·필터용)
+    try:
+        from services.analytics.tls_enricher import TlsEnricher
+        TlsEnricher().enrich(sessions, pkt_map)
+    except Exception as exc:  # enrich 실패는 업로드를 막지 않는다
+        logger.warning("TLS enrich 실패: %s", exc)
+
     if len(sessions) == 0:
         detail = {"message": "No sessions were parsed (empty file or unrecognized format)", "errors": parse_warnings} \
                  if parse_warnings else "No sessions were parsed (empty file or unrecognized format)"
