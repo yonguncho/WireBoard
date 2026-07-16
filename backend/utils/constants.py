@@ -2,7 +2,7 @@
 import os
 import re
 
-APP_VERSION = "7.12.0"  # 단일 버전 정의 — main.py/PDF 리포트 등에서 참조
+APP_VERSION = "7.13.0"  # 단일 버전 정의 — main.py/PDF 리포트 등에서 참조
 
 
 def _env_bytes(name: str, default: int) -> int:

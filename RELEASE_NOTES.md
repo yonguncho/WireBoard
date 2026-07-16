@@ -1,3 +1,28 @@
+## WireBoard v7.13.0 (2026-07-16)
+
+TLS handshake outcome per SNI — see which sites connected and which failed.
+
+### New
+- **TLS handshake verdict in Panel 7** — every TLS session now shows the SNI
+  (the domain the client tried to reach) alongside whether the handshake actually
+  completed. Each ClientHello is classified as:
+  - **✓ established** — Finished observed, or ServerHello + chosen cipher (TLS 1.3).
+  - **✗ failed** — with the reason: a fatal TLS alert (e.g. `handshake_failure`),
+    an RST right after ClientHello, or no server response.
+  - **~ incomplete** — ServerHello seen but completion not confirmed (truncated capture).
+  Failed handshakes sort first for fast triage, with an `✓ established N / ✗ failed N`
+  summary. Fixes a latent gap where the TLS panel's SNI metadata was never populated.
+
+### Reliability
+- **Stateless `/health` liveness endpoint** + self-healing watchdog: the product now
+  recovers itself after a reboot/crash (5-minute scheduled check) instead of relying
+  on an external agent.
+
+### Tests
+- 921 passed (incl. 12 new TLS enricher tests: ClientHello / ServerHello / alert / RST).
+
+---
+
 ## WireBoard v7.12.0 (2026-07-09)
 
 Launch prep — licensing infrastructure, onboarding, legal clean-up.
