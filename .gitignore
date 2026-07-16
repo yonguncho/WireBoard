@@ -14,3 +14,4 @@ build/
 venv/
 test_results.json
 logs/
+wireboard_status.json
