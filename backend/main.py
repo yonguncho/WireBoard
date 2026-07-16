@@ -185,6 +185,15 @@ app.include_router(har_router)
 app.include_router(capture_router)
 app.include_router(license_router)
 
+
+# ── Stateless liveness probe (2026-07-11) ──
+# 외부 워치독이 캡처 업로드 없이 서버 생존을 확인할 수 있는 무상태 엔드포인트.
+# 기존 /api/health/{upload_id}는 세션별 진단이라 liveness 용도로 부적합.
+@app.get("/health", include_in_schema=False)
+async def _liveness():
+    return {"status": "healthy", "version": APP_VERSION, "port": 8764}
+
+
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(_STATIC_DIR):
     _assets_dir = os.path.join(_STATIC_DIR, "assets")
