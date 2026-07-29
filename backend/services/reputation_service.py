@@ -29,25 +29,33 @@ def _get_feodo_lock() -> asyncio.Lock:
         _FEODO_LOCK = asyncio.Lock()
     return _FEODO_LOCK
 
-_IPAPI_URL = "http://ip-api.com/json/{ip}?fields=countryCode,as,org,status"
+_IPAPI_URL = "https://ip-api.com/json/{ip}?fields=countryCode,as,org,status"
 _FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.json"
 _URLHAUS_URL = "https://urlhaus-api.abuse.ch/v1/host/"
 _ABUSEIPDB_URL = "https://api.abuseipdb.com/api/v2/check"
 
 _ABUSE_THRESHOLD = 70
 
-# ENABLE_EXTERNAL_REPUTATION=0 으로 설정하면 per-IP 외부 조회(ip-api, urlhaus)를 비활성화.
-# Feodo는 bulk blocklist 다운로드라 IP를 외부에 노출하지 않으므로 이 플래그와 무관하다.
+# 오프라인이 기본 태세다. 외부 조회는 명시적 옵트인일 때만 수행한다.
+# ENABLE_EXTERNAL_REPUTATION 을 1/true/yes/on 으로 설정해야 활성화되며,
+# 그 외의 값·미설정·오타는 모두 비활성화로 떨어진다(fail-closed).
+#
+# 이 플래그는 네 개 소스 **전부**를 덮는다:
+#   - ip-api / urlhaus / abuseipdb : 조회 IP가 그대로 외부로 나가는 per-IP 조회
+#   - feodo                        : IP를 노출하진 않지만 외부 네트워크 접속 자체가
+#                                    발생하므로, "외부 API 0건" 보장을 지키려면 함께 막아야 한다.
+#                                    단 게이트는 캐시 조회 아래에 두어, 이미 받아둔
+#                                    블록리스트는 오프라인에서도 계속 응답한다.
 _EXTERNAL_REPUTATION_ENABLED: bool = (
-    os.environ.get("ENABLE_EXTERNAL_REPUTATION", "1").strip().lower()
-    not in ("0", "false", "no", "off")
+    os.environ.get("ENABLE_EXTERNAL_REPUTATION", "0").strip().lower()
+    in ("1", "true", "yes", "on")
 )
 
 
 class ReputationService:
     async def _lookup_ipapi(self, ip: str) -> ReputationSourceResult:
         if not _EXTERNAL_REPUTATION_ENABLED:
-            return ReputationSourceResult(source="ip-api", is_reliable=False, note="외부 조회 비활성화 (ENABLE_EXTERNAL_REPUTATION=0)")
+            return ReputationSourceResult(source="ip-api", is_reliable=False, note="외부 조회 비활성화 (ENABLE_EXTERNAL_REPUTATION 미설정)")
         if not _HTTPX_AVAILABLE:
             return ReputationSourceResult(source="ip-api", is_reliable=False)
         try:
@@ -80,6 +88,14 @@ class ReputationService:
                 source="feodo",
                 is_malicious=(ip in _FEODO_CACHE),
                 is_reliable=True,
+            )
+        # 캐시 미스 이후부터가 실제 외부 접속이다 — 여기서 막는다.
+        # (위의 캐시 히트 분기는 그대로 통과하므로 받아둔 목록은 오프라인에서도 유효)
+        if not _EXTERNAL_REPUTATION_ENABLED:
+            return ReputationSourceResult(
+                source="feodo",
+                is_reliable=False,
+                note="외부 조회 비활성화 (ENABLE_EXTERNAL_REPUTATION 미설정)",
             )
         if not _HTTPX_AVAILABLE:
             return ReputationSourceResult(source="feodo", is_reliable=False)
@@ -115,7 +131,7 @@ class ReputationService:
 
     async def _lookup_urlhaus(self, ip: str) -> ReputationSourceResult:
         if not _EXTERNAL_REPUTATION_ENABLED:
-            return ReputationSourceResult(source="urlhaus", is_reliable=False, note="외부 조회 비활성화 (ENABLE_EXTERNAL_REPUTATION=0)")
+            return ReputationSourceResult(source="urlhaus", is_reliable=False, note="외부 조회 비활성화 (ENABLE_EXTERNAL_REPUTATION 미설정)")
         if not _HTTPX_AVAILABLE:
             return ReputationSourceResult(source="urlhaus", is_reliable=False)
         try:
@@ -133,6 +149,14 @@ class ReputationService:
             return ReputationSourceResult(source="urlhaus", is_reliable=False)
 
     async def _lookup_abuseipdb(self, ip: str) -> ReputationSourceResult:
+        # ABUSEIPDB_API_KEY 만으로 게이트되어 있어, 오프라인 스위치를 꺼도 키가
+        # 설정돼 있으면 캡처 IP가 계속 외부로 나가던 구멍을 닫는다.
+        if not _EXTERNAL_REPUTATION_ENABLED:
+            return ReputationSourceResult(
+                source="abuseipdb",
+                is_reliable=False,
+                note="외부 조회 비활성화 (ENABLE_EXTERNAL_REPUTATION 미설정)",
+            )
         api_key = os.environ.get("ABUSEIPDB_API_KEY", "")
         if not api_key:
             return ReputationSourceResult(

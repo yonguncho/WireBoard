@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """Edge cases: reputation service error/timeout/quota handling."""
 import asyncio
+import importlib
 import os
 import sys
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,7 +15,26 @@ sys.path.insert(0, os.path.abspath(BACKEND_DIR))
 pytest.importorskip("httpx")
 
 import httpx
+import services.reputation_service as reputation_service
 from services.reputation_service import ReputationService
+
+
+@pytest.fixture
+def external_enabled(monkeypatch):
+    """외부 조회를 명시적으로 켠다.
+
+    v7.13.0 까지는 _EXTERNAL_REPUTATION_ENABLED 의 기본값이 True 였기 때문에
+    아래 테스트들이 아무 설정 없이 통과했다. 기본값이 오프라인(옵트인)으로
+    바뀌면서, 테스트가 암묵적으로 의존하던 전제를 스스로 밝히도록 만든 것이다.
+    검증 대상 로직 자체는 하나도 완화하지 않았다 — 각 조회의 성공/악성 판정
+    경로는 그대로 실행된다.
+    """
+    monkeypatch.setattr(reputation_service, "_EXTERNAL_REPUTATION_ENABLED", True)
+
+
+def _flag_value() -> bool:
+    """현재 환경변수로 모듈을 다시 읽어 플래그 판정 결과를 얻는다."""
+    return importlib.reload(reputation_service)._EXTERNAL_REPUTATION_ENABLED
 
 
 def _run(coro):
@@ -66,7 +87,7 @@ class TestIpApiEdge:
             result = _run(svc._lookup_ipapi("1.2.3.4"))
         assert result.is_reliable is False
 
-    def test_success_returns_reliable(self):
+    def test_success_returns_reliable(self, external_enabled):
         svc = ReputationService()
         json_data = {"countryCode": "US", "as": "AS1234 Acme ISP", "org": "Acme"}
         with patch("httpx.AsyncClient") as mock_cls:
@@ -100,7 +121,7 @@ class TestFeodoEdge:
             result = _run(svc._lookup_feodo("1.2.3.4"))
         assert result.is_reliable is False
 
-    def test_ip_in_blocklist_is_malicious(self):
+    def test_ip_in_blocklist_is_malicious(self, external_enabled):
         svc = ReputationService()
         blocklist = [{"ip_address": "1.2.3.4"}, {"ip_address": "5.6.7.8"}]
         with patch("httpx.AsyncClient") as mock_cls:
@@ -150,7 +171,7 @@ class TestUrlhausEdge:
             result = _run(svc._lookup_urlhaus("1.2.3.4"))
         assert result.is_reliable is False
 
-    def test_host_match_is_malicious(self):
+    def test_host_match_is_malicious(self, external_enabled):
         svc = ReputationService()
         with patch("httpx.AsyncClient") as mock_cls:
             mock_ctx = AsyncMock()
@@ -178,14 +199,14 @@ class TestUrlhausEdge:
 # ── AbuseIPDB ────────────────────────────────────────────────────
 
 class TestAbuseIPDBEdge:
-    def test_no_api_key_returns_note(self):
+    def test_no_api_key_returns_note(self, external_enabled):
         svc = ReputationService()
         with patch.dict(os.environ, {"ABUSEIPDB_API_KEY": ""}):
             result = _run(svc._lookup_abuseipdb("1.2.3.4"))
         assert result.note is not None
         assert "key" in result.note.lower() or "configured" in result.note.lower()
 
-    def test_quota_exceeded_429_returns_note(self):
+    def test_quota_exceeded_429_returns_note(self, external_enabled):
         svc = ReputationService()
         with patch.dict(os.environ, {"ABUSEIPDB_API_KEY": "fake-key"}):
             with patch("httpx.AsyncClient") as mock_cls:
@@ -209,7 +230,7 @@ class TestAbuseIPDBEdge:
                 result = _run(svc._lookup_abuseipdb("1.2.3.4"))
         assert result.is_reliable is False
 
-    def test_high_abuse_score_is_malicious(self):
+    def test_high_abuse_score_is_malicious(self, external_enabled):
         svc = ReputationService()
         resp_data = {"data": {"abuseConfidenceScore": 90, "countryCode": "RU"}}
         with patch.dict(os.environ, {"ABUSEIPDB_API_KEY": "fake-key"}):
@@ -277,3 +298,64 @@ class TestLookupAllAggregation:
              patch.object(svc, "_lookup_abuseipdb", new=AsyncMock(return_value=clean)):
             result = _run(svc.lookup_all("1.2.3.4"))
         assert result.is_malicious is False
+
+
+# ── F3 회귀: 오프라인이 기본 태세인지 ────────────────────────────
+
+class TestExternalReputationDefaultOff:
+    """기본 설정에서 캡처 유래 IP가 밖으로 나가지 않아야 한다."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_module_flag(self):
+        """_flag_value() 의 importlib.reload 가 다른 테스트로 새지 않게 되돌린다."""
+        yield
+        os.environ.pop("ENABLE_EXTERNAL_REPUTATION", None)
+        importlib.reload(reputation_service)
+
+    def test_unset_env_means_disabled(self, monkeypatch):
+        monkeypatch.delenv("ENABLE_EXTERNAL_REPUTATION", raising=False)
+        assert _flag_value() is False
+
+    @pytest.mark.parametrize("value", ["", "0", "false", "no", "off", "2", "y", "enabled", "  ", "nonsense"])
+    def test_non_optin_values_stay_disabled(self, monkeypatch, value):
+        monkeypatch.setenv("ENABLE_EXTERNAL_REPUTATION", value)
+        assert _flag_value() is False
+
+    @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on", " On "])
+    def test_explicit_optin_enables(self, monkeypatch, value):
+        monkeypatch.setenv("ENABLE_EXTERNAL_REPUTATION", value)
+        assert _flag_value() is True
+
+    @pytest.mark.parametrize("method,source", [
+        ("_lookup_ipapi", "ip-api"),
+        ("_lookup_urlhaus", "urlhaus"),
+        ("_lookup_abuseipdb", "abuseipdb"),
+    ])
+    def test_per_ip_lookups_make_no_request_when_disabled(self, monkeypatch, method, source):
+        monkeypatch.setattr(reputation_service, "_EXTERNAL_REPUTATION_ENABLED", False)
+        # AbuseIPDB 는 키가 있어도 막혀야 한다 (v7.13.0 에서는 키만으로 게이트됨)
+        monkeypatch.setenv("ABUSEIPDB_API_KEY", "dummy-key")
+        with patch("httpx.AsyncClient") as client_cls:
+            res = _run(getattr(ReputationService(), method)("203.0.113.77"))
+        assert client_cls.call_count == 0, f"{source} 가 외부 접속을 시도했다"
+        assert res.is_reliable is False
+        assert res.source == source
+
+    def test_feodo_download_is_gated_when_disabled(self, monkeypatch):
+        monkeypatch.setattr(reputation_service, "_EXTERNAL_REPUTATION_ENABLED", False)
+        monkeypatch.setattr(reputation_service, "_FEODO_CACHE_TS", 0.0)  # 캐시 만료 상태
+        with patch("httpx.AsyncClient") as client_cls:
+            res = _run(ReputationService()._lookup_feodo("203.0.113.77"))
+        assert client_cls.call_count == 0
+        assert res.is_reliable is False
+
+    def test_warm_feodo_cache_still_answers_when_disabled(self, monkeypatch):
+        """게이트는 캐시 조회 '아래'에 있어야 한다 — 받아둔 목록은 오프라인에서도 유효."""
+        monkeypatch.setattr(reputation_service, "_EXTERNAL_REPUTATION_ENABLED", False)
+        monkeypatch.setattr(reputation_service, "_FEODO_CACHE", {"203.0.113.77"})
+        monkeypatch.setattr(reputation_service, "_FEODO_CACHE_TS", time.monotonic())
+        with patch("httpx.AsyncClient") as client_cls:
+            res = _run(ReputationService()._lookup_feodo("203.0.113.77"))
+        assert client_cls.call_count == 0
+        assert res.is_reliable is True
+        assert res.is_malicious is True

@@ -21,8 +21,15 @@ already **opt-in**: with no `ABUSEIPDB_API_KEY` set, that lookup is skipped
 gracefully (`reputation_service._lookup_abuseipdb`). So no accidental cost.
 
 Controls:
-- `ENABLE_EXTERNAL_REPUTATION=0` → disables per-IP lookups (ip-api, URLhaus).
-  Feodo (bulk, privacy-safe) is unaffected.
+- **Offline is the default.** External lookups are opt-in: set
+  `ENABLE_EXTERNAL_REPUTATION` to `1`/`true`/`yes`/`on` to enable them. Any other
+  value — including unset, empty, or a typo — leaves them disabled (fail-closed).
+- The switch covers **all four** sources: ip-api, URLhaus and AbuseIPDB (per-IP
+  lookups that send the queried IP out) and Feodo (a bulk download that sends no
+  IP, but is still an outbound connection). Note that AbuseIPDB was previously
+  gated only by `ABUSEIPDB_API_KEY`, so it ignored this switch entirely.
+- The Feodo gate sits *below* the cache lookup, so an already-downloaded
+  blocklist keeps answering after the switch is turned off.
 - `ABUSEIPDB_API_KEY` unset → AbuseIPDB skipped. This is the default.
 
 ## Recommended free, keyless additions (bulk = privacy-safe, no per-query cost)
@@ -64,5 +71,5 @@ existing Feodo pattern (download + cache + local membership test):
   they don't leak the customer's capture IPs to third parties.
 - Cache bulk lists (Feodo already uses a 1h TTL) so one download serves the whole
   session; surface the list's age in the UI so results aren't trusted blindly.
-- Keep the "offline" switch (`ENABLE_EXTERNAL_REPUTATION=0`) prominent for
+- Keep the "offline" default (`ENABLE_EXTERNAL_REPUTATION` unset) prominent for
   air-gapped / regulated environments.

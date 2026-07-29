@@ -5,6 +5,7 @@
 여기서는 필터 생성·검증·에러 처리(권한/드라이버 부재)를 테스트한다.
 """
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -82,3 +83,64 @@ class TestCaptureEndpoints:
                             json={"iface": "__nonexistent__", "src": "bad-ip"})
         # capability 없으면 501, 있으면 iface 검증(400) 또는 ip 검증(400)
         assert r.status_code in (400, 501, 403)
+
+
+# ── F1 회귀: 자동 종료된 캡처의 버퍼 해제 ────────────────────────
+
+class _FakeSniffer:
+    """AsyncSniffer 대역 — start/stop 만 흉내내고 결과 버퍼를 들고 있는다."""
+
+    def __init__(self, *a, **kw):
+        self.results = [object()] * 5   # 수집된 패킷이 있는 상태
+        self.running = True
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+
+class TestAutoStopReleasesBuffer:
+    """자동 종료 후 /stop 으로 수거되지 않은 캡처가 영구히 남지 않아야 한다."""
+
+    @pytest.fixture
+    def fast_capture(self, monkeypatch):
+        import scapy.all as scapy
+
+        monkeypatch.setattr(cap, "_capture_available", lambda: (True, ""))
+        monkeypatch.setattr(cap, "_iface_list", lambda: [{"name": "test0"}])
+        monkeypatch.setattr(scapy, "AsyncSniffer", _FakeSniffer)
+        monkeypatch.setattr(cap, "_AUTO_STOP_GRACE_SECONDS", 0.3)
+        cap._captures.clear()
+        yield
+        cap._captures.clear()
+
+    def _start(self):
+        import asyncio
+
+        # asyncio.run() 은 루프를 닫아버려, get_event_loop() 를 쓰는 다른
+        # 테스트 모듈(test_reputation_edge 등)을 깨뜨린다. 기존 패턴을 따른다.
+        body = cap.CaptureStartRequest(iface="test0", max_packets=100, max_seconds=1)
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(cap.capture_start(body))["capture_id"]
+
+    def test_entry_is_removed_after_grace_period(self, fast_capture):
+        cap_id = self._start()
+        assert cap_id in cap._captures
+        time.sleep(1.0 + 0.3 + 0.7)          # max_seconds + grace + 여유
+        assert cap_id not in cap._captures, "자동 종료된 캡처가 _captures 에 남았다"
+
+    def test_buffer_is_emptied_so_ram_is_freed(self, fast_capture):
+        cap_id = self._start()
+        sniffer = cap._captures[cap_id].sniffer
+        time.sleep(1.0 + 0.3 + 0.7)
+        assert sniffer.results == [], "패킷 버퍼가 해제되지 않았다"
+
+    def test_explicit_stop_still_wins_before_grace(self, fast_capture):
+        """정상 흐름(UI 는 1초 폴링) 에서는 reaper 가 데이터를 뺏어가면 안 된다."""
+        cap_id = self._start()
+        time.sleep(1.0 + 0.1)                # 자동 종료 직후, 유예 만료 전
+        c = cap._captures.get(cap_id)
+        assert c is not None, "유예 시간 안인데 항목이 사라졌다"
+        assert len(c.sniffer.results) == 5, "유예 시간 안인데 버퍼가 비워졌다"

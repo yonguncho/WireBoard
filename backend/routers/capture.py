@@ -35,6 +35,11 @@ router = APIRouter()
 _MAX_PACKETS_CAP = 100_000
 _MAX_SECONDS_CAP = 300
 _MAX_CONCURRENT = 3
+# 자동 종료된 캡처를 /stop 으로 수거하지 않았을 때 버퍼를 버리기까지의 유예 시간.
+# 이 값이 없으면 자동 종료된 캡처가 최대 10만 패킷을 담은 채 프로세스가 끝날
+# 때까지 _captures 에 남는다 (동시 캡처 슬롯은 stopped 플래그로 이미 풀린 상태라
+# 반복 시작이 가능해 RAM 이 계속 쌓인다).
+_AUTO_STOP_GRACE_SECONDS = 60
 
 _captures: dict[str, "_LiveCapture"] = {}
 _lock = threading.Lock()
@@ -189,6 +194,19 @@ async def capture_start(body: CaptureStartRequest):
         raise HTTPException(status_code=500, detail={"code": "capture_error", "message": f"캡처 시작 오류: {exc}"})
 
     # 시간 상한 도달 시 자동 종료 타이머
+    def _release():
+        """유예 시간 내에 수거되지 않은 캡처의 패킷 버퍼를 해제한다."""
+        with _lock:
+            c = _captures.pop(cap_id, None)
+        if c is None:
+            return          # 이미 /stop 이 수거해 갔다
+        try:
+            c.sniffer.results = []
+        except Exception:
+            pass
+        logger.info("미수거 캡처 해제: id=%s (자동 종료 후 %ds 경과)",
+                    cap_id, _AUTO_STOP_GRACE_SECONDS)
+
     def _auto_stop():
         c = _captures.get(cap_id)
         if c and not c.stopped:
@@ -197,6 +215,12 @@ async def capture_start(body: CaptureStartRequest):
             except Exception:
                 pass
             c.stopped = True
+            # 유예 시간 안에 /stop 으로 수거되지 않으면 버퍼를 버린다.
+            # /stop 은 c.timer.cancel() 을 호출하므로 정상 흐름에서는 발동하지 않는다.
+            reaper = threading.Timer(_AUTO_STOP_GRACE_SECONDS, _release)
+            reaper.daemon = True
+            reaper.start()
+            c.timer = reaper
 
     timer = threading.Timer(max_seconds, _auto_stop)
     timer.daemon = True

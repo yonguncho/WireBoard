@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -69,6 +69,53 @@ _SPA_CSP = (
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data:;"
 )
+
+
+# DNS 리바인딩 방어용 Host 허용목록.
+# 127.0.0.1 바인드는 네트워크 도달성만 제한할 뿐, 공격자가 자신의 도메인을
+# 127.0.0.1로 재해석시키는 DNS 리바인딩은 막지 못한다. 리바인딩된 요청에는
+# 공격자 도메인이 Host 헤더로 남으므로, 루프백 이름이 아닌 Host를 거부한다.
+# "testserver"는 Starlette TestClient의 기본 Host이며 등록 가능한 공개 도메인이
+# 아니어서 리바인딩 대상이 될 수 없으므로 함께 허용한다.
+_ALLOWED_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]", "testserver"})
+
+
+def _host_name(value: str) -> str:
+    """Host/Origin 값에서 포트를 떼고 호스트명만 돌려준다 (IPv6 대괄호는 유지)."""
+    value = value.strip().lower()
+    if value.startswith("["):            # [::1]:8764
+        end = value.find("]")
+        return value[: end + 1] if end != -1 else value
+    return value.rsplit(":", 1)[0] if ":" in value else value
+
+
+class HostValidationMiddleware(BaseHTTPMiddleware):
+    """Host/Origin 검증 — DNS 리바인딩과 교차 출처 호출을 차단한다.
+
+    Host 검사는 리바인딩(공격자 도메인이 127.0.0.1로 해석된 상태)을 막고,
+    Origin 검사는 리바인딩 이전의 평범한 교차 출처 요청을 막는다. Origin이
+    없는 요청(동일 출처 GET, 로컬 CLI)은 Host 검사만 거친다. Origin: null
+    (샌드박스 iframe)은 "://"가 없어 거부된다.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        host = request.headers.get("host", "")
+        if host and _host_name(host) not in _ALLOWED_HOSTS:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": {"code": "invalid_host", "msg": "Host header not allowed"}},
+            )
+
+        origin = request.headers.get("origin", "")
+        if origin:
+            _, sep, rest = origin.partition("://")
+            if not sep or _host_name(rest) not in _ALLOWED_HOSTS:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": {"code": "cross_origin_denied", "msg": "Cross-origin request denied"}},
+                )
+
+        return await call_next(request)
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -145,6 +192,7 @@ from utils.constants import APP_VERSION
 
 app = FastAPI(title="WireBoard", version=APP_VERSION)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(HostValidationMiddleware)
 app.add_middleware(StructuredLoggingMiddleware)
 
 _annotations_lock = threading.Lock()
