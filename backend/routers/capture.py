@@ -53,6 +53,7 @@ class _LiveCapture:
     started_at: float
     max_packets: int
     max_seconds: float
+    capture_token: str        # 기본값 없음 — 토큰 없는 캡처가 생기면 안 된다
     timer: object = None
     stopped: bool = False
 
@@ -171,6 +172,10 @@ async def capture_start(body: CaptureStartRequest):
     max_seconds = max(1, min(int(body.max_seconds), _MAX_SECONDS_CAP))
 
     cap_id = str(uuid.uuid4())
+    # 업로드 경로(upload.py)와 동일하게 128비트 토큰을 발급한다.
+    # start 는 발급 지점이라 토큰을 요구할 수 없고, 교차 출처 호출은
+    # main.py 의 HostValidationMiddleware(Origin 가드)가 막는다.
+    capture_token = secrets.token_hex(16)
 
     # 패킷 수 상한 도달 시 자동 종료
     def _stop_filter(pkt):
@@ -230,20 +235,25 @@ async def capture_start(body: CaptureStartRequest):
         _captures[cap_id] = _LiveCapture(
             sniffer=sniffer, iface=body.iface, bpf=bpf,
             started_at=time.time(), max_packets=max_packets,
-            max_seconds=max_seconds, timer=timer,
+            max_seconds=max_seconds, capture_token=capture_token, timer=timer,
         )
     logger.info("라이브 캡처 시작: id=%s iface=%s bpf=%r limit=%d/%ds",
                 cap_id, body.iface, bpf, max_packets, max_seconds)
-    return {"capture_id": cap_id, "bpf": bpf, "max_packets": max_packets, "max_seconds": max_seconds}
+    return {"capture_id": cap_id, "capture_token": capture_token, "bpf": bpf,
+            "max_packets": max_packets, "max_seconds": max_seconds}
 
 
 @router.get("/api/capture/{capture_id}/status")
-async def capture_status(capture_id: str):
+async def capture_status(
+    capture_id: str,
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
+):
     if not UUID_RE.match(capture_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "capture_id must be a valid UUID"})
     c = _captures.get(capture_id)
     if c is None:
         raise HTTPException(status_code=404, detail={"code": "capture_not_found", "message": "Capture not found"})
+    check_capture_token(c, x_upload_token)
     count = len(getattr(c.sniffer, "results", []) or [])
     running = (not c.stopped) and getattr(c.sniffer, "running", False)
     return {
@@ -254,12 +264,17 @@ async def capture_status(capture_id: str):
 
 
 @router.post("/api/capture/{capture_id}/stop")
-async def capture_stop(capture_id: str, request: Request):
+async def capture_stop(
+    capture_id: str,
+    request: Request,
+    x_upload_token: str | None = Header(None, alias="X-Upload-Token"),
+):
     if not UUID_RE.match(capture_id):
         raise HTTPException(status_code=400, detail={"code": "invalid_uuid", "msg": "capture_id must be a valid UUID"})
     c = _captures.get(capture_id)
     if c is None:
         raise HTTPException(status_code=404, detail={"code": "capture_not_found", "message": "Capture not found"})
+    check_capture_token(c, x_upload_token)
 
     import scapy.all as scapy  # noqa: PLC0415
 

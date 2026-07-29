@@ -14,7 +14,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 from services.export.state_exporter import StateExporter
-from services.export_service import ExportService
+from services.export_service import ExportService, ExportDependencyMissing
 from services.report.pdf_exporter import PdfExporter
 from services.narrative.capture_summary import summarize_capture
 
@@ -125,6 +125,12 @@ async def export_flexible(
 
     try:
         data = _export_svc.export(sessions, attacks, fmt)
+    except ExportDependencyMissing as exc:
+        # 이 빌드에 없는 선택적 의존성 — 원인을 밝혀서 501 로 닫는다 (기존엔 500)
+        raise HTTPException(status_code=501, detail={
+            "code": "export_format_unavailable",
+            "msg": str(exc),
+        })
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

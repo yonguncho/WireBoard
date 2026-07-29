@@ -10,6 +10,27 @@ from models.session import SessionModel
 _FORMULA_STARTERS = frozenset("=+-@\t\r|%")
 
 
+class ExportDependencyMissing(RuntimeError):
+    """선택적 내보내기 의존성이 이 빌드에 없을 때.
+
+    excel(openpyxl)·pdf(reportlab)는 선택적 의존성이다. requirements.txt 의
+    필수 목록에도, WireBoard.spec 의 hiddenimports 에도 없으므로 배포 EXE 에는
+    포함되지 않는다. 그 상태에서 ImportError 가 그대로 올라가 HTTP 500 이 되던
+    것을, 원인을 밝히는 501 로 바꾸기 위한 예외다.
+
+    참고: UI 가 쓰는 PDF 리포트 경로는 POST /api/export/{id}/pdf 이며,
+    reportlab 없이 순수 파이썬으로 동작하므로 이 예외와 무관하다.
+    """
+
+    def __init__(self, fmt: str, module: str):
+        self.fmt = fmt
+        self.module = module
+        super().__init__(
+            f"{fmt} export requires the optional '{module}' package, "
+            f"which is not available in this build"
+        )
+
+
 def _sc(value: str) -> str:
     """스프레드시트 수식 인젝션 방지: 수식 시작 문자 앞에 탭 접두사 추가."""
     if value and value[0] in _FORMULA_STARTERS:
@@ -78,7 +99,10 @@ class ExportService:
         sessions: List[SessionModel],
         attacks: List[AttackDetectionResult],
     ) -> bytes:
-        import openpyxl
+        try:
+            import openpyxl
+        except ImportError as exc:
+            raise ExportDependencyMissing("excel", "openpyxl") from exc
         wb = openpyxl.Workbook()
         ws_s = wb.active
         ws_s.title = "Sessions"
@@ -101,10 +125,13 @@ class ExportService:
         return buf.getvalue()
 
     def _to_pdf(self, sessions: List[SessionModel]) -> bytes:
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import letter
-        from reportlab.lib.styles import getSampleStyleSheet
-        from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import letter
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
+        except ImportError as exc:
+            raise ExportDependencyMissing("pdf", "reportlab") from exc
 
         buf = io.BytesIO()
         doc = SimpleDocTemplate(buf, pagesize=letter)

@@ -23,6 +23,8 @@ export function LiveCapture({ onCaptured, onClose }: Props) {
   const [maxPackets, setMaxPackets] = useState(5000)
   const [maxSeconds, setMaxSeconds] = useState(60)
   const [captureId, setCaptureId] = useState<string | null>(null)
+  // start 응답으로 받은 캡처 토큰. status/stop 이 이 토큰을 요구한다.
+  const [captureTok, setCaptureTok] = useState<string | null>(null)
   const [pktCount, setPktCount] = useState(0)
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -47,15 +49,16 @@ export function LiveCapture({ onCaptured, onClose }: Props) {
     return () => { if (pollRef.current) window.clearInterval(pollRef.current) }
   }, [])
 
-  const poll = useCallback((id: string) => {
+  // 토큰을 인자로 넘긴다 — useCallback([]) 안에서 state 를 읽으면 stale closure 가 된다
+  const poll = useCallback((id: string, token: string) => {
     pollRef.current = window.setInterval(async () => {
       try {
-        const s = await getCaptureStatus(id)
+        const s = await getCaptureStatus(id, token)
         setPktCount(s.packet_count)
         setElapsed(s.elapsed)
         if (!s.running && s.stopped) {   // auto-stopped (limit reached)
           if (pollRef.current) window.clearInterval(pollRef.current)
-          finalize(id)
+          finalize(id, token)
         }
       } catch { /* keep polling */ }
     }, 1000)
@@ -74,28 +77,29 @@ export function LiveCapture({ onCaptured, onClose }: Props) {
         max_seconds: maxSeconds,
       })
       setCaptureId(r.capture_id)
+      setCaptureTok(r.capture_token)
       setPktCount(0); setElapsed(0)
       setPhase('running')
-      poll(r.capture_id)
+      poll(r.capture_id, r.capture_token)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }
 
-  const finalize = async (id: string) => {
+  const finalize = async (id: string, token: string) => {
     setPhase('stopping')
     try {
-      const res = await stopCapture(id)
+      const res = await stopCapture(id, token)
       onCaptured(res)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-      setPhase('idle'); setCaptureId(null)
+      setPhase('idle'); setCaptureId(null); setCaptureTok(null)
     }
   }
 
   const stop = () => {
     if (pollRef.current) window.clearInterval(pollRef.current)
-    if (captureId) finalize(captureId)
+    if (captureId && captureTok) finalize(captureId, captureTok)
   }
 
   return (

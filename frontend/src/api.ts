@@ -81,20 +81,24 @@ export async function getCaptureInterfaces(): Promise<CaptureIface[]> {
   if (!r.ok) return handleError(r, 'Interface list failed')
   return (await r.json()).interfaces
 }
-export async function startCapture(body: CaptureStartBody): Promise<{ capture_id: string; bpf: string; max_packets: number; max_seconds: number }> {
+export async function startCapture(body: CaptureStartBody): Promise<{ capture_id: string; capture_token: string; bpf: string; max_packets: number; max_seconds: number }> {
   const r = await fetch(`${BASE}/api/capture/start`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   })
   if (!r.ok) return handleError(r, 'Capture start failed')
   return r.json()
 }
-export async function getCaptureStatus(id: string): Promise<CaptureStatus> {
-  const r = await fetch(`${BASE}/api/capture/${id}/status`)
+export async function getCaptureStatus(id: string, capture_token?: string): Promise<CaptureStatus> {
+  const r = await fetch(`${BASE}/api/capture/${id}/status`, {
+    headers: tokenHeader(undefined, capture_token),
+  })
   if (!r.ok) return handleError(r, 'Capture status failed')
   return r.json()
 }
-export async function stopCapture(id: string): Promise<CaptureResult> {
-  const r = await fetch(`${BASE}/api/capture/${id}/stop`, { method: 'POST' })
+export async function stopCapture(id: string, capture_token?: string): Promise<CaptureResult> {
+  const r = await fetch(`${BASE}/api/capture/${id}/stop`, {
+    method: 'POST', headers: tokenHeader(undefined, capture_token),
+  })
   if (!r.ok) return handleError(r, 'Capture stop failed')
   const data = await r.json()
   if (data.upload_id && data.capture_token) setCaptureToken(data.upload_id, data.capture_token)

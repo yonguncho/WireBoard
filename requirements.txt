@@ -6,3 +6,10 @@ dpkt>=1.9.8
 scapy>=2.5.0
 geoip2>=4.8.0
 yara-python>=4.5.0
+
+# --- 선택적: POST /api/export 의 excel/pdf 포맷에만 필요 ---
+# 배포 EXE 에는 포함하지 않는다(WireBoard.spec hiddenimports 에도 없음).
+# 없으면 해당 포맷 요청이 501 export_format_unavailable 로 닫힌다.
+# UI 가 쓰는 PDF 리포트(POST /api/export/{id}/pdf)는 순수 파이썬이라 무관하다.
+# openpyxl>=3.1     # excel
+# reportlab>=4.0    # pdf
