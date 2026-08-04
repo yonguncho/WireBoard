@@ -542,7 +542,7 @@ export default function App() {
         <div className="header-brand">
           <IconWave />
           <span className="header-logo">WireBoard</span>
-          <span className="header-ver">v7.13.3</span>
+          <span className="header-ver">v7.13.4</span>
         </div>
         {meta && (
           <div className="header-file-info">
@@ -797,12 +797,17 @@ export default function App() {
                 <PCard title="Traffic Timeline" wide>
                   <Panel3Timeline data={panels.panel3_timeline} uploadId={meta.uploadId} />
                 </PCard>
-                <PCard title="IP Ranking (click → drill down)">
-                  <Panel6IpRanking data={panels.panel6_ip_ranking} uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
-                </PCard>
-                <PCard title="Top Conversations (click → session)">
-                  <Panel9Conversations data={panels.panel9_conversations} uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
-                </PCard>
+                {/* 전체폭 행으로 감싼다 — .panel-grid 는 wide 카드가 모든 트랙을
+                    점유해 auto-fit 이 빈 트랙을 접지 못하므로, 이 두 카드만
+                    따로 grid 를 만들어 남는 폭을 나눠 갖게 한다 */}
+                <div className="panel-row-2">
+                  <PCard title="IP Ranking (click → drill down)">
+                    <Panel6IpRanking data={panels.panel6_ip_ranking} uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
+                  </PCard>
+                  <PCard title="Top Conversations (click → session)">
+                    <Panel9Conversations data={panels.panel9_conversations} uploadId={meta.uploadId} onFlowSelect={setFlowSessionId} />
+                  </PCard>
+                </div>
               </>
             )}
 

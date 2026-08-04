@@ -1302,6 +1302,18 @@ button.stat-card:focus-visible { outline: 2px solid var(--blue); outline-offset:
 }
 .overview-bottom-row .panel-card { margin: 0; }
 
+/* 전체폭 2단 행. .panel-grid 안에 wide 카드(grid-column:1/-1)가 있으면 모든
+   트랙이 점유되어 auto-fit 이 빈 트랙을 접지 못한다. 그 결과 일반 카드는
+   최소폭(360px) 트랙 하나에 갇혀 남는 공간을 못 쓴다. 자체 grid 를 가진 행으로
+   감싸 두 카드가 전체 폭을 나눠 갖게 한다 (Traffic 탭의 IP Ranking /
+   Top Conversations). 좁은 화면에서는 minmax 로 자동 1단이 된다. */
+.panel-row-2 {
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 16px;
+}
+.panel-row-2 .panel-card { margin: 0; min-width: 0; }
+
 /* ── Traffic Overview (diagnostic dashboard) ─────────────────────────────── */
 .to-wrap { grid-column:1/-1; display:flex; flex-direction:column; gap:16px; }
 .to-stat-strip { display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px; }
