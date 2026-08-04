@@ -781,7 +781,7 @@ body {
 .tab-btn:hover { color:var(--txt-primary) }
 .tab-btn.active { color:var(--blue);border-bottom-color:var(--blue) }
 .tab-icon { opacity:.7;font-size:12px }
-.panel-grid { grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;display:grid }
+.panel-grid { grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;display:grid }
 .panel-card { background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);flex-direction:column;display:flex;overflow:hidden }
 .panel-card.wide { grid-column:1/-1 }
 .panel-card-title { color:var(--txt-secondary);text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--card-border);background:#ffffff04;padding:12px 16px 10px;font-size:11px;font-weight:600 }
