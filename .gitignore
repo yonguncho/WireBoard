@@ -15,3 +15,6 @@ venv/
 test_results.json
 logs/
 wireboard_status.json
+
+watchdog_loop.log
+watchdog_unkillable.json
