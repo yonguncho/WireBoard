@@ -38,15 +38,24 @@ function Stop-ProcessBounded([int]$ProcId, [int]$TimeoutSec = 5) {
 
 # 종료 불가로 판명된 프로세스 목록(PID + 기동시각으로 키 구성 — PID 재사용 오탐 방지).
 # 매 5분마다 재시도하면 그때마다 taskkill 이 하나씩 새는 셈이라, 한 번 실패하면 기록해 두고 건너뛴다.
+# 저장 형식은 벌거벗은 배열이 아니라 { "pids": [...] } 로 고정한다.
+# 배열을 그대로 ConvertTo-Json/ConvertFrom-Json 왕복시키면 PowerShell 5.1 이 매 회차 한 겹씩
+# 감싸서 [{"value":[...],"Count":2}, ...] 로 부패하고, 그러면 -in 매칭이 실패해
+# 종료 불가 프로세스를 5분마다 영원히 재시도한다(= 막으려던 누수가 그대로 발생). 2026-08-31 실제 발생.
 function Get-Unkillable {
-  if (Test-Path $UnkillFile) { try { return @(Get-Content $UnkillFile -Raw | ConvertFrom-Json) } catch { return @() } }
+  if (Test-Path $UnkillFile) {
+    try {
+      $o = Get-Content $UnkillFile -Raw | ConvertFrom-Json
+      return @($o.pids | Where-Object { $_ -is [string] })
+    } catch { return @() }
+  }
   return @()
 }
 function Add-Unkillable([string]$key) {
   $cur = @(Get-Unkillable)
   if ($key -notin $cur) {
-    $cur += $key
-    [System.IO.File]::WriteAllText($UnkillFile, (ConvertTo-Json @($cur)), $utf8)
+    $obj = [PSCustomObject]@{ pids = @($cur) + $key }
+    [System.IO.File]::WriteAllText($UnkillFile, (ConvertTo-Json $obj), $utf8)
   }
 }
 function Get-ProcKey($proc) { "$($proc.ProcessId)_$($proc.CreationDate.ToString('yyyyMMddHHmmss'))" }
