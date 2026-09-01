@@ -77,11 +77,19 @@ if (Test-Path $StatusFile) {
 }
 
 # ── 1) 헬스 폴링 ──
+# 1회 실패로 down 판정하지 않는다 — 재기동은 멀쩡한 서비스를 죽이는 파괴적 조치라
+# 오탐 비용이 미탐 비용보다 훨씬 크다(다음 주기에 다시 본다).
+# 2026-08-31 실제 사고: 이 PC가 느려지면서 워치독 프로세스 자체가 기어가는 상태가 되자
+# 5초 타임아웃을 넘겨 down 오판 → 정상 동작 중이던 WireBoard 를 하루 3회(14:12·18:55·20:58) 죽이고 재기동했다.
+# 직전 이틀은 무중단이었고, 매 확인 시점의 제품은 정상(/health 120~1160ms)이었다.
 $alive = $false
-try {
-  $r = Invoke-WebRequest -Uri $HealthUrl -TimeoutSec 5 -UseBasicParsing
-  if ($r.StatusCode -eq 200 -and $r.Content -match '"status"\s*:\s*"healthy"') { $alive = $true }
-} catch { $alive = $false }
+foreach ($attempt in 1..3) {
+  try {
+    $r = Invoke-WebRequest -Uri $HealthUrl -TimeoutSec 10 -UseBasicParsing
+    if ($r.StatusCode -eq 200 -and $r.Content -match '"status"\s*:\s*"healthy"') { $alive = $true; break }
+  } catch { }
+  if ($attempt -lt 3) { Start-Sleep -Seconds 3 }
+}
 
 if ($alive) {
   # 정상 경로에서는 프로세스를 열거하지 않는다 — 의도적 결정이다.
