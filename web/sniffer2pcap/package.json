@@ -1,0 +1,9 @@
+{
+  "name": "sniffer2pcap",
+  "private": true,
+  "type": "module",
+  "description": "FortiGate sniffer output to PCAP converter (static, runs in the browser)",
+  "scripts": {
+    "test": "node --test tests/"
+  }
+}

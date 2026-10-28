@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- connect-src 'none': 이 페이지는 어떤 네트워크 요청도 보낼 수 없다 = 업로드 불가를 브라우저가 보증 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>FortiGate Sniffer to PCAP Converter — Free, Runs in Your Browser</title>
+<meta name="description" content="Convert FortiGate 'diagnose sniffer packet' output (verbose 3 or 6) to a .pcap file you can open in Wireshark. Free, no install, no login. Your capture never leaves your browser.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="FortiGate Sniffer to PCAP Converter">
+<meta property="og:description" content="Turn 'diagnose sniffer packet' output into a Wireshark-ready .pcap. Runs entirely in your browser — nothing is uploaded.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232457d6'/%3E%3Cpath d='M7 20h5l3-9 3 13 3-8h4' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "FortiGate Sniffer to PCAP Converter",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "Any (web browser)",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "description": "Converts FortiGate diagnose sniffer packet text output (verbose 3 or 6) to libpcap files. Runs entirely in the browser."
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        { "@type": "Question", "name": "What is the difference between verbose 3 and verbose 6?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Both print each packet as hex starting from the Ethernet header when one is available. Verbose 6 also prints the interface name and direction, so the converter can split the capture per interface. Verbose 2 and 5 print hex from the IP header only; verbose 1 and 4 print no hex and cannot be converted." } },
+        { "@type": "Question", "name": "Why does Wireshark show no Ethernet information?",
+          "acceptedAnswer": { "@type": "Answer", "text": "The packets had no Ethernet header in the sniffer output: verbose 2 or 5 was used, the interface has no layer-2 header (IPsec or SSL-VPN tunnels), or the capture mixes such interfaces with Ethernet ports. The converter then writes Raw IP instead of inventing MAC addresses." } },
+        { "@type": "Question", "name": "Is my capture uploaded anywhere?",
+          "acceptedAnswer": { "@type": "Answer", "text": "No. The conversion runs in your browser in a Web Worker. The page's Content Security Policy forbids all network requests, so the browser itself blocks any attempt to send data." } }
+      ]
+    }
+  ]
+}
+</script>
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <h1>FortiGate sniffer output to PCAP converter</h1>
+    <p class="lede">Paste or drop the text from <code>diagnose sniffer packet … 6</code> (or 3) and get a <code>.pcap</code> file for Wireshark. Free, no install, no login.</p>
+    <p class="privacy"><span class="dot" aria-hidden="true"></span>Runs 100% in your browser. Your capture is never uploaded — this page is technically unable to send network requests.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="card tool" aria-labelledby="tool-h">
+    <h2 id="tool-h" class="visually-hidden">Converter</h2>
+    <label id="drop" class="drop" for="file">
+      <input id="file" type="file" accept=".txt,.log,.cap,text/plain">
+      <strong>Drop a terminal log file here</strong>
+      <span>or click to choose a file (.txt / .log, PuTTY or SecureCRT logs are fine)</span>
+      <span id="file-name" class="file-name"></span>
+    </label>
+    <div class="or"><span>or paste the output</span></div>
+    <textarea id="paste" spellcheck="false" autocomplete="off" placeholder="2026-10-29 01:02:03.010632 port1 in 10.1.1.10.51000 -> 198.51.100.20.443: syn 1000
+0x0000   0009 0f09 0b02 0050 56a5 6e3f 0800 4500        .......PV.n?..E.
+0x0010   002c 0003 0000 4006 4577 0a01 010a c633        .,....@.Ew.....3
+..."></textarea>
+    <details class="options">
+      <summary>Options</summary>
+      <label for="base-time">Start time for logs with relative timestamps (UTC, optional)</label>
+      <input id="base-time" type="datetime-local" step="1">
+      <p class="muted">Only used when the sniffer ran without the <code>a</code> / <code>l</code> option, so times look like <code>3.462208</code>. Leave empty to keep times relative to the start of the capture.</p>
+    </details>
+    <div class="actions">
+      <button id="convert" type="button">Convert to PCAP</button>
+      <button id="sample" type="button" class="ghost">Try a sample</button>
+    </div>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <section id="results" class="card" hidden aria-labelledby="res-h">
+    <h2 id="res-h">Result</h2>
+    <div id="downloads" class="downloads"></div>
+    <table class="summary"><tbody id="summary-body"></tbody></table>
+    <div id="failures"></div>
+    <ul id="notes" class="notes" hidden></ul>
+  </section>
+
+  <section class="content" aria-labelledby="how-h">
+    <h2 id="how-h">How to capture on the FortiGate</h2>
+    <p>Start logging your SSH session first (see below), then run one of these commands in the FortiGate CLI. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop.</p>
+    <dl class="cmds">
+      <dt><code>diagnose sniffer packet any 'host 192.0.2.10' 6 0 a</code></dt>
+      <dd>All interfaces, every packet to or from one host, Ethernet headers and interface names, absolute UTC timestamps. <strong>The best default.</strong></dd>
+      <dt><code>diagnose sniffer packet port1 'tcp port 443' 6 1000 a</code></dt>
+      <dd>One interface only, HTTPS traffic, stops by itself after 1,000 packets.</dd>
+      <dt><code>diagnose sniffer packet any 'host 192.0.2.10 and icmp' 3 50 a</code></dt>
+      <dd>Verbose 3: same hex as 6 but without interface names. Fine for a single interface.</dd>
+      <dt><code>diagnose sniffer packet any 'net 10.0.0.0/8 and port 53' 6 0 l</code></dt>
+      <dd>DNS traffic with timestamps in the FortiGate's local time (<code>l</code>) instead of UTC (<code>a</code>).</dd>
+    </dl>
+    <p>The syntax is <code>diagnose sniffer packet &lt;interface&gt; '&lt;filter&gt;' &lt;verbose&gt; &lt;count&gt; &lt;timestamp&gt;</code>. The filter uses tcpdump syntax; <code>none</code> captures everything. Use a count of <code>0</code> for no limit and keep filters narrow on busy firewalls — the sniffer prints every packet to your terminal.</p>
+
+    <h3>Verbose levels</h3>
+    <table class="levels">
+      <thead><tr><th>Level</th><th>Prints</th><th>Converts?</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Packet headers only</td><td>No</td></tr>
+        <tr><td>2</td><td>Headers + hex from the IP header</td><td>Yes (Raw IP)</td></tr>
+        <tr><td>3</td><td>Headers + hex from the Ethernet header, if available</td><td>Yes</td></tr>
+        <tr><td>4</td><td>Headers only, with interface name</td><td>No</td></tr>
+        <tr><td>5</td><td>Headers + hex from the IP header, with interface name</td><td>Yes (Raw IP)</td></tr>
+        <tr><td><strong>6</strong></td><td><strong>Headers + hex from the Ethernet header, with interface name</strong></td><td><strong>Yes — recommended</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Saving the output to a file</h3>
+    <ul>
+      <li><strong>PuTTY:</strong> before connecting, open <em>Session → Logging</em>, choose <em>All session output</em> and a log file name. Connect, run the sniffer, then drop the log file here.</li>
+      <li><strong>SecureCRT:</strong> <em>File → Log Session</em>, pick a file, then run the sniffer.</li>
+      <li><strong>macOS / Linux terminal:</strong> <code>script sniffer.txt</code> (macOS) or <code>script -c "ssh admin@192.0.2.1" sniffer.txt</code> (Linux) records everything shown in the terminal.</li>
+      <li><strong>Short captures:</strong> just select the output in your terminal, copy, and paste it into the box above.</li>
+    </ul>
+    <p class="muted">Prompts, the command line, blank lines, <code>--More--</code>, colour codes and per-line timestamps added by your terminal are ignored automatically.</p>
+  </section>
+
+  <section class="content faq" aria-labelledby="faq-h">
+    <h2 id="faq-h">FAQ</h2>
+    <details open>
+      <summary>What is the difference between verbose 3 and verbose 6?</summary>
+      <p>Both print every packet as hex starting from the Ethernet header (when the interface has one). Verbose 6 additionally prints the interface name and direction (<code>port1 in</code>), so this tool can also give you one pcap per interface. Verbose 2 and 5 start the hex at the IP header, and verbose 1 and 4 print no hex at all, so there are no bytes to convert.</p>
+    </details>
+    <details>
+      <summary>Why does Wireshark show no Ethernet (MAC) information?</summary>
+      <p>Because the sniffer output had none for those packets. That happens with verbose 2 or 5, on interfaces without a layer-2 header such as IPsec or SSL-VPN tunnels, and in a capture on <code>any</code> that mixes tunnels with Ethernet ports. In those cases the file is written as <em>Raw IP</em>. We deliberately do not invent MAC addresses — fake MACs look real in Wireshark and can send an investigation the wrong way. In a mixed capture, the per-interface downloads keep the Ethernet headers for every interface that has them.</p>
+    </details>
+    <details>
+      <summary>Is my capture uploaded anywhere?</summary>
+      <p>No. The page is static: the conversion runs in a Web Worker inside your browser and the pcap is created in memory. The page's Content Security Policy sets <code>connect-src 'none'</code>, which means your browser refuses any network request from this page — you can confirm this in the developer tools' Network tab. There are no cookies and no analytics.</p>
+    </details>
+    <details>
+      <summary>My log uses times like <code>3.462208</code>. Is that a problem?</summary>
+      <p>No. Without the <code>a</code> or <code>l</code> option the FortiGate prints seconds since the capture started. The pcap keeps those relative times (Wireshark will show dates in 1970). If you know when the capture started, set it under <em>Options</em> to get real clock times.</p>
+    </details>
+    <details>
+      <summary>Some lines could not be parsed. What happened?</summary>
+      <p>The result shows how many lines failed and a few examples. Typical causes: the log starts in the middle of a packet, a hex line went missing (the packet is then left out rather than guessed), or the last packet was cut off when logging stopped (it is kept and marked as truncated in Wireshark). If the FortiGate printed "<em>N</em> packets received by filter", the result also compares that number with what was converted.</p>
+    </details>
+    <details>
+      <summary>Can't I just download a pcap from the FortiGate GUI?</summary>
+      <p>Often you can: recent FortiOS versions offer packet capture with pcap download in the web GUI. This tool is for when you only have CLI access, are working through a jump host or a colleague's terminal log, or already have the sniffer text and need it in Wireshark.</p>
+    </details>
+  </section>
+
+  <section class="content about" aria-labelledby="about-h">
+    <h2 id="about-h">About</h2>
+    <p>This converter is made by <a href="https://choiceguidelab.com/" rel="noopener">ChoiceGuideLab</a>. We also build <strong>APO</strong>, a FortiGate firewall policy analysis tool that helps you find policies worth cleaning up. Like this page, it processes your configuration locally rather than on our servers.</p>
+  </section>
+</main>
+
+<footer class="wrap foot">
+  <p>Independent tool — not affiliated with, endorsed by, or sponsored by Fortinet, Inc. Fortinet, FortiGate and FortiOS are trademarks of Fortinet, Inc., used here only to describe compatibility. Wireshark is a trademark of the Wireshark Foundation.</p>
+  <p>No cookies. No analytics. No data leaves your browser.</p>
+</footer>
+</body>
+</html>
