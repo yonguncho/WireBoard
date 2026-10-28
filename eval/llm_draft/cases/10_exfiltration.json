@@ -1,0 +1,81 @@
+{
+  "name": "10_exfiltration",
+  "facts": {
+    "stats": {
+      "id": "S1",
+      "risk_level": "HIGH",
+      "risk_score": 45,
+      "sessions": 109,
+      "total_traffic": "842.2 MB",
+      "unique_sources": 3,
+      "unique_destinations": 4,
+      "findings_total": 1,
+      "findings_high": 1,
+      "findings_medium": 0,
+      "findings_low": 0,
+      "capture_start": "2026-10-29 01:02:03 UTC",
+      "capture_end": "2026-10-29 01:10:43 UTC",
+      "duration_seconds": 520,
+      "likely_targets": [
+        "198.51.100.99"
+      ]
+    },
+    "findings": [
+      {
+        "id": "F1",
+        "type": "Data exfiltration",
+        "severity": "high",
+        "mitre_id": "T1041",
+        "source_ip": "10.0.0.51",
+        "detail": "10.0.0.51: 14 external connections, 820 MB sent (outbound 96%)"
+      }
+    ],
+    "health": [],
+    "top_talkers": [
+      {
+        "id": "P1",
+        "source": "10.0.0.51",
+        "destination": "198.51.100.99",
+        "traffic": "840.0 MB",
+        "sessions": 14,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P2",
+        "source": "10.0.0.21",
+        "destination": "198.51.100.10",
+        "traffic": "1.9 MB",
+        "sessions": 40,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P3",
+        "source": "10.0.0.22",
+        "destination": "198.51.100.11",
+        "traffic": "225.0 KB",
+        "sessions": 25,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P4",
+        "source": "10.0.0.21",
+        "destination": "192.0.2.53",
+        "traffic": "5.4 KB",
+        "sessions": 30,
+        "destination_ports": [
+          53
+        ]
+      }
+    ]
+  },
+  "templates": {
+    "executive_summary": "Data exfiltration detected — HIGH risk. Between 01:02:03 and 01:10:43, 10.0.0.51 carried out Data exfiltration activity against 198.51.100.99.",
+    "incident_narrative": "Analyzed 842.2 MB of traffic across 109 sessions. Data exfiltration Detected (confidence: 90%): 10.0.0.51: 14 external connections, 820 MB sent (outbound 96%)"
+  }
+}

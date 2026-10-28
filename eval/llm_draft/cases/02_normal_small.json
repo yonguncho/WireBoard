@@ -1,0 +1,39 @@
+{
+  "name": "02_normal_small",
+  "facts": {
+    "stats": {
+      "id": "S1",
+      "risk_level": "CLEAN",
+      "risk_score": 0,
+      "sessions": 6,
+      "total_traffic": "31.2 KB",
+      "unique_sources": 1,
+      "unique_destinations": 1,
+      "findings_total": 0,
+      "findings_high": 0,
+      "findings_medium": 0,
+      "findings_low": 0,
+      "capture_start": "2026-10-29 01:02:03 UTC",
+      "capture_end": "2026-10-29 01:02:08 UTC",
+      "duration_seconds": 5
+    },
+    "findings": [],
+    "health": [],
+    "top_talkers": [
+      {
+        "id": "P1",
+        "source": "10.0.0.5",
+        "destination": "198.51.100.40",
+        "traffic": "31.2 KB",
+        "sessions": 6,
+        "destination_ports": [
+          443
+        ]
+      }
+    ]
+  },
+  "templates": {
+    "executive_summary": "Normal traffic — no anomalous events. No known anomaly patterns were detected in the analyzed capture file. It appears to be ordinary network traffic.",
+    "incident_narrative": "Analyzed 31.2 KB across 6 sessions (1 sources, 1 destinations). Top talker: 10.0.0.5 -> 198.51.100.40 (31.2 KB)."
+  }
+}

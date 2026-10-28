@@ -1,5 +1,6 @@
 """PdfExporter — 분석 결과 PDF 리포트 생성 (외부 라이브러리 없음)."""
 import tempfile
+import textwrap
 import time
 import unicodedata
 from pathlib import Path
@@ -161,6 +162,13 @@ def _build_narrative(target_ip: str, sessions: list, attacks: list, annotations:
     return lines
 
 
+def _ai_block(title: str, para: dict) -> list[str]:
+    """AI 초안 문단 → PDF 줄 (라벨 + 근거 ID + 95자 줄바꿈)."""
+    ids = ", ".join(para.get("finding_ids") or [])
+    head = f"{title} (AI-generated draft - review required; based on {ids}):"
+    return [head] + ["  " + w for w in textwrap.wrap(para.get("text", ""), width=95)]
+
+
 class PdfExporter:
     def generate(self, analysis_result: dict, output_path: Path | None = None) -> tuple[Path, bool]:
         target_ip = analysis_result.get("target_ip", "unknown")
@@ -204,7 +212,18 @@ class PdfExporter:
                     lines.append(f"  - {rec}")
             lines.append("")
 
-        lines += _build_narrative(target_ip, sessions, attacks, annotations)
+        # 로컬 LLM 초안 (선택 기능) — 검사 통과한 문단만, 라벨과 근거 ID 를 붙여 삽입.
+        # 검사 실패 슬롯은 넣지 않는다 = 위아래 템플릿 서술이 그대로 그 자리를 맡는다.
+        ai = {p["slot"]: p for p in ((analysis_result.get("ai_draft") or {}).get("paragraphs") or [])
+              if p.get("source") == "llm"}
+        if "executive_summary" in ai:
+            lines += _ai_block("Summary", ai["executive_summary"]) + [""]
+
+        narrative_lines = _build_narrative(target_ip, sessions, attacks, annotations)
+        if "incident_narrative" in ai:
+            at = narrative_lines.index("=== THREAT ASSESSMENT ===") + 1
+            narrative_lines[at:at] = _ai_block("Incident narrative", ai["incident_narrative"]) + [""]
+        lines += narrative_lines
 
         # === 진단 상세 (네트워크 vs 앱 / 성능 / 프로토콜 / 캡처 품질) ===
         diag = analysis_result.get("diagnostics") or {}

@@ -1,0 +1,81 @@
+{
+  "name": "04_beacon_single",
+  "facts": {
+    "stats": {
+      "id": "S1",
+      "risk_level": "HIGH",
+      "risk_score": 45,
+      "sessions": 143,
+      "total_traffic": "2.2 MB",
+      "unique_sources": 3,
+      "unique_destinations": 4,
+      "findings_total": 1,
+      "findings_high": 1,
+      "findings_medium": 0,
+      "findings_low": 0,
+      "capture_start": "2026-10-29 01:02:03 UTC",
+      "capture_end": "2026-10-29 01:49:03 UTC",
+      "duration_seconds": 2820,
+      "likely_targets": [
+        "203.0.113.77"
+      ]
+    },
+    "findings": [
+      {
+        "id": "F1",
+        "type": "C2 beacon",
+        "severity": "high",
+        "mitre_id": "T1071",
+        "source_ip": "10.0.0.31",
+        "detail": "10.0.0.31 → 203.0.113.77: CV=3.2%, 48 connections (48 bursts)"
+      }
+    ],
+    "health": [],
+    "top_talkers": [
+      {
+        "id": "P1",
+        "source": "10.0.0.21",
+        "destination": "198.51.100.10",
+        "traffic": "1.9 MB",
+        "sessions": 40,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P2",
+        "source": "10.0.0.22",
+        "destination": "198.51.100.11",
+        "traffic": "225.0 KB",
+        "sessions": 25,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P3",
+        "source": "10.0.0.31",
+        "destination": "203.0.113.77",
+        "traffic": "43.2 KB",
+        "sessions": 48,
+        "destination_ports": [
+          8443
+        ]
+      },
+      {
+        "id": "P4",
+        "source": "10.0.0.21",
+        "destination": "192.0.2.53",
+        "traffic": "5.4 KB",
+        "sessions": 30,
+        "destination_ports": [
+          53
+        ]
+      }
+    ]
+  },
+  "templates": {
+    "executive_summary": "C2 beacon detected — HIGH risk. Between 01:02:03 and 01:49:03, 10.0.0.31 carried out C2 beacon activity against 203.0.113.77.",
+    "incident_narrative": "Analyzed 2.2 MB of traffic across 143 sessions. C2 beacon Detected (confidence: 90%): 10.0.0.31 → 203.0.113.77: CV=3.2%, 48 connections (48 bursts)"
+  }
+}

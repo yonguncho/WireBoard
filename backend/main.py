@@ -26,6 +26,7 @@ _access_logger.addFilter(_sensitive_filter)
 logging.getLogger("routers.upload").addFilter(_sensitive_filter)
 logging.getLogger("routers.analyze").addFilter(_sensitive_filter)
 logging.getLogger("routers.filter").addFilter(_sensitive_filter)
+logging.getLogger("services.narrative.llm_draft").addFilter(_sensitive_filter)
 
 from routers.upload import router as upload_router
 from routers.analyze import router as analyze_router

@@ -1,0 +1,72 @@
+{
+  "name": "03_normal_degraded_network",
+  "facts": {
+    "stats": {
+      "id": "S1",
+      "risk_level": "MEDIUM",
+      "risk_score": 22,
+      "sessions": 95,
+      "total_traffic": "2.2 MB",
+      "unique_sources": 2,
+      "unique_destinations": 3,
+      "findings_total": 0,
+      "findings_high": 0,
+      "findings_medium": 0,
+      "findings_low": 0,
+      "capture_start": "2026-10-29 01:02:03 UTC",
+      "capture_end": "2026-10-29 01:06:36 UTC",
+      "duration_seconds": 273
+    },
+    "findings": [],
+    "health": [
+      {
+        "id": "H1",
+        "text": "9 of 60 connection(s) were refused (server sent RST) (15%)."
+      },
+      {
+        "id": "H2",
+        "text": "9 of 60 connection(s) got no response (SYN timeout / half-open) (15%)."
+      },
+      {
+        "id": "H3",
+        "text": "7 session(s): High retransmit rate"
+      }
+    ],
+    "top_talkers": [
+      {
+        "id": "P1",
+        "source": "10.0.0.21",
+        "destination": "198.51.100.10",
+        "traffic": "1.9 MB",
+        "sessions": 40,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P2",
+        "source": "10.0.0.22",
+        "destination": "198.51.100.11",
+        "traffic": "225.0 KB",
+        "sessions": 25,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P3",
+        "source": "10.0.0.21",
+        "destination": "192.0.2.53",
+        "traffic": "5.4 KB",
+        "sessions": 30,
+        "destination_ports": [
+          53
+        ]
+      }
+    ]
+  },
+  "templates": {
+    "executive_summary": "Network issues detected — MEDIUM risk (no attack signature). No attack signature matched, but the capture shows network problems (MEDIUM concern).",
+    "incident_narrative": "Analyzed 2.2 MB across 95 sessions (2 sources, 3 destinations). Top talker: 10.0.0.21 -> 198.51.100.10 (1.9 MB). 9 of 60 connection(s) were refused (server sent RST) (15%). 9 of 60 connection(s) got no response (SYN timeout / half-open) (15%). 7 session(s): High retransmit rate"
+  }
+}

@@ -17,6 +17,7 @@ from services.export.state_exporter import StateExporter
 from services.export_service import ExportService, ExportDependencyMissing
 from services.report.pdf_exporter import PdfExporter
 from services.narrative.capture_summary import summarize_capture
+from services.narrative.llm_draft import LlmConfig, draft_for_capture
 
 
 def _report_payload(capture):
@@ -195,6 +196,16 @@ async def export_pdf(
     except Exception as exc:  # report must still generate without these blocks
         logger.warning("PDF 진단 생성 실패 (리포트는 계속): %s", exc)
 
+    # 로컬 LLM 문단 초안 (선택 기능). 꺼져 있거나 모델이 없으면 None → PDF 는 기존과 동일.
+    ai_draft = None
+    llm_cfg = LlmConfig.from_env()
+    if llm_cfg.enabled:
+        try:
+            ai_draft = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: draft_for_capture(capture, summarize_capture(capture), llm_cfg))
+        except Exception as exc:  # 초안은 best-effort — 리포트 자체를 깨지 않는다
+            logger.warning("AI 초안 생성 실패 (리포트는 계속): %s", exc)
+
     analysis_result = {
         "target_ip": capture.target_ip or "unknown",
         "sessions": capture.sessions,
@@ -202,6 +213,7 @@ async def export_pdf(
         "annotations": annotations,
         "risk": risk_block,
         "diagnostics": diagnostics,
+        "ai_draft": ai_draft,
         "summary": {
             "total_sessions": len(capture.sessions),
             "total_bytes": sum(s.bytes_sent + s.bytes_recv for s in capture.sessions),

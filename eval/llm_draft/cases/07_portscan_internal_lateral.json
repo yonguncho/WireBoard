@@ -1,0 +1,85 @@
+{
+  "name": "07_portscan_internal_lateral",
+  "facts": {
+    "stats": {
+      "id": "S1",
+      "risk_level": "MEDIUM",
+      "risk_score": 25,
+      "sessions": 101,
+      "total_traffic": "2.2 MB",
+      "unique_sources": 3,
+      "unique_destinations": 4,
+      "findings_total": 1,
+      "findings_high": 0,
+      "findings_medium": 1,
+      "findings_low": 0,
+      "capture_start": "2026-10-29 01:02:03 UTC",
+      "capture_end": "2026-10-29 01:12:02 UTC",
+      "duration_seconds": 599,
+      "likely_targets": [
+        "10.0.0.12"
+      ]
+    },
+    "findings": [
+      {
+        "id": "F1",
+        "type": "Port scan",
+        "severity": "medium",
+        "mitre_id": "T1046",
+        "source_ip": "10.0.0.66",
+        "detail": "10.0.0.66 → 10.0.0.12: scanned 35 ports"
+      }
+    ],
+    "health": [],
+    "top_talkers": [
+      {
+        "id": "P1",
+        "source": "10.0.0.21",
+        "destination": "198.51.100.10",
+        "traffic": "1.9 MB",
+        "sessions": 40,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P2",
+        "source": "10.0.0.22",
+        "destination": "198.51.100.11",
+        "traffic": "225.0 KB",
+        "sessions": 25,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P3",
+        "source": "10.0.0.21",
+        "destination": "192.0.2.53",
+        "traffic": "5.4 KB",
+        "sessions": 30,
+        "destination_ports": [
+          53
+        ]
+      },
+      {
+        "id": "P4",
+        "source": "10.0.0.66",
+        "destination": "10.0.0.12",
+        "traffic": "720 B",
+        "sessions": 6,
+        "destination_ports": [
+          22,
+          135,
+          139,
+          445,
+          3389
+        ]
+      }
+    ]
+  },
+  "templates": {
+    "executive_summary": "Port scan detected — MEDIUM risk. Between 01:02:03 and 01:12:02, 10.0.0.66 carried out Port scan activity against 10.0.0.12.",
+    "incident_narrative": "Analyzed 2.2 MB of traffic across 101 sessions. Port scan Suspected (confidence: 70%): 10.0.0.66 → 10.0.0.12: scanned 35 ports"
+  }
+}

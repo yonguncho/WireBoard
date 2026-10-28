@@ -80,6 +80,59 @@ python launcher.py
 
 MaxMind에서 `GeoLite2-Country.mmdb`를 무료 계정으로 다운로드 후 `WireBoard.exe`와 같은 디렉터리에 배치하면 자동 로드.
 
+### 로컬 LLM 보고서 문단 초안 (선택, 기본 꺼짐)
+
+PDF 보고서의 **요약 문단**과 **사건 경위 서술**을 사용자 PC의 로컬 LLM이 초안으로 써 줍니다.
+외부 API를 쓰지 않으며(비용 0), 꺼져 있거나 모델이 없으면 보고서는 지금과 완전히 같습니다.
+WireBoard 자체에는 아무것도 추가 설치되지 않습니다 — 이미 설치한 LLM 런타임에 `127.0.0.1`로 접속만 합니다.
+
+- 모델에는 **원본 패킷을 넣지 않습니다.** WireBoard가 계산한 결과(탐지 항목·MITRE ID·상위 통신쌍·진단·수치)를
+  `F1`/`H1`/`P1`/`S1` ID가 붙은 JSON으로 만들어 넣습니다.
+- 생성 문단은 코드 규칙으로 즉시 검사합니다: 입력에 없는 IP·숫자·포트·시각·도메인·해시·MITRE ID,
+  존재하지 않는 근거 ID, 단정 표현("definitely compromised" 등), 비영어 출력. **하나라도 걸리면 그 문단은 버리고 템플릿 문장을 씁니다.**
+- 통과한 문단은 PDF에 `AI-generated draft - review required; based on F1, S1` 라벨과 함께 들어갑니다.
+  수치 표·IOC 목록은 계속 코드가 만듭니다.
+- 검사 결과(통과/대체 문단 수와 대체 사유)는 서버 로그 `services.narrative.llm_draft`에 남습니다.
+- API: `GET /api/summary/{upload_id}/ai-draft` (X-Upload-Token 필요) — 꺼져 있으면 `{"available": false}`.
+
+**1) 런타임 설치 (둘 중 하나)**
+
+- [Ollama](https://ollama.com/download) 설치 후: `ollama pull llama3.1:8b`
+- llama.cpp `llama-server` (OpenAI 호환 API): `llama-server -m <모델>.gguf --port 8080`
+
+**2) WireBoard 실행 전 환경변수 설정 (PowerShell)**
+
+```powershell
+$env:WIREBOARD_LLM_ENABLED = "1"
+$env:WIREBOARD_LLM_MODEL   = "llama3.1:8b"            # 기본값
+# llama.cpp 서버를 쓰는 경우:
+# $env:WIREBOARD_LLM_API = "openai"; $env:WIREBOARD_LLM_URL = "http://127.0.0.1:8080"
+.\WireBoard.exe
+```
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `WIREBOARD_LLM_ENABLED` | `0` | `1`/`true`/`yes`/`on` 이면 켬 |
+| `WIREBOARD_LLM_API` | `ollama` | `ollama` 또는 `openai`(llama.cpp server 등 `/v1/chat/completions`) |
+| `WIREBOARD_LLM_URL` | `http://127.0.0.1:11434` (openai면 `:8080`) | **loopback 주소만 허용** — 원격 주소면 기능이 꺼짐 |
+| `WIREBOARD_LLM_MODEL` | `llama3.1:8b` | 런타임에 설치된 모델 이름 |
+| `WIREBOARD_LLM_TIMEOUT` | `180` | 초. 초과 시 템플릿 보고서로 진행 |
+
+**권장 사양 (추정치 — 이 저장소에서 실측 전)**
+
+| 모델 | 메모리 | CPU 전용 PC (8코어급) 예상 | GPU (VRAM 8GB+) |
+|------|--------|---------------------------|-----------------|
+| 7~8B instruct, Q4 (`llama3.1:8b`, `qwen2.5:7b`) — **권장** | RAM 8GB 이상 여유 | 생성 약 5~10 토큰/초 → 보고서 1건(문단 2개) 약 40~120초 | 수 초 |
+| 3B instruct (`llama3.2:3b`) | RAM 4GB | 약 2~3배 빠름, 검사 탈락률 높을 수 있음 | 수 초 |
+
+PDF 내보내기 버튼을 누를 때만 생성하며(요약 화면 로딩은 기다리지 않음), 같은 결과는 메모리에 캐시합니다.
+모델·프롬프트를 바꿀 때는 `eval/llm_draft/` 평가로 통과율·문단당 시간·템플릿 대체율을 비교하세요:
+
+```powershell
+python eval\llm_draft\run_eval.py --model llama3.1:8b
+python eval\llm_draft\run_eval.py --table
+```
+
 ## API 엔드포인트
 
 ### 핵심 흐름

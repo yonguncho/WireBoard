@@ -1,0 +1,89 @@
+{
+  "name": "11_mixed_scan_then_bruteforce",
+  "facts": {
+    "stats": {
+      "id": "S1",
+      "risk_level": "HIGH",
+      "risk_score": 50,
+      "sessions": 155,
+      "total_traffic": "2.3 MB",
+      "unique_sources": 3,
+      "unique_destinations": 4,
+      "findings_total": 2,
+      "findings_high": 2,
+      "findings_medium": 0,
+      "findings_low": 0,
+      "capture_start": "2026-10-29 01:02:03 UTC",
+      "capture_end": "2026-10-29 01:06:36 UTC",
+      "duration_seconds": 273,
+      "likely_targets": [
+        "10.0.0.15"
+      ]
+    },
+    "findings": [
+      {
+        "id": "F1",
+        "type": "Port scan",
+        "severity": "high",
+        "mitre_id": "T1046",
+        "source_ip": "203.0.113.200",
+        "detail": "203.0.113.200 → 10.0.0.15: scanned 1024 ports"
+      },
+      {
+        "id": "F2",
+        "type": "Brute force",
+        "severity": "high",
+        "mitre_id": "T1110",
+        "source_ip": "203.0.113.200",
+        "detail": "203.0.113.200 → 10.0.0.15:22: 512 attempts, 99% failure rate"
+      }
+    ],
+    "health": [],
+    "top_talkers": [
+      {
+        "id": "P1",
+        "source": "10.0.0.21",
+        "destination": "198.51.100.10",
+        "traffic": "1.9 MB",
+        "sessions": 40,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P2",
+        "source": "10.0.0.22",
+        "destination": "198.51.100.11",
+        "traffic": "225.0 KB",
+        "sessions": 25,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P3",
+        "source": "203.0.113.200",
+        "destination": "10.0.0.15",
+        "traffic": "144.0 KB",
+        "sessions": 60,
+        "destination_ports": [
+          22
+        ]
+      },
+      {
+        "id": "P4",
+        "source": "10.0.0.21",
+        "destination": "192.0.2.53",
+        "traffic": "5.4 KB",
+        "sessions": 30,
+        "destination_ports": [
+          53
+        ]
+      }
+    ]
+  },
+  "templates": {
+    "executive_summary": "Brute force + Port scan detected — HIGH risk. Between 01:02:03 and 01:06:36, 203.0.113.200 carried out Brute force + Port scan activity against 10.0.0.15.",
+    "incident_narrative": "Analyzed 2.3 MB of traffic across 155 sessions. Port scan Detected (confidence: 90%): 203.0.113.200 → 10.0.0.15: scanned 1024 ports Brute force Detected (confidence: 90%): 203.0.113.200 → 10.0.0.15:22: 512 attempts, 99% failure rate"
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "name": "12_mixed_beacon_exfil_degraded",
+  "facts": {
+    "stats": {
+      "id": "S1",
+      "risk_level": "HIGH",
+      "risk_score": 100,
+      "sessions": 197,
+      "total_traffic": "140.2 MB",
+      "unique_sources": 3,
+      "unique_destinations": 4,
+      "findings_total": 3,
+      "findings_high": 1,
+      "findings_medium": 1,
+      "findings_low": 1,
+      "capture_start": "2026-10-29 01:02:03 UTC",
+      "capture_end": "2026-10-29 01:49:33 UTC",
+      "duration_seconds": 2850,
+      "likely_targets": [
+        "203.0.113.77"
+      ]
+    },
+    "findings": [
+      {
+        "id": "F1",
+        "type": "C2 beacon",
+        "severity": "high",
+        "mitre_id": "T1071",
+        "source_ip": "10.0.0.31",
+        "detail": "10.0.0.31 → 203.0.113.77: CV=2.1%, 96 connections (96 bursts)"
+      },
+      {
+        "id": "F2",
+        "type": "Data exfiltration",
+        "severity": "medium",
+        "mitre_id": "T1041",
+        "source_ip": "10.0.0.31",
+        "detail": "10.0.0.31: 6 external connections, 140 MB sent (outbound 91%)"
+      },
+      {
+        "id": "F3",
+        "type": "Communication failure spike",
+        "severity": "low",
+        "mitre_id": "T1499",
+        "source_ip": "10.0.0.9",
+        "detail": "RST flood: 45/sec detected"
+      }
+    ],
+    "health": [
+      {
+        "id": "H1",
+        "text": "9 of 60 connection(s) were refused (server sent RST) (15%)."
+      },
+      {
+        "id": "H2",
+        "text": "9 of 60 connection(s) got no response (SYN timeout / half-open) (15%)."
+      },
+      {
+        "id": "H3",
+        "text": "7 session(s): High retransmit rate"
+      }
+    ],
+    "top_talkers": [
+      {
+        "id": "P1",
+        "source": "10.0.0.31",
+        "destination": "203.0.113.77",
+        "traffic": "138.1 MB",
+        "sessions": 102,
+        "destination_ports": [
+          443,
+          8443
+        ]
+      },
+      {
+        "id": "P2",
+        "source": "10.0.0.21",
+        "destination": "198.51.100.10",
+        "traffic": "1.9 MB",
+        "sessions": 40,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P3",
+        "source": "10.0.0.22",
+        "destination": "198.51.100.11",
+        "traffic": "225.0 KB",
+        "sessions": 25,
+        "destination_ports": [
+          443
+        ]
+      },
+      {
+        "id": "P4",
+        "source": "10.0.0.21",
+        "destination": "192.0.2.53",
+        "traffic": "5.4 KB",
+        "sessions": 30,
+        "destination_ports": [
+          53
+        ]
+      }
+    ]
+  },
+  "templates": {
+    "executive_summary": "C2 beacon + Communication failure spike + Data exfiltration detected (incl. suspected) — HIGH risk. Between 01:02:03 and 01:49:33, 10.0.0.31, 10.0.0.9 carried out C2 beacon + Communication failure spike + Data exfiltration activity against 203.0.113.77.",
+    "incident_narrative": "Analyzed 140.2 MB of traffic across 197 sessions. C2 beacon Detected (confidence: 90%): 10.0.0.31 → 203.0.113.77: CV=2.1%, 96 connections (96 bursts) Data exfiltration Suspected (confidence: 70%): 10.0.0.31: 6 external connections, 140 MB sent (outbound 91%) Communication failure spike Low confidence (confidence: 40%): RST flood: 45/sec detected Connectivity diagnosis: 9 of 60 connection(s) were refused (server sent RST) (15%). 9 of 60 connection(s) got no response (SYN timeout / half-open) (15%). 7 session(s): High retransmit rate"
+  }
+}
