@@ -58,6 +58,15 @@ FortiGate `diagnose sniffer packet` 텍스트 출력을 libpcap(.pcap)로 바꾸
 
 정적 파일 7개를 그대로 올리면 된다. `.js` 가 `text/javascript` MIME으로 서빙되기만 하면 된다.
 
+**CSP 는 HTTP 헤더로도 보낼 것.** `<meta>` CSP 는 문서에만 적용되고, 변환이 실제로 일어나는
+module Worker(`worker.js`)는 자기 응답 헤더의 CSP 를 따른다. 그래서 서버(또는 Cloudflare Transform Rule)에서
+`index.html`·`worker.js` 둘 다에 아래 헤더를 붙인다. 붙이기 전까지 페이지 문구는 "코드에 전송 로직이 없고
+CSP 가 fetch/XHR 을 막는다" 수준으로만 주장한다(현재 문구).
+
+```
+Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'
+```
+
 | 선택지 | 장점 | 단점 |
 |--------|------|------|
 | **A. choiceguidelab.com 하위 경로** (예: `/tools/fortigate-sniffer-to-pcap/`, wp-content 밖 정적 폴더) | 기존 도메인 권위·내부링크(APO 글) 효과, 별도 비용 0, APO 유입 동선 짧음 | WordPress/캐시 플러그인이 헤더·HTML을 건드릴 수 있음, Cloudflare 캐시 갱신 관리 필요 |

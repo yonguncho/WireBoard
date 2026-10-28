@@ -33,7 +33,7 @@
         { "@type": "Question", "name": "Why does Wireshark show no Ethernet information?",
           "acceptedAnswer": { "@type": "Answer", "text": "The packets had no Ethernet header in the sniffer output: verbose 2 or 5 was used, the interface has no layer-2 header (IPsec or SSL-VPN tunnels), or the capture mixes such interfaces with Ethernet ports. The converter then writes Raw IP instead of inventing MAC addresses." } },
         { "@type": "Question", "name": "Is my capture uploaded anywhere?",
-          "acceptedAnswer": { "@type": "Answer", "text": "No. The conversion runs in your browser in a Web Worker. The page's Content Security Policy forbids all network requests, so the browser itself blocks any attempt to send data." } }
+          "acceptedAnswer": { "@type": "Answer", "text": "No. The conversion runs in your browser in a Web Worker and the page contains no upload or tracking code. Its Content Security Policy also blocks fetch/XHR requests." } }
       ]
     }
   ]
@@ -46,7 +46,7 @@
   <div class="wrap">
     <h1>FortiGate sniffer output to PCAP converter</h1>
     <p class="lede">Paste or drop the text from <code>diagnose sniffer packet … 6</code> (or 3) and get a <code>.pcap</code> file for Wireshark. Free, no install, no login.</p>
-    <p class="privacy"><span class="dot" aria-hidden="true"></span>Runs 100% in your browser. Your capture is never uploaded — this page is technically unable to send network requests.</p>
+    <p class="privacy"><span class="dot" aria-hidden="true"></span>Runs 100% in your browser. Your capture is never uploaded — the page has no code that sends data, and its security policy blocks network requests.</p>
   </div>
 </header>
 
@@ -135,7 +135,7 @@
     </details>
     <details>
       <summary>Is my capture uploaded anywhere?</summary>
-      <p>No. The page is static: the conversion runs in a Web Worker inside your browser and the pcap is created in memory. The page's Content Security Policy sets <code>connect-src 'none'</code>, which means your browser refuses any network request from this page — you can confirm this in the developer tools' Network tab. There are no cookies and no analytics.</p>
+      <p>No. The page is static: the conversion runs in a Web Worker inside your browser and the pcap is created in memory. The code contains no upload or tracking calls, and the Content Security Policy sets <code>connect-src 'none'</code>, so the browser refuses fetch/XHR requests from the page. You can confirm in the developer tools' Network tab that nothing is sent after the page loads. There are no cookies and no analytics.</p>
     </details>
     <details>
       <summary>My log uses times like <code>3.462208</code>. Is that a problem?</summary>

@@ -81,9 +81,11 @@ function parseHeader(s, baseSec) {
 
 /** hex 줄 본문 → {bytes, partial}. partial=true 는 줄이 중간에 잘렸다는 뜻. */
 function parseHexBody(body) {
-  // 오른쪽 ASCII 열은 탭 또는 2칸 이상 공백으로 구분된다
+  // 오른쪽 ASCII 열은 탭 또는 2칸 이상 공백으로 구분된다.
+  // 탭이 공백 1칸으로 뭉개진 복사본 대비: hex 영역 폭(8그룹 = 39자) 밖은 보지 않고,
+  // 2자리 토큰(홀수 바이트)은 줄의 마지막 그룹으로만 인정한다.
   const cut = body.search(/\t| {2,}/);
-  const hexPart = cut >= 0 ? body.slice(0, cut) : body;
+  const hexPart = (cut >= 0 ? body.slice(0, cut) : body).slice(0, 39);
   const out = [];
   let partial = false;
   for (const tok of hexPart.split(' ')) {
@@ -91,7 +93,7 @@ function parseHexBody(body) {
     if (!HEX_TOKEN_RE.test(tok) || tok.length > 4) break;
     if (tok.length % 2) { partial = true; break; }
     for (let i = 0; i < tok.length; i += 2) out.push(parseInt(tok.substr(i, 2), 16));
-    if (out.length >= 16) break;
+    if (tok.length === 2 || out.length >= 16) break;
   }
   return { bytes: out, partial };
 }
@@ -128,8 +130,8 @@ export function classify(d, preferIp = false) {
     else if (ethType === 0x86dd) ethIpLen = ipLength(d, ethHdr, 6);
   }
   const rawIpLen = ipLength(d, 0, 0);
-  const asEth = () => ({ kind: 'eth', ipOffset: ethHdr, wireLen: Math.max(d.length, ethHdr + ethIpLen) });
-  const asIp = () => ({ kind: 'ip', ipOffset: 0, wireLen: Math.max(d.length, rawIpLen) });
+  const asEth = () => ({ kind: 'eth', ipOffset: ethHdr, ipEnd: ethHdr + ethIpLen, wireLen: Math.max(d.length, ethHdr + ethIpLen), ambiguous: !!rawIpLen });
+  const asIp = () => ({ kind: 'ip', ipOffset: 0, ipEnd: rawIpLen, wireLen: Math.max(d.length, rawIpLen) });
   if (preferIp && rawIpLen) return asIp();
   if (ethIpLen) return asEth();
   if (rawIpLen) return asIp();
@@ -173,16 +175,26 @@ export function convertSnifferText(text, options = {}) {
     const c = cur;
     cur = null;
     if (c.bad) { fail(c.bad.line, c.bad.reason, c.bad.text); return; }
-    const data = Uint8Array.from(c.bytes);
+    let data = Uint8Array.from(c.bytes);
     const verbose = summary.verbose;
-    const cls = classify(data, verbose === 2 || verbose === 5);
+    let cls = classify(data, verbose === 2 || verbose === 5);
+    // 마지막 줄이 2자리 토큰으로 끝났는데 그 바이트가 IP 길이 밖이면, 탭이 공백 1칸으로 뭉개져
+    // ASCII 열("ab cd")을 hex 로 읽은 것이다 — 버린다. (진짜 이더넷 패딩은 짝수 그룹으로 찍힌다)
+    if (c.lastOdd && cls.ipEnd && data.length > cls.ipEnd) {
+      data = data.subarray(0, data.length - 1);
+      cls = classify(data, verbose === 2 || verbose === 5);
+    }
     const truncated = cls.wireLen > data.length;
     if (truncated) summary.truncatedPackets++;
     packets.push({
       sec: c.hdr.sec, usec: c.hdr.usec, iface: c.hdr.iface, dir: c.hdr.dir,
       data, kind: cls.kind, ipOffset: cls.ipOffset, wireLen: cls.wireLen, truncated, line: c.hdr.line,
+      ambiguous: !!cls.ambiguous,
     });
   };
+
+  // 줄바꿈 정규화: CRLF·CR 단독(옛 Mac/일부 터미널 로그) 모두 LF 로
+  if (text.indexOf('\r') >= 0) text = text.replace(/\r\n?/g, '\n');
 
   let start = 0;
   const len = text.length;
@@ -223,6 +235,7 @@ export function convertSnifferText(text, options = {}) {
       }
       for (const b of bytes) cur.bytes.push(b);
       if (partial) cur.partialAt = lineNo;
+      cur.lastOdd = bytes.length % 2 === 1;
       continue;
     }
 
@@ -271,6 +284,19 @@ export function convertSnifferText(text, options = {}) {
   }
   flush();
   if (pending) summary.headersWithoutHex++;
+
+  // 이더넷/IP 둘 다로 읽히는 패킷(raw IP 의 src 가 8.0.x.x 등)은 확실한 패킷들의 다수결로 정한다.
+  // 명령줄이 있으면 verbose 로 이미 정해졌으므로 여기서는 명령줄이 없는 로그만 해당.
+  const sure = { eth: 0, ip: 0 };
+  for (const p of packets) if (!p.ambiguous && (p.kind === 'eth' || p.kind === 'ip')) sure[p.kind]++;
+  if (sure.ip > sure.eth) {
+    for (const p of packets) {
+      if (!p.ambiguous) continue;
+      const cls = classify(p.data, true);
+      Object.assign(p, { kind: cls.kind, ipOffset: cls.ipOffset, wireLen: cls.wireLen, truncated: cls.wireLen > p.data.length });
+    }
+    summary.truncatedPackets = packets.filter(p => p.truncated).length;
+  }
 
   summary.packets = packets.length;
   summary.failedLines = failureCount;
