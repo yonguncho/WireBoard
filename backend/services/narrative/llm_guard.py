@@ -60,13 +60,15 @@ _IP_IS_LABEL_RE = re.compile(rf"({_IP_TOK})\s+(?:is|was|as)\s+(?:an?\s+|the\s+)?
 _UNSUPPORTED_METRICS_RE = re.compile(r"\b(confidence|probability|accuracy|certainty)\b", re.I)
 # 침해 언급은 완곡 표현(may/possible/consistent with …)이 앞에 있을 때만 허용 (eval 12: "The compromised host …")
 _COMPROMISE_RE = re.compile(r"\bcompromis\w*", re.I)
-_HEDGE_RE = re.compile(r"\b(may|might|could|possibl\w*|potential\w*|suspect\w*|consistent with|suggest\w*|"
-                       r"indicat\w*|whether|check\w* for|signs? of|risk of|no|not|without)\b", re.I)
+# indicates/suggests 는 완곡 표현이 아니다 (eval v4 06: "This indicates a serious security compromise")
+_HEDGE_RE = re.compile(r"\b(may|might|could|possibl\w*|potential\w*|suspect\w*|consistent with|"
+                       r"whether|check\w* for|signs? of|risk of|attempt\w* to|no|not|without)\b", re.I)
 _NEGATION_RE = re.compile(r"\b(no|not|without|nor)\b", re.I)
 # "70 out of 100", "70/100" 의 100 은 척도라 숫자 검사에서 뺀다
 _SCALE_RE = re.compile(r"\s*(?:out of|/)\s*100\b", re.I)
 # 출력 형식이 본문에 새어 나온 경우 ("The finding_ids for this narrative are [F1]")
-_FORMAT_LEAK_RE = re.compile(r"finding_ids?|\"text\"|executive_summary|incident_narrative|[{}]", re.I)
+# (eval v4 01: "top talkers were IP:443" — 주소 자리에 자리표시자)
+_FORMAT_LEAK_RE = re.compile(r"finding_ids?|\"text\"|executive_summary|incident_narrative|[{}]|\bIP:\d|<ip>|\bx\.x\.x\.x\b", re.I)
 
 # 공격 유형·행위 주장은 입력(탐지 결과)에 근거가 있을 때만 — 3B 모델이 실제로
 # 평범한 웹 트래픽을 "lateral movement" 라고 지어낸 사례가 있었다 (eval 04)
@@ -82,6 +84,10 @@ _THREAT_CLAIMS = [
     (re.compile(r"privilege escalation|\bpersistence\b|sql injection|\bxss\b", re.I), ("__never__",)),
     # 장악 단정 표현 (eval 리뷰: "taken over by an attacker", "has been hacked")
     (re.compile(r"taken over|\bhacked\b|attacker[- ]controlled|under (?:the )?(?:attacker'?s? )?control", re.I), ("__never__",)),
+    # 공격 성공 주장 — 패킷 통계로는 알 수 없다 (eval v4 08: 실패율 97% → "successful in some attempts")
+    (re.compile(r"\bsuccess\w*|\bsucceeded\b|gained access|logged in|\bbreached\b", re.I), ("__never__",)),
+    # 표적·행위자 추정 — WireBoard 가 판단하지 않는 내용 (eval v4 12: "consistent with a targeted attack")
+    (re.compile(r"targeted attack|likely targeted|\bAPT\b|nation[- ]state|threat actor", re.I), ("__never__",)),
 ]
 # IP:포트 / "port N on IP" 쌍 — 숫자 자체는 입력에 있어도 엉뚱한 자리에 쓰면 위반
 # (eval 11: "스캔한 포트 수 1024" 를 "10.0.0.15:1024" 로 씀)

@@ -83,6 +83,8 @@ MaxMind에서 `GeoLite2-Country.mmdb`를 무료 계정으로 다운로드 후 `W
 ### 로컬 LLM 보고서 문단 초안 (선택, 기본 꺼짐)
 
 PDF 보고서의 **요약 문단**과 **사건 경위 서술**을 사용자 PC의 로컬 LLM이 초안으로 써 줍니다.
+
+> **동작 범위:** WireBoard 를 실행하는 **그 PC** 의 `127.0.0.1` 에서 돌고 있는 LLM 에만 접속합니다. 개발자 PC 나 어떤 서버의 모델도 쓰지 않으므로, 다른 사용자가 이 기능을 쓰려면 **자기 PC 에 Ollama 와 모델을 직접 설치**해야 합니다. 설치하지 않은 사용자에게는 기능이 꺼진 상태(기존 보고서)로 동작합니다. 무료 웹 도구(`web/sniffer2pcap`)는 LLM 과 무관합니다.
 외부 API를 쓰지 않으며(비용 0), 꺼져 있거나 모델이 없으면 보고서는 지금과 완전히 같습니다.
 WireBoard 자체에는 아무것도 추가 설치되지 않습니다 — 이미 설치한 LLM 런타임에 `127.0.0.1`로 접속만 합니다.
 
@@ -97,14 +99,14 @@ WireBoard 자체에는 아무것도 추가 설치되지 않습니다 — 이미 
 
 **1) 런타임 설치 (둘 중 하나)**
 
-- [Ollama](https://ollama.com/download) 설치 후: `ollama pull llama3.1:8b`
+- [Ollama](https://ollama.com/download) 설치 후: `ollama pull llama3.2:3b`
 - llama.cpp `llama-server` (OpenAI 호환 API): `llama-server -m <모델>.gguf --port 8080`
 
 **2) WireBoard 실행 전 환경변수 설정 (PowerShell)**
 
 ```powershell
 $env:WIREBOARD_LLM_ENABLED = "1"
-$env:WIREBOARD_LLM_MODEL   = "llama3.1:8b"            # 기본값
+$env:WIREBOARD_LLM_MODEL   = "llama3.2:3b"            # 기본값
 # llama.cpp 서버를 쓰는 경우:
 # $env:WIREBOARD_LLM_API = "openai"; $env:WIREBOARD_LLM_URL = "http://127.0.0.1:8080"
 .\WireBoard.exe
@@ -115,21 +117,26 @@ $env:WIREBOARD_LLM_MODEL   = "llama3.1:8b"            # 기본값
 | `WIREBOARD_LLM_ENABLED` | `0` | `1`/`true`/`yes`/`on` 이면 켬 |
 | `WIREBOARD_LLM_API` | `ollama` | `ollama` 또는 `openai`(llama.cpp server 등 `/v1/chat/completions`) |
 | `WIREBOARD_LLM_URL` | `http://127.0.0.1:11434` (openai면 `:8080`) | **loopback 주소만 허용** — 원격 주소면 기능이 꺼짐 |
-| `WIREBOARD_LLM_MODEL` | `llama3.1:8b` | 런타임에 설치된 모델 이름 |
-| `WIREBOARD_LLM_TIMEOUT` | `180` | 초. 초과 시 템플릿 보고서로 진행 |
+| `WIREBOARD_LLM_MODEL` | `llama3.2:3b` | 런타임에 설치된 모델 이름 |
+| `WIREBOARD_LLM_TIMEOUT` | `300` | 초. 초과 시 템플릿 보고서로 진행 |
 
-**권장 사양 (추정치 — 이 저장소에서 실측 전)**
+**권장 사양 — 실측 (2026-10-30, CPU 전용 노트북: Intel UHD 620, GPU 미사용, Ollama 0.40.13, 평가 케이스 12종·문단 24개)**
 
-| 모델 | 메모리 | CPU 전용 PC (8코어급) 예상 | GPU (VRAM 8GB+) |
-|------|--------|---------------------------|-----------------|
-| 7~8B instruct, Q4 (`llama3.1:8b`, `qwen2.5:7b`) — **권장** | RAM 8GB 이상 여유 | 생성 약 5~10 토큰/초 → 보고서 1건(문단 2개) 약 40~120초 | 수 초 |
-| 3B instruct (`llama3.2:3b`) | RAM 4GB | 약 2~3배 빠름, 검사 탈락률 높을 수 있음 | 수 초 |
+| 모델 | 메모리(모델 적재) | 문단당 생성 시간 | 보고서 1건(문단 2개) | 최종 검사 통과율 |
+|------|------------------|-----------------|---------------------|-----------------|
+| `llama3.2:3b` (Q4_K_M) — **기본값·권장** | 약 2.6 GB | 34.9초 | 약 70초 | 79% |
+| `hermes3:8b` (Q4_0, Llama 3.1 8B 계열) | 약 5.3 GB | 71.0초 | 약 140초 | 79% |
 
+- 통과하지 못한 문단(약 21%)은 자동으로 템플릿 문장으로 대체됩니다. GPU 가 있으면 수 초 수준으로 빨라집니다(미측정).
+- **검사의 한계 (실측에서 확인):** 입력에 있는 숫자를 엉뚱한 의미로 쓰는 경우(예: 출발지 4개를 "beacon 호스트 4대"로)나
+  주어·방향이 바뀐 문장은 코드 규칙으로 완전히 잡을 수 없습니다. 그래서 모든 AI 문단에 "review required" 라벨이 붙습니다.
+- 실측에서 모델이 실제로 낸 환각과 그에 대한 차단 규칙·회귀 테스트는 `tests/test_llm_draft.py`, 원문은 `eval/llm_draft/runs/`.
 PDF 내보내기 버튼을 누를 때만 생성하며(요약 화면 로딩은 기다리지 않음), 같은 결과는 메모리에 캐시합니다.
 모델·프롬프트를 바꿀 때는 `eval/llm_draft/` 평가로 통과율·문단당 시간·템플릿 대체율을 비교하세요:
 
 ```powershell
-python eval\llm_draft\run_eval.py --model llama3.1:8b
+python eval\llm_draft\run_eval.py --model llama3.2:3b
+python eval\llm_draft\run_eval.py --rescore eval\llm_draft\runs\<파일>.json   # 검사 규칙만 바꿨을 때 (모델 호출 없음)
 python eval\llm_draft\run_eval.py --table
 ```
 

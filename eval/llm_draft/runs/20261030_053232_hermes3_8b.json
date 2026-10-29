@@ -1,0 +1,333 @@
+{
+  "summary": {
+    "at": "2026-10-30T05:32:32",
+    "model": "hermes3:8b",
+    "api": "ollama",
+    "prompt_version": "v4",
+    "cases": 12,
+    "paragraphs": 24,
+    "passed": 20,
+    "pass_rate": 0.833,
+    "template_rate": 0.167,
+    "sec_per_paragraph": 71.0,
+    "errors": 0,
+    "violation_reasons": {
+      "numbers not in input": 1,
+      "banned assertive wording": 3,
+      "unhedged compromise claim": 2
+    }
+  },
+  "detail": [
+    {
+      "case": "01_normal_web",
+      "gen_ms": 255699,
+      "raw_output": "{\"executive_summary\": {\"text\": \"The network traffic analysis of the 2026-10-29 01:02:03 to 01:06:36 UTC capture shows normal activity with no detected attack patterns. The 2 internal hosts communicated with 3 external destinations, totaling 2.2 MB of traffic across 95 sessions. No suspicious behavior was found. The risk level is clean.\", \"finding_ids\": [\"S1\"]}, \"incident_narrative\": {\"text\": \"During the 2026-10-29 01:02:03 to 01:06:36 UTC capture, 2 internal hosts at 10.0.0.21 and 10.0.0.22 communicated with 3 external destinations at IP addresses 198.51.100.10, 198.51.100.11, and 192.0.2.53. The hosts at 10.0.0.21 and 10.0.0.22 both primarily used port 443 to connect to the external IPs. The host at 10.0.0.21 also established a small number of sessions to port 53 on IP 192.0.2.53. No attack patterns were detected in the traffic.\", \"finding_ids\": [\"P1\", \"P2\", \"P3\"]}}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "The network traffic analysis of the 2026-10-29 01:02:03 to 01:06:36 UTC capture shows normal activity with no detected attack patterns. The 2 internal hosts communicated with 3 external destinations, totaling 2.2 MB of traffic across 95 sessions. No suspicious behavior was found. The risk level is clean.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "During the 2026-10-29 01:02:03 to 01:06:36 UTC capture, 2 internal hosts at 10.0.0.21 and 10.0.0.22 communicated with 3 external destinations at IP addresses 198.51.100.10, 198.51.100.11, and 192.0.2.53. The hosts at 10.0.0.21 and 10.0.0.22 both primarily used port 443 to connect to the external IPs. The host at 10.0.0.21 also established a small number of sessions to port 53 on IP 192.0.2.53. No attack patterns were detected in the traffic.",
+          "finding_ids": [
+            "P1",
+            "P2",
+            "P3"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "02_normal_small",
+      "gen_ms": 93577,
+      "raw_output": "{\"executive_summary\": {\"text\": \"The network capture shows a single host, 10.0.0.5, establishing 6 sessions totaling 31.2 KB of traffic to a single external destination, 198.51.100.40, using port 443. No malicious findings were detected in the capture. The risk level is assessed as clean with a risk score of 0. No further action is required at this time.\", \"finding_ids\": [\"S1\"]}, \"incident_narrative\": {\"text\": \"The capture shows host 10.0.0.5 initiating 6 sessions to external IP 198.51.100.40 over port 443 between the times of 01:02:03 and 01:02:08 UTC on October 29, 2026. The total traffic for these sessions was 31.2 KB. No attack patterns were detected in the capture. The host did not exhibit any malicious behavior.\", \"finding_ids\": [\"P1\"]}}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "The network capture shows a single host, 10.0.0.5, establishing 6 sessions totaling 31.2 KB of traffic to a single external destination, 198.51.100.40, using port 443. No malicious findings were detected in the capture. The risk level is assessed as clean with a risk score of 0. No further action is required at this time.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "The capture shows host 10.0.0.5 initiating 6 sessions to external IP 198.51.100.40 over port 443 between the times of 01:02:03 and 01:02:08 UTC on October 29, 2026. The total traffic for these sessions was 31.2 KB. No attack patterns were detected in the capture. The host did not exhibit any malicious behavior.",
+          "finding_ids": [
+            "P1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "03_normal_degraded_network",
+      "gen_ms": 170534,
+      "raw_output": "{\n \"executive_summary\": {\n  \"text\": \"The network was monitored for a duration of 273 seconds, capturing a total of 95 sessions and 2.2 MB of traffic. The traffic was primarily between 3 external hosts and 2 internal hosts. No malicious findings were detected, and the risk level is assessed as medium with a risk score of 22. The top talkers were 10.0.0.21 and 10.0.0.22, both connecting to external destinations on port 443.\",\n  \"finding_ids\": [\n   \"S1\"\n  ]\n },\n \"incident_narrative\": {\n  \"text\": \"During the capture period from 2026-10-29 01:02:03 UTC to 2026-10-29 01:06:36 UTC, 95 sessions were observed. 10.0.0.21 and 10.0.0.22 were the two internal hosts that initiated the majority of the traffic, connecting to external destinations 198.51.100.10 and 198.51.100.11 on port 443. Additionally, 10.0.0.21 also communicated with 192.0.2.53 on port 53. Health checks revealed that 15% of attempted connections were refused or received no response, indicating potential issues with the targeted hosts.\",\n  \"finding_ids\": [\n   \"H1\",\n   \"H2\",\n   \"H3\",\n   \"P1\",\n   \"P2\",\n   \"P3\"\n  ]\n }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "The network was monitored for a duration of 273 seconds, capturing a total of 95 sessions and 2.2 MB of traffic. The traffic was primarily between 3 external hosts and 2 internal hosts. No malicious findings were detected, and the risk level is assessed as medium with a risk score of 22. The top talkers were 10.0.0.21 and 10.0.0.22, both connecting to external destinations on port 443.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "During the capture period from 2026-10-29 01:02:03 UTC to 2026-10-29 01:06:36 UTC, 95 sessions were observed. 10.0.0.21 and 10.0.0.22 were the two internal hosts that initiated the majority of the traffic, connecting to external destinations 198.51.100.10 and 198.51.100.11 on port 443. Additionally, 10.0.0.21 also communicated with 192.0.2.53 on port 53. Health checks revealed that 15% of attempted connections were refused or received no response, indicating potential issues with the targeted hosts.",
+          "finding_ids": [
+            "H1",
+            "H2",
+            "H3",
+            "P1",
+            "P2",
+            "P3"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "04_beacon_single",
+      "gen_ms": 129819,
+      "raw_output": "{\n \"executive_summary\": {\n  \"text\": \"The network capture indicates a high risk C2 beacon activity from 10.0.0.31 to 203.0.113.77 on port 8443. The beacon had a low timing variation of 3.2%, suggesting a stable connection. No other attack patterns were detected. The risk score is 45 out of 100, indicating a serious security issue that requires immediate attention.\",\n  \"finding_ids\": [\n   \"S1\"\n  ]\n },\n \"incident_narrative\": {\n  \"text\": \"The C2 beacon activity was observed from 10.0.0.31 to 203.0.113.77 on port 8443. The beacon had a low timing variation of 3.2%, suggesting a stable connection. No other attack patterns were detected. The beacon activity is consistent with an attempt to compromise the internal network.\",\n  \"finding_ids\": [\n   \"F1\"\n  ]\n }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "The network capture indicates a high risk C2 beacon activity from 10.0.0.31 to 203.0.113.77 on port 8443. The beacon had a low timing variation of 3.2%, suggesting a stable connection. No other attack patterns were detected. The risk score is 45 out of 100, indicating a serious security issue that requires immediate attention.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "The C2 beacon activity was observed from 10.0.0.31 to 203.0.113.77 on port 8443. The beacon had a low timing variation of 3.2%, suggesting a stable connection. No other attack patterns were detected. The beacon activity is consistent with an attempt to compromise the internal network.",
+          "finding_ids": [
+            "F1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "05_beacon_two_hosts",
+      "gen_ms": 144296,
+      "raw_output": "{\n \"executive_summary\": {\n  \"text\": \"A high-risk network incident was detected, involving 4 internal hosts beaconing to 2 external targets. The risk score was 70 out of 100. Further investigation is required to determine the full scope and impact.\",\n  \"finding_ids\": [\n   \"S1\"\n  ]\n },\n \"incident_narrative\": {\n  \"text\": \"The network capture revealed 4 internal hosts beaconing to 2 external targets. Host 10.0.0.31 sent a high severity C2 beacon to 203.0.113.77 with a timing variation of 3.2%, consisting of 48 connections. Host 10.0.0.44 sent a medium severity C2 beacon to 203.0.113.90 with a timing variation of 11.8%, consisting of 20 connections. No other attack patterns were detected.\",\n  \"finding_ids\": [\n   \"F1\",\n   \"F2\"\n  ]\n }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A high-risk network incident was detected, involving 4 internal hosts beaconing to 2 external targets. The risk score was 70 out of 100. Further investigation is required to determine the full scope and impact.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "The network capture revealed 4 internal hosts beaconing to 2 external targets. Host 10.0.0.31 sent a high severity C2 beacon to 203.0.113.77 with a timing variation of 3.2%, consisting of 48 connections. Host 10.0.0.44 sent a medium severity C2 beacon to 203.0.113.90 with a timing variation of 11.8%, consisting of 20 connections. No other attack patterns were detected.",
+          "finding_ids": [
+            "F1",
+            "F2"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "06_portscan_external",
+      "gen_ms": 103001,
+      "raw_output": "{\n \"executive_summary\": {\n  \"text\": \"A high risk port scan was detected from 203.0.113.200 to 10.0.0.10 scanning 512 ports. This indicates a serious security compromise. Further investigation is required to determine the full impact and remediation steps.\",\n  \"finding_ids\": [\n   \"S1\"\n  ]\n },\n \"incident_narrative\": {\n  \"text\": \"During the 273 second capture, 203.0.113.200 performed a port scan on 10.0.0.10, scanning 512 ports. This high risk port scan is consistent with a serious security compromise. No other attack patterns were detected.\",\n  \"finding_ids\": [\n   \"F1\"\n  ]\n }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A high risk port scan was detected from 203.0.113.200 to 10.0.0.10 scanning 512 ports. This indicates a serious security compromise. Further investigation is required to determine the full impact and remediation steps.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "During the 273 second capture, 203.0.113.200 performed a port scan on 10.0.0.10, scanning 512 ports. This high risk port scan is consistent with a serious security compromise. No other attack patterns were detected.",
+          "finding_ids": [
+            "F1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "07_portscan_internal_lateral",
+      "gen_ms": 131627,
+      "raw_output": "{\n \"executive_summary\": {\n  \"text\": \"The network traffic analysis detected a medium risk port scan attack from 10.0.0.66 targeting 10.0.0.12. The scan attempted to connect to 35 ports on the target system. No high severity findings were detected, and the overall risk score was 25 out of 100. Further investigation is recommended to determine the source and intent of the scan.\",\n  \"finding_ids\": [\n   \"S1\"\n  ]\n },\n \"incident_narrative\": {\n  \"text\": \"The port scan attack was carried out by the host at IP address 10.0.0.66, which scanned the host at 10.0.0.12, attempting connections to 35 different ports. The scan started at 2026-10-29 01:02:03 UTC and ended at 2026-10-29 01:12:02 UTC, lasting a total of 599 seconds. No other attack patterns were detected in the captured traffic.\",\n  \"finding_ids\": [\n   \"F1\"\n  ]\n }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "The network traffic analysis detected a medium risk port scan attack from 10.0.0.66 targeting 10.0.0.12. The scan attempted to connect to 35 ports on the target system. No high severity findings were detected, and the overall risk score was 25 out of 100. Further investigation is recommended to determine the source and intent of the scan.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "The port scan attack was carried out by the host at IP address 10.0.0.66, which scanned the host at 10.0.0.12, attempting connections to 35 different ports. The scan started at 2026-10-29 01:02:03 UTC and ended at 2026-10-29 01:12:02 UTC, lasting a total of 599 seconds. No other attack patterns were detected in the captured traffic.",
+          "finding_ids": [
+            "F1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "08_bruteforce_ssh",
+      "gen_ms": 122690,
+      "raw_output": "{\n \"executive_summary\": {\n  \"text\": \"A brute force attack was detected targeting 10.0.0.15 on port 22 from 198.51.100.66. The attacker made 340 attempts with a 97% failure rate. The risk level is HIGH with a risk score of 45. No other attack patterns were detected. The main target identified was 10.0.0.15.\",\n  \"finding_ids\": [\n   \"S1\"\n  ]\n },\n \"incident_narrative\": {\n  \"text\": \"On 2026-10-29 at 01:02:03 UTC, the capture began. 198.51.100.66 initiated a brute force attack targeting 10.0.0.15 on port 22. The attacker made 340 attempts, with a 97% failure rate. This continued until the capture ended at 01:06:36 UTC, lasting a total of 273 seconds. No other attack patterns were detected.\",\n  \"finding_ids\": [\n   \"F1\"\n  ]\n }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A brute force attack was detected targeting 10.0.0.15 on port 22 from 198.51.100.66. The attacker made 340 attempts with a 97% failure rate. The risk level is HIGH with a risk score of 45. No other attack patterns were detected. The main target identified was 10.0.0.15.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "On 2026-10-29 at 01:02:03 UTC, the capture began. 198.51.100.66 initiated a brute force attack targeting 10.0.0.15 on port 22. The attacker made 340 attempts, with a 97% failure rate. This continued until the capture ended at 01:06:36 UTC, lasting a total of 273 seconds. No other attack patterns were detected.",
+          "finding_ids": [
+            "F1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "09_ddos_inbound",
+      "gen_ms": 110360,
+      "raw_output": "{\n \"executive_summary\": {\n  \"text\": \"A high risk DDoS attack was detected, with 10.0.0.80 being hit by 18432 packets per second from 212 sources. The attack lasted 273 seconds, indicating a significant threat to the network. Immediate mitigation steps should be taken to protect the targeted systems.\",\n  \"finding_ids\": [\n   \"S1\"\n  ]\n },\n \"incident_narrative\": {\n  \"text\": \"The DDoS attack targeted the internal IP 10.0.0.80, with 212 sources sending 18432 packets per second to it. This attack lasted from 2026-10-29 01:02:03 UTC to 2026-10-29 01:06:36 UTC, totaling 273 seconds of high traffic. No other attack patterns were detected in the captured data.\",\n  \"finding_ids\": [\n   \"F1\"\n  ]\n }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A high risk DDoS attack was detected, with 10.0.0.80 being hit by 18432 packets per second from 212 sources. The attack lasted 273 seconds, indicating a significant threat to the network. Immediate mitigation steps should be taken to protect the targeted systems.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "The DDoS attack targeted the internal IP 10.0.0.80, with 212 sources sending 18432 packets per second to it. This attack lasted from 2026-10-29 01:02:03 UTC to 2026-10-29 01:06:36 UTC, totaling 273 seconds of high traffic. No other attack patterns were detected in the captured data.",
+          "finding_ids": [
+            "F1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "10_exfiltration",
+      "gen_ms": 125704,
+      "raw_output": "{\n \"executive_summary\": {\n  \"text\": \"A high risk data exfiltration incident was detected, with 10.0.0.51 sending 820 MB to an external IP (198.51.100.99) over 14 connections. The risk score is 45 out of 50, indicating a severe threat. Immediate investigation and containment actions are required.\",\n  \"finding_ids\": [\n   \"S1\"\n  ]\n },\n \"incident_narrative\": {\n  \"text\": \"The data exfiltration attack was carried out by 10.0.0.51, which established 14 connections to external IP 198.51.100.99, sending a total of 820 MB (96% outbound traffic). The majority of the traffic, 840 MB, was sent to 198.51.100.99 using port 443. No other suspicious activity or attack patterns were detected in the captured data.\",\n  \"finding_ids\": [\n   \"F1\"\n  ]\n }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "Data exfiltration detected — HIGH risk. Between 01:02:03 and 01:10:43, 10.0.0.51 carried out Data exfiltration activity against 198.51.100.99.",
+          "finding_ids": [],
+          "source": "template",
+          "violations": [
+            "numbers not in input: 50"
+          ]
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "The data exfiltration attack was carried out by 10.0.0.51, which established 14 connections to external IP 198.51.100.99, sending a total of 820 MB (96% outbound traffic). The majority of the traffic, 840 MB, was sent to 198.51.100.99 using port 443. No other suspicious activity or attack patterns were detected in the captured data.",
+          "finding_ids": [
+            "F1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "11_mixed_scan_then_bruteforce",
+      "gen_ms": 150152,
+      "raw_output": "{\n \"executive_summary\": {\n  \"text\": \"A high-risk port scan and brute force attack were detected from 203.0.113.200 targeting 10.0.0.15. The attacker scanned 1024 ports and made 512 login attempts with a 99% failure rate. This indicates a serious security breach that requires immediate investigation and remediation.\",\n  \"finding_ids\": [\n   \"S1\"\n  ]\n },\n \"incident_narrative\": {\n  \"text\": \"The port scan and brute force attack originated from 203.0.113.200 and targeted 10.0.0.15. The attacker first performed a port scan, scanning all 1024 ports on 10.0.0.15. Following the port scan, the attacker launched a brute force attack on the SSH service (port 22), attempting to gain access. The brute force attack consisted of 512 attempts, with a 99% failure rate, indicating the attacker was likely using a credential stuffing or dictionary attack to guess login credentials. The attack lasted from 2026-10-29 01:02:03 UTC to 2026-10-29 01:06:36 UTC, with a total duration of 273 seconds.\",\n  \"finding_ids\": [\n   \"F1\",\n   \"F2\"\n  ]\n }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "Brute force + Port scan detected — HIGH risk. Between 01:02:03 and 01:06:36, 203.0.113.200 carried out Brute force + Port scan activity against 10.0.0.15.",
+          "finding_ids": [],
+          "source": "template",
+          "violations": [
+            "banned assertive wording: breach"
+          ]
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "The port scan and brute force attack originated from 203.0.113.200 and targeted 10.0.0.15. The attacker first performed a port scan, scanning all 1024 ports on 10.0.0.15. Following the port scan, the attacker launched a brute force attack on the SSH service (port 22), attempting to gain access. The brute force attack consisted of 512 attempts, with a 99% failure rate, indicating the attacker was likely using a credential stuffing or dictionary attack to guess login credentials. The attack lasted from 2026-10-29 01:02:03 UTC to 2026-10-29 01:06:36 UTC, with a total duration of 273 seconds.",
+          "finding_ids": [
+            "F1",
+            "F2"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "12_mixed_beacon_exfil_degraded",
+      "gen_ms": 165611,
+      "raw_output": "{\n \"executive_summary\": {\n  \"text\": \"The captured traffic indicates a high-risk compromise of at least one internal host, 10.0.0.31, which was beaconing to an external IP, 203.0.113.77, and exfiltrating 140 MB of data to it. The compromised host also sent a RST flood to other hosts, likely causing communication failures. Immediate investigation and mitigation are recommended.\",\n  \"finding_ids\": [\n   \"S1\"\n  ]\n },\n \"incident_narrative\": {\n  \"text\": \"The compromised host, 10.0.0.31, first established a high-risk C2 beacon to 203.0.113.77 using 96 connections, then exfiltrated 140 MB of data to the same external IP over 6 connections. The beacon had a low CV of 2.1%, indicating careful operation. The compromised host also sent a RST flood to other systems, likely causing communication failures. No other attack patterns were detected.\",\n  \"finding_ids\": [\n   \"F1\",\n   \"F2\",\n   \"F3\"\n  ]\n }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "C2 beacon + Communication failure spike + Data exfiltration detected (incl. suspected) — HIGH risk. Between 01:02:03 and 01:49:33, 10.0.0.31, 10.0.0.9 carried out C2 beacon + Communication failure spike + Data exfiltration activity against 203.0.113.77.",
+          "finding_ids": [],
+          "source": "template",
+          "violations": [
+            "unhedged compromise claim: compromised",
+            "banned assertive wording: the compromise"
+          ]
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "Analyzed 140.2 MB of traffic across 197 sessions. C2 beacon Detected (confidence: 90%): 10.0.0.31 → 203.0.113.77: CV=2.1%, 96 connections (96 bursts) Data exfiltration Suspected (confidence: 70%): 10.0.0.31: 6 external connections, 140 MB sent (outbound 91%) Communication failure spike Low confidence (confidence: 40%): RST flood: 45/sec detected Connectivity diagnosis: 9 of 60 connection(s) were refused (server sent RST) (15%). 9 of 60 connection(s) got no response (SYN timeout / half-open) (15%). 7 session(s): High retransmit rate",
+          "finding_ids": [],
+          "source": "template",
+          "violations": [
+            "unhedged compromise claim: compromised",
+            "banned assertive wording: the compromise"
+          ]
+        }
+      ]
+    }
+  ]
+}

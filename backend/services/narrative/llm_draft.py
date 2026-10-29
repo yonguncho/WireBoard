@@ -12,8 +12,8 @@
   WIREBOARD_LLM_ENABLED   1/true/yes/on 이면 켬 (기본 0)
   WIREBOARD_LLM_API       ollama (기본) | openai   — openai = llama.cpp server 등 /v1/chat/completions
   WIREBOARD_LLM_URL       기본 http://127.0.0.1:11434 (ollama) / http://127.0.0.1:8080 (openai)
-  WIREBOARD_LLM_MODEL     기본 llama3.1:8b
-  WIREBOARD_LLM_TIMEOUT   초, 기본 180
+  WIREBOARD_LLM_MODEL     기본 llama3.2:3b (CPU 실측: 8B 와 검사 통과율 같고 2배 빠름 — eval/llm_draft)
+  WIREBOARD_LLM_TIMEOUT   초, 기본 300 (CPU 전용 8B 는 보고서 1건 약 140초)
 """
 from __future__ import annotations
 
@@ -94,12 +94,12 @@ class LlmConfig:
         api = os.environ.get("WIREBOARD_LLM_API", "ollama").strip().lower()
         default_url = "http://127.0.0.1:8080" if api == "openai" else "http://127.0.0.1:11434"
         try:
-            timeout = float(os.environ.get("WIREBOARD_LLM_TIMEOUT", "180"))
+            timeout = float(os.environ.get("WIREBOARD_LLM_TIMEOUT", "300"))
         except ValueError:
-            timeout = 180.0
+            timeout = 300.0
         enabled = os.environ.get("WIREBOARD_LLM_ENABLED", "0").strip().lower() in _TRUE
         url = os.environ.get("WIREBOARD_LLM_URL", default_url).strip().rstrip("/")
-        cfg = cls(enabled, api, url, os.environ.get("WIREBOARD_LLM_MODEL", "llama3.1:8b").strip(), timeout)
+        cfg = cls(enabled, api, url, os.environ.get("WIREBOARD_LLM_MODEL", "llama3.2:3b").strip(), timeout)
         if enabled and (api not in ("ollama", "openai") or not is_loopback(url)):
             logger.warning("AI 초안 비활성: WIREBOARD_LLM_URL 은 loopback 주소만, API 는 ollama/openai 만 허용 (api=%s)", api)
             return cls(False, api, url, cfg.model, timeout)

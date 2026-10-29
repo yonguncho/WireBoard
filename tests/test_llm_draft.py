@@ -366,3 +366,17 @@ def test_exact_duration_conversion_allowed():
     facts = json.loads(json.dumps(FACTS))
     facts["stats"]["duration_seconds"] = 120
     assert check_paragraph("The capture lasted 2 minutes and 10.0.0.31 beaconed to 203.0.113.77.", ["S1"], facts) == []
+
+@pytest.mark.parametrize("bad, reason", [
+    # llama3.2 3B v4 실측에서 통과했던 문장
+    ("10.0.0.31 beaconed to 203.0.113.77 96 times. The attack was successful in some attempts.", "threat claims not in input"),
+    ("10.0.0.31 beaconed to 203.0.113.77 96 times, consistent with a targeted attack.", "threat claims not in input"),
+    ("The top talkers were IP:443 and IP:53, consistent with beaconing from 10.0.0.31.", "output format leaked into text"),
+])
+def test_v4_3b_passed_errors_now_rejected(bad, reason):
+    p = check_paragraph(bad, ["F1"], FACTS)
+    assert any(v.startswith(reason) for v in p), p
+
+def test_indicates_is_not_a_hedge_for_compromise():
+    p = check_paragraph("10.0.0.31 beaconed to 203.0.113.77 96 times. This indicates a serious security compromise.", ["F1"], FACTS)
+    assert any(v.startswith("unhedged compromise claim") for v in p), p

@@ -1,0 +1,348 @@
+{
+  "summary": {
+    "at": "2026-10-30T05:04:08",
+    "model": "llama3.2:latest",
+    "api": "ollama",
+    "prompt_version": "v4",
+    "cases": 12,
+    "paragraphs": 24,
+    "passed": 23,
+    "pass_rate": 0.958,
+    "template_rate": 0.042,
+    "sec_per_paragraph": 34.9,
+    "errors": 0,
+    "violation_reasons": {
+      "cites unknown finding IDs": 1
+    }
+  },
+  "detail": [
+    {
+      "case": "01_normal_web",
+      "gen_ms": 86770,
+      "raw_output": "{\n  \"executive_summary\": {\n    \"text\": \"No attack pattern was detected. The incident appears to be a normal network traffic capture. The risk level is CLEAN. Further analysis is recommended to ensure the network is secure.\",\n    \"finding_ids\": [\"S1\"]\n  },\n  \"incident_narrative\": {\n    \"text\": \"At 01:02:03 UTC on 2026-10-29, a network traffic capture was initiated. The capture lasted for 273 seconds and included 95 sessions. The top talkers were IP:443, IP:443, and IP:53, indicating normal DNS and HTTPS traffic. No attack patterns were detected in the findings.\",\n    \"finding_ids\": [\"S1\", \"P1\", \"P2\", \"P3\"]\n  }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "No attack pattern was detected. The incident appears to be a normal network traffic capture. The risk level is CLEAN. Further analysis is recommended to ensure the network is secure.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "At 01:02:03 UTC on 2026-10-29, a network traffic capture was initiated. The capture lasted for 273 seconds and included 95 sessions. The top talkers were IP:443, IP:443, and IP:53, indicating normal DNS and HTTPS traffic. No attack patterns were detected in the findings.",
+          "finding_ids": [
+            "S1",
+            "P1",
+            "P2",
+            "P3"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "02_normal_small",
+      "gen_ms": 32361,
+      "raw_output": "{\"executive_summary\": {\"text\": \"No network incidents detected. The network is operating within normal parameters. Further monitoring is recommended to ensure continued security.\", \"finding_ids\": [\"S1\"]}, \"incident_narrative\": {\"text\": \"The network was monitored from 01:02:03 UTC to 01:02:08 UTC on 2026-10-29. No unusual activity was detected. The top talker was a single connection from 10.0.0.5 to 198.51.100.40 on port 443. The network traffic was within normal parameters, with a total of 31.2 KB of traffic and 6 sessions. The risk level is CLEAN, indicating no immediate security concerns.\", \"finding_ids\": [\"S1\", \"P1\"]}}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "No network incidents detected. The network is operating within normal parameters. Further monitoring is recommended to ensure continued security.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "The network was monitored from 01:02:03 UTC to 01:02:08 UTC on 2026-10-29. No unusual activity was detected. The top talker was a single connection from 10.0.0.5 to 198.51.100.40 on port 443. The network traffic was within normal parameters, with a total of 31.2 KB of traffic and 6 sessions. The risk level is CLEAN, indicating no immediate security concerns.",
+          "finding_ids": [
+            "S1",
+            "P1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "03_normal_degraded_network",
+      "gen_ms": 63292,
+      "raw_output": "{\n  \"executive_summary\": {\n    \"text\": \"A medium-risk network incident was detected, with 95 sessions and 2.2 MB of total traffic. The incident occurred between 01:02:03 UTC and 01:06:36 UTC. Further analysis is required to determine the cause and impact of the incident.\",\n    \"finding_ids\": [\"S1\"]\n  },\n  \"incident_narrative\": {\n    \"text\": \"At 01:02:03 UTC, the network captured 95 sessions, with 9 of 60 connections refused (server sent RST) and 9 of 60 connections got no response (SYN timeout / half-open). Additionally, 7 sessions had a high retransmit rate. The top talkers were 40 sessions to 198.51.100.10 on destination port 443, 25 sessions to 198.51.100.11 on destination port 443, and 30 sessions to 192.0.2.53 on destination port 53. The incident ended at 01:06:36 UTC.\",\n    \"finding_ids\": [\"F1\", \"H1\", \"H2\", \"H3\", \"P1\", \"P2\", \"P3\"]\n  }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A medium-risk network incident was detected, with 95 sessions and 2.2 MB of total traffic. The incident occurred between 01:02:03 UTC and 01:06:36 UTC. Further analysis is required to determine the cause and impact of the incident.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "Analyzed 2.2 MB across 95 sessions (2 sources, 3 destinations). Top talker: 10.0.0.21 -> 198.51.100.10 (1.9 MB). 9 of 60 connection(s) were refused (server sent RST) (15%). 9 of 60 connection(s) got no response (SYN timeout / half-open) (15%). 7 session(s): High retransmit rate",
+          "finding_ids": [],
+          "source": "template",
+          "violations": [
+            "cites unknown finding IDs: F1"
+          ]
+        }
+      ]
+    },
+    {
+      "case": "04_beacon_single",
+      "gen_ms": 71486,
+      "raw_output": "{\n  \"executive_summary\": {\n    \"text\": \"The network observed a high-risk incident involving a C2 beacon from 10.0.0.31 to 203.0.113.77, indicating a potential security threat. The risk level is HIGH. Further analysis is required to determine the next steps.\",\n    \"finding_ids\": [\"S1\"]\n  },\n  \"incident_narrative\": {\n    \"text\": \"At 01:02:03 UTC on 2026-10-29, 10.0.0.31 initiated a C2 beacon to 203.0.113.77 (T1071). The beacon was consistent with a high-severity attack. The top talkers revealed 48 sessions from 10.0.0.31 to 203.0.113.77 on port 8443, and 30 sessions from 10.0.0.21 to 192.0.2.53 on port 53. The incident started at 01:02:03 UTC and ended at 01:49:03 UTC, lasting 2820 seconds.\",\n    \"finding_ids\": [\"F1\", \"P1\", \"P3\", \"P4\", \"S1\"]\n  }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "The network observed a high-risk incident involving a C2 beacon from 10.0.0.31 to 203.0.113.77, indicating a potential security threat. The risk level is HIGH. Further analysis is required to determine the next steps.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "At 01:02:03 UTC on 2026-10-29, 10.0.0.31 initiated a C2 beacon to 203.0.113.77 (T1071). The beacon was consistent with a high-severity attack. The top talkers revealed 48 sessions from 10.0.0.31 to 203.0.113.77 on port 8443, and 30 sessions from 10.0.0.21 to 192.0.2.53 on port 53. The incident started at 01:02:03 UTC and ended at 01:49:03 UTC, lasting 2820 seconds.",
+          "finding_ids": [
+            "F1",
+            "P1",
+            "P3",
+            "P4",
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "05_beacon_two_hosts",
+      "gen_ms": 94453,
+      "raw_output": "{\n  \"executive_summary\": {\n    \"text\": \"A high-risk network incident was detected, indicating a potential threat to the organization. The incident involved two C2 beacons, one from each of the likely target IP addresses, with high and medium severity respectively. The overall risk level is HIGH. The next step is to investigate the incident further and take necessary measures to prevent future incidents.\",\n    \"finding_ids\": [\"S1\"]\n  },\n  \"incident_narrative\": {\n    \"text\": \"At 01:02:03 UTC on 2026-10-29, the network capture started. The top talker, P3, showed 48 sessions to 203.0.113.77:8443, indicating a potential C2 beacon. The source IP of P3 is 10.0.0.31, which is also the source IP of the first C2 beacon (F1). F1 is consistent with a C2 beacon, with a CV of 3.2% and 48 connections (48 bursts). At 02:37:08 UTC on 2026-10-29, the network capture ended. The second C2 beacon, F2, occurred at a later time, showing 20 sessions to 203.0.113.90:443, with a CV of 11.8%. The top talker, P4, showed 20 sessions to 203.0.113.90:443, indicating another potential C2 beacon. The source IP of P4 is 10.0.0.44, which is also the source IP of the second C2 beacon (F2).\",\n    \"finding_ids\": [\"F1\", \"F2\", \"P3\", \"P4\"]\n  }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A high-risk network incident was detected, indicating a potential threat to the organization. The incident involved two C2 beacons, one from each of the likely target IP addresses, with high and medium severity respectively. The overall risk level is HIGH. The next step is to investigate the incident further and take necessary measures to prevent future incidents.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "At 01:02:03 UTC on 2026-10-29, the network capture started. The top talker, P3, showed 48 sessions to 203.0.113.77:8443, indicating a potential C2 beacon. The source IP of P3 is 10.0.0.31, which is also the source IP of the first C2 beacon (F1). F1 is consistent with a C2 beacon, with a CV of 3.2% and 48 connections (48 bursts). At 02:37:08 UTC on 2026-10-29, the network capture ended. The second C2 beacon, F2, occurred at a later time, showing 20 sessions to 203.0.113.90:443, with a CV of 11.8%. The top talker, P4, showed 20 sessions to 203.0.113.90:443, indicating another potential C2 beacon. The source IP of P4 is 10.0.0.44, which is also the source IP of the second C2 beacon (F2).",
+          "finding_ids": [
+            "F1",
+            "F2",
+            "P3",
+            "P4"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "06_portscan_external",
+      "gen_ms": 68106,
+      "raw_output": "{\n  \"executive_summary\": {\n    \"text\": \"A high-risk network incident was detected on October 29, 2026, from 01:02:03 to 01:06:36 UTC. The incident involves a port scan on a target IP address, indicating a potential security threat. The risk level is HIGH, and the next step is to investigate and contain the incident.\",\n    \"finding_ids\": [\"S1\"]\n  },\n  \"incident_narrative\": {\n    \"text\": \"At 01:02:03 UTC, a port scan was detected on the target IP address 10.0.0.10 from 203.0.113.200. The scan scanned 512 ports. Additionally, there were multiple sessions of traffic between other IP addresses and the target IP address, including 40 sessions from 10.0.0.21 to 198.51.100.10 on port 443, and 119 sessions from 203.0.113.200 to 10.0.0.10 on multiple ports. The incident started at 01:02:03 UTC and ended at 01:06:36 UTC, lasting 273 seconds.\",\n    \"finding_ids\": [\"F1\", \"P1\", \"P3\"]\n  }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A high-risk network incident was detected on October 29, 2026, from 01:02:03 to 01:06:36 UTC. The incident involves a port scan on a target IP address, indicating a potential security threat. The risk level is HIGH, and the next step is to investigate and contain the incident.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "At 01:02:03 UTC, a port scan was detected on the target IP address 10.0.0.10 from 203.0.113.200. The scan scanned 512 ports. Additionally, there were multiple sessions of traffic between other IP addresses and the target IP address, including 40 sessions from 10.0.0.21 to 198.51.100.10 on port 443, and 119 sessions from 203.0.113.200 to 10.0.0.10 on multiple ports. The incident started at 01:02:03 UTC and ended at 01:06:36 UTC, lasting 273 seconds.",
+          "finding_ids": [
+            "F1",
+            "P1",
+            "P3"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "07_portscan_internal_lateral",
+      "gen_ms": 78386,
+      "raw_output": "{\"executive_summary\": {\"text\": \"A medium-risk network incident was detected on 2026-10-29, indicating potential unauthorized access attempts. The incident involved a port scan from 10.0.0.66 to 10.0.0.12, scanning 35 ports. The risk level is medium due to the number of sessions and traffic involved. Further analysis is required to determine the impact and next steps.\", \"finding_ids\": [\"S1\"]}, \"incident_narrative\": {\"text\": \"At 01:02:03 UTC on 2026-10-29, a port scan was detected from 10.0.0.66 to 10.0.0.12, scanning 35 ports (F1). The source IP, 10.0.0.66, was identified as the source of the traffic. The destination IP, 10.0.0.12, received the traffic. The top talkers indicate that traffic was also being sent to other destinations, including 198.51.100.10 and 192.0.2.53. However, the majority of the traffic (1.9 MB) was directed to 198.51.100.10 on port 443 (P1). Further analysis is required to determine the purpose and impact of this incident.\", \"finding_ids\": [\"F1\", \"P1\", \"P2\", \"P3\", \"P4\", \"S1\"]} }",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A medium-risk network incident was detected on 2026-10-29, indicating potential unauthorized access attempts. The incident involved a port scan from 10.0.0.66 to 10.0.0.12, scanning 35 ports. The risk level is medium due to the number of sessions and traffic involved. Further analysis is required to determine the impact and next steps.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "At 01:02:03 UTC on 2026-10-29, a port scan was detected from 10.0.0.66 to 10.0.0.12, scanning 35 ports (F1). The source IP, 10.0.0.66, was identified as the source of the traffic. The destination IP, 10.0.0.12, received the traffic. The top talkers indicate that traffic was also being sent to other destinations, including 198.51.100.10 and 192.0.2.53. However, the majority of the traffic (1.9 MB) was directed to 198.51.100.10 on port 443 (P1). Further analysis is required to determine the purpose and impact of this incident.",
+          "finding_ids": [
+            "F1",
+            "P1",
+            "P2",
+            "P3",
+            "P4",
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "08_bruteforce_ssh",
+      "gen_ms": 66609,
+      "raw_output": "{\"executive_summary\": {\"text\": \"A high-risk network incident was detected on October 29, 2026, at 01:02:03 UTC, lasting until 01:06:36 UTC. The incident involved a brute force attack on a target IP, 10.0.0.15, with 340 attempts and a 97% failure rate. The risk level is HIGH with a risk score of 45. The next step is to investigate and contain the incident.\", \"finding_ids\": [\"S1\"]}, \"incident_narrative\": {\"text\": \"At 01:02:03 UTC, the network capture began. The top talker, P3, indicated that 198.51.100.66 was attempting to connect to 10.0.0.15 on port 22, with 80 sessions and 192.0 KB of traffic. The findings, F1, indicate a brute force attack on the target IP, with 340 attempts and a 97% failure rate. The attack was successful in some attempts, but the majority of the attempts were unsuccessful. The incident ended at 01:06:36 UTC.\", \"finding_ids\": [\"F1\", \"P3\"]}}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A high-risk network incident was detected on October 29, 2026, at 01:02:03 UTC, lasting until 01:06:36 UTC. The incident involved a brute force attack on a target IP, 10.0.0.15, with 340 attempts and a 97% failure rate. The risk level is HIGH with a risk score of 45. The next step is to investigate and contain the incident.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "At 01:02:03 UTC, the network capture began. The top talker, P3, indicated that 198.51.100.66 was attempting to connect to 10.0.0.15 on port 22, with 80 sessions and 192.0 KB of traffic. The findings, F1, indicate a brute force attack on the target IP, with 340 attempts and a 97% failure rate. The attack was successful in some attempts, but the majority of the attempts were unsuccessful. The incident ended at 01:06:36 UTC.",
+          "finding_ids": [
+            "F1",
+            "P3"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "09_ddos_inbound",
+      "gen_ms": 62378,
+      "raw_output": "{\n  \"executive_summary\": {\n    \"text\": \"A DDoS attack was detected, indicating a high risk to network stability. The attack was detected between 01:02:03 UTC and 01:06:36 UTC, with a total traffic of 5.4 MB. The next step is to investigate and mitigate the attack.\",\n    \"finding_ids\": [\"S1\"]\n  },\n  \"incident_narrative\": {\n    \"text\": \"At 01:02:03 UTC, a DDoS attack was initiated against the network, with 10.0.0.80 receiving 18432 packets per second from 212 sources (F1). The attack was consistent with a high-risk DDoS attack (T1498). The top talkers revealed that 203.0.113.5 was sending traffic to 10.0.0.80 on port 80 (P1), while 10.0.0.21 was sending traffic to 198.51.100.10 on port 443 (P2). The attack was ongoing until 01:06:36 UTC. No other hosts were affected.\",\n    \"finding_ids\": [\"F1\", \"P1\", \"P2\"]\n  }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A DDoS attack was detected, indicating a high risk to network stability. The attack was detected between 01:02:03 UTC and 01:06:36 UTC, with a total traffic of 5.4 MB. The next step is to investigate and mitigate the attack.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "At 01:02:03 UTC, a DDoS attack was initiated against the network, with 10.0.0.80 receiving 18432 packets per second from 212 sources (F1). The attack was consistent with a high-risk DDoS attack (T1498). The top talkers revealed that 203.0.113.5 was sending traffic to 10.0.0.80 on port 80 (P1), while 10.0.0.21 was sending traffic to 198.51.100.10 on port 443 (P2). The attack was ongoing until 01:06:36 UTC. No other hosts were affected.",
+          "finding_ids": [
+            "F1",
+            "P1",
+            "P2"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "10_exfiltration",
+      "gen_ms": 54859,
+      "raw_output": "{\n  \"executive_summary\": {\n    \"text\": \"A high-risk network incident was detected, indicating potential data exfiltration. The incident occurred between 2026-10-29 01:02:03 UTC and 2026-10-29 01:10:43 UTC. The overall risk level is HIGH. Further analysis is required to determine the next steps.\",\n    \"finding_ids\": [\"S1\"]\n  },\n  \"incident_narrative\": {\n    \"text\": \"At 01:02:03 UTC, 10.0.0.51 initiated 14 external connections to 198.51.100.99:443. During the same time, 10.0.0.51 sent 820 MB of data, 96% of which was outbound. This is consistent with T1041, Data exfiltration. No other notable traffic was observed. The incident ended at 01:10:43 UTC.\",\n    \"finding_ids\": [\"F1\", \"P1\"]\n  }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A high-risk network incident was detected, indicating potential data exfiltration. The incident occurred between 2026-10-29 01:02:03 UTC and 2026-10-29 01:10:43 UTC. The overall risk level is HIGH. Further analysis is required to determine the next steps.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "At 01:02:03 UTC, 10.0.0.51 initiated 14 external connections to 198.51.100.99:443. During the same time, 10.0.0.51 sent 820 MB of data, 96% of which was outbound. This is consistent with T1041, Data exfiltration. No other notable traffic was observed. The incident ended at 01:10:43 UTC.",
+          "finding_ids": [
+            "F1",
+            "P1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "11_mixed_scan_then_bruteforce",
+      "gen_ms": 66386,
+      "raw_output": "{\n  \"executive_summary\": {\n    \"text\": \"A high-risk network incident was detected on October 29, 2026, from 01:02:03 to 01:06:36 UTC. The incident involves a high-risk port scan and brute force attack on a specific IP address. The risk level is HIGH, and the next step is to investigate and contain the incident.\",\n    \"finding_ids\": [\"S1\"]\n  },\n  \"incident_narrative\": {\n    \"text\": \"At 01:02:03 UTC, the network traffic captured the IP address 203.0.113.200 performing a high-risk port scan on 10.0.0.15 (1024 ports). The scan was followed by a high-risk brute force attack on the same IP address (10.0.0.15:22), with 512 attempts and a 99% failure rate. The top talkers indicate that traffic was also being sent to other IP addresses, but the most significant traffic was between 10.0.0.21 and 198.51.100.10 (443 ports). The incident started at 01:02:03 UTC and ended at 01:06:36 UTC, lasting 273 seconds.\",\n    \"finding_ids\": [\"F1\", \"P3\"]\n  }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A high-risk network incident was detected on October 29, 2026, from 01:02:03 to 01:06:36 UTC. The incident involves a high-risk port scan and brute force attack on a specific IP address. The risk level is HIGH, and the next step is to investigate and contain the incident.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "At 01:02:03 UTC, the network traffic captured the IP address 203.0.113.200 performing a high-risk port scan on 10.0.0.15 (1024 ports). The scan was followed by a high-risk brute force attack on the same IP address (10.0.0.15:22), with 512 attempts and a 99% failure rate. The top talkers indicate that traffic was also being sent to other IP addresses, but the most significant traffic was between 10.0.0.21 and 198.51.100.10 (443 ports). The incident started at 01:02:03 UTC and ended at 01:06:36 UTC, lasting 273 seconds.",
+          "finding_ids": [
+            "F1",
+            "P3"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    },
+    {
+      "case": "12_mixed_beacon_exfil_degraded",
+      "gen_ms": 92012,
+      "raw_output": "{\n  \"executive_summary\": {\n    \"text\": \"A high-risk network incident was detected, with 197 sessions and 140.2 MB of total traffic. The incident is consistent with a targeted attack, with 3 unique sources and 4 unique destinations. The risk level is HIGH, with a risk score of 100. The next step is to investigate the likely targets and potential attack vectors.\",\n    \"finding_ids\": [\"S1\"]\n  },\n  \"incident_narrative\": {\n    \"text\": \"The incident began at 01:02:03 UTC on October 29, 2026, and ended at 01:49:33 UTC. The source IP 10.0.0.31 was involved in a C2 beacon (T1071) to 203.0.113.77, indicating a potential command and control (C2) server. Additionally, 10.0.0.31 sent 140 MB of data (91% outbound) to an external destination, indicating data exfiltration (T1041). Meanwhile, 10.0.0.9 experienced a communication failure spike (T1499), with 45 RST floods per second detected. The top talker was 10.0.0.31, which communicated with 203.0.113.77 on ports 443 and 8443. The incident is likely targeted, with 3 unique sources and 4 unique destinations.\",\n    \"finding_ids\": [\"F1\", \"F2\", \"H1\", \"H2\", \"H3\", \"P1\"]\n  }\n}",
+      "paragraphs": [
+        {
+          "slot": "executive_summary",
+          "text": "A high-risk network incident was detected, with 197 sessions and 140.2 MB of total traffic. The incident is consistent with a targeted attack, with 3 unique sources and 4 unique destinations. The risk level is HIGH, with a risk score of 100. The next step is to investigate the likely targets and potential attack vectors.",
+          "finding_ids": [
+            "S1"
+          ],
+          "source": "llm",
+          "violations": []
+        },
+        {
+          "slot": "incident_narrative",
+          "text": "The incident began at 01:02:03 UTC on October 29, 2026, and ended at 01:49:33 UTC. The source IP 10.0.0.31 was involved in a C2 beacon (T1071) to 203.0.113.77, indicating a potential command and control (C2) server. Additionally, 10.0.0.31 sent 140 MB of data (91% outbound) to an external destination, indicating data exfiltration (T1041). Meanwhile, 10.0.0.9 experienced a communication failure spike (T1499), with 45 RST floods per second detected. The top talker was 10.0.0.31, which communicated with 203.0.113.77 on ports 443 and 8443. The incident is likely targeted, with 3 unique sources and 4 unique destinations.",
+          "finding_ids": [
+            "F1",
+            "F2",
+            "H1",
+            "H2",
+            "H3",
+            "P1"
+          ],
+          "source": "llm",
+          "violations": []
+        }
+      ]
+    }
+  ]
+}
