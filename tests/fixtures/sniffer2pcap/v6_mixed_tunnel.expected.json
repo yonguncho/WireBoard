@@ -1,0 +1,88 @@
+{
+  "linktype": 101,
+  "packets": [
+    {
+      "time": "1793235723.000000",
+      "iface": "port1",
+      "src": null,
+      "dst": null,
+      "cap_len": 42,
+      "is_ip": false
+    },
+    {
+      "time": "1793235723.000112",
+      "iface": "port1",
+      "src": "10.1.1.10",
+      "dst": "192.0.2.53",
+      "cap_len": 71,
+      "is_ip": true
+    },
+    {
+      "time": "1793235723.000532",
+      "iface": "port2",
+      "src": "203.0.113.5",
+      "dst": "192.0.2.53",
+      "cap_len": 71,
+      "is_ip": true
+    },
+    {
+      "time": "1793235723.000533",
+      "iface": "vpn_hq",
+      "src": "203.0.113.5",
+      "dst": "192.0.2.53",
+      "cap_len": 57,
+      "is_ip": true
+    },
+    {
+      "time": "1793235723.010632",
+      "iface": "port1",
+      "src": "10.1.1.10",
+      "dst": "198.51.100.20",
+      "cap_len": 58,
+      "is_ip": true
+    },
+    {
+      "time": "1793235723.010682",
+      "iface": "port2",
+      "src": "203.0.113.5",
+      "dst": "198.51.100.20",
+      "cap_len": 58,
+      "is_ip": true
+    },
+    {
+      "time": "1793235723.010683",
+      "iface": "vpn_hq",
+      "src": "203.0.113.5",
+      "dst": "198.51.100.20",
+      "cap_len": 44,
+      "is_ip": true
+    },
+    {
+      "time": "1793235723.030982",
+      "iface": "port2",
+      "src": "198.51.100.20",
+      "dst": "203.0.113.5",
+      "cap_len": 54,
+      "is_ip": true
+    },
+    {
+      "time": "1793235723.030983",
+      "iface": "vpn_hq",
+      "src": "198.51.100.20",
+      "dst": "203.0.113.5",
+      "cap_len": 40,
+      "is_ip": true
+    }
+  ],
+  "interfaces": [
+    "port1",
+    "port2",
+    "vpn_hq"
+  ],
+  "iface_linktypes": {
+    "port1": 1,
+    "port2": 1,
+    "vpn_hq": 101
+  },
+  "combined_dropped": 1
+}

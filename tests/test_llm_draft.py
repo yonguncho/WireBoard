@@ -1,0 +1,244 @@
+"""로컬 LLM 초안 — 환각 검사·폴백·기본 OFF 동일성 테스트 (모델 불필요, 가짜 응답 주입).
+
+모델 불필요: 가짜 응답을 caller 로 주입한다.
+실행: python -m pytest tests/test_llm_draft.py -q
+"""
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend"))
+
+from services.narrative import llm_draft  # noqa: E402
+from services.narrative.llm_draft import (  # noqa: E402
+    LlmConfig, LlmUnavailable, build_facts, draft_for_capture, generate_draft, template_paragraphs,
+)
+from services.narrative.llm_guard import check_paragraph  # noqa: E402
+from services.narrative.summary_builder import build_summary  # noqa: E402
+from services.report.pdf_exporter import PdfExporter  # noqa: E402
+
+CASE = json.loads((ROOT / "eval/llm_draft/cases/12_mixed_beacon_exfil_degraded.json").read_text(encoding="utf-8"))
+FACTS, TEMPLATES = CASE["facts"], CASE["templates"]
+CFG = LlmConfig(True, "ollama", "http://127.0.0.1:11434", "fake", 5)
+
+GOOD_EXEC = ("The capture indicates HIGH risk activity (score 100) across 197 sessions. Host 10.0.0.31 shows "
+             "C2 beacon behaviour toward 203.0.113.77 consistent with T1071, and may be sending data out (T1041). "
+             "The host should be isolated and reviewed.")
+GOOD_NARR = ("Between 2026-10-29 01:02:03 UTC and 01:49:33 UTC, 10.0.0.31 made 96 connections to 203.0.113.77 "
+             "with a CV of 2.1%, which is consistent with beaconing. The same host sent 140 MB over 6 external "
+             "connections. 9 of 60 connections were refused.")
+
+
+def fake(exec_text=GOOD_EXEC, exec_ids=("S1", "F1", "F2"), narr_text=GOOD_NARR, narr_ids=("F1", "F2", "H1")):
+    payload = {"executive_summary": {"text": exec_text, "finding_ids": list(exec_ids)},
+               "incident_narrative": {"text": narr_text, "finding_ids": list(narr_ids)}}
+    return lambda cfg, facts: "```json\n" + json.dumps(payload) + "\n```"
+
+
+def sources(draft):
+    return {p["slot"]: p["source"] for p in draft["paragraphs"]}
+
+
+# ── 정상 문단은 통과 ──────────────────────────────────────────────────────────
+
+def test_grounded_paragraphs_pass():
+    d = generate_draft(FACTS, TEMPLATES, CFG, caller=fake())
+    assert sources(d) == {"executive_summary": "llm", "incident_narrative": "llm"}, d["paragraphs"]
+    assert d["stats"] == {"passed": 2, "replaced": 0, "gen_ms": d["stats"]["gen_ms"]}
+    assert d["label"] == "AI-generated draft - review required"
+
+
+# ── 일부러 틀린 가짜 출력이 걸러지는가 ─────────────────────────────────────────
+
+@pytest.mark.parametrize("bad, reason", [
+    (GOOD_NARR.replace("96 connections", "97 connections"), "numbers not in input"),           # 틀린 숫자
+    (GOOD_NARR.replace("140 MB", "1.4 GB"), "numbers not in input"),                           # 틀린 크기
+    (GOOD_NARR.replace("203.0.113.77", "203.0.113.78"), "IPs not in input"),                   # 없는 IP
+    (GOOD_NARR + " It also contacted 2001:db8::99.", "IPs not in input"),                      # 없는 IPv6
+    (GOOD_NARR + " Port 4444 was used.", "numbers not in input"),                              # 없는 포트
+    (GOOD_NARR.replace("01:49:33", "02:49:33"), "times/dates not in input"),                   # 틀린 시각
+    (GOOD_NARR.replace("2026-10-29", "2026-10-28"), "times/dates not in input"),               # 틀린 날짜
+    (GOOD_NARR + " This matches T1059.001.", "MITRE IDs not in input"),                        # 없는 기법
+    (GOOD_NARR + " The tactic is TA0011.", "MITRE IDs not in input"),                          # 없는 전술
+    (GOOD_NARR + " It resolved evil-c2.example.net first.", "domains not in input"),           # 없는 도메인
+    (GOOD_NARR + " Payload hash " + "ab" * 32 + ".", "hashes not in input"),                   # 없는 해시
+    (GOOD_NARR + " See also F9.", "mentions unknown IDs in text"),                             # 없는 ID 언급
+    (GOOD_NARR + " The host is definitely compromised.", "banned assertive wording"),          # 단정
+    (GOOD_NARR + " 10.0.0.31 has been compromised.", "banned assertive wording"),
+    ("이 호스트는 확실히 침해됨. " + GOOD_NARR, "banned assertive wording"),
+    ("Beaconing seen.", "too short"),
+    # 독립 리뷰가 찾은 우회 경로 (모두 걸러져야 함)
+    (GOOD_NARR.replace("140 MB", "140 GB"), "number/unit not in input"),                      # 단위만 바꿈
+    (GOOD_NARR.replace("140 MB", "140TB"), "number/unit not in input"),                        # 공백 없는 단위
+    (GOOD_NARR + " It used port4444 as well.", "numbers not in input"),                        # 단어에 붙은 숫자
+    (GOOD_NARR + " See port_7777.", "numbers not in input"),
+    (GOOD_NARR + " This matches t1059.", "MITRE IDs not in input"),                            # 소문자 MITRE
+    (GOOD_NARR + " See also f9.", "mentions unknown IDs in text"),                             # 소문자 ID
+    (GOOD_NARR + " It reached ample.com.", "domains not in input"),                            # 부분 문자열 도메인
+    (GOOD_NARR + " It contacted forty-two hosts.", "numbers written as words"),                # 단어 숫자
+    (GOOD_NARR + " The host has been breached.", "banned assertive wording"),
+    (GOOD_NARR + " The host is infected.", "banned assertive wording"),
+])
+def test_hallucinated_paragraph_is_replaced_by_template(bad, reason):
+    d = generate_draft(FACTS, TEMPLATES, CFG, caller=fake(narr_text=bad))
+    p = next(p for p in d["paragraphs"] if p["slot"] == "incident_narrative")
+    assert p["source"] == "template"
+    assert p["text"] == TEMPLATES["incident_narrative"]
+    assert any(v.startswith(reason) for v in p["violations"]), p["violations"]
+    # 다른 슬롯은 영향 없음 (문단 단위 대체)
+    assert sources(d)["executive_summary"] == "llm"
+    assert d["stats"]["replaced"] == 1
+
+
+def test_unknown_or_missing_finding_ids_rejected():
+    d = generate_draft(FACTS, TEMPLATES, CFG, caller=fake(exec_ids=("F1", "F7")))
+    assert sources(d)["executive_summary"] == "template"
+    d = generate_draft(FACTS, TEMPLATES, CFG, caller=fake(exec_ids=()))
+    assert sources(d)["executive_summary"] == "template"
+
+
+def test_unparseable_output_falls_back_entirely():
+    d = generate_draft(FACTS, TEMPLATES, CFG, caller=lambda c, f: "Sure! Here is your report: ...")
+    assert sources(d) == {"executive_summary": "template", "incident_narrative": "template"}
+    assert d["stats"]["replaced"] == 2
+
+
+def test_check_paragraph_accepts_values_copied_from_input():
+    assert check_paragraph("Host 10.0.0.21 talked to 192.0.2.53 on port 53 in 30 sessions (5.4 KB), see P4.",
+                           ["P4"], FACTS) == []
+
+
+# ── 꺼짐 / 모델 없음 → 기존과 동일 ─────────────────────────────────────────────
+
+class _Cap:
+    def __init__(self, attacks, sessions):
+        self.attacks, self.sessions, self.target_ip = attacks, sessions, None
+
+
+def _capture():
+    sys.path.insert(0, str(ROOT / "eval/llm_draft"))
+    import make_cases
+    attacks, sessions, health = make_cases.CASES["04_beacon_single"]
+    return _Cap(attacks, sessions), build_summary(attacks, sessions, health=health)
+
+
+def test_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("WIREBOARD_LLM_ENABLED", raising=False)
+    assert LlmConfig.from_env().enabled is False
+    cap, nr = _capture()
+    assert draft_for_capture(cap, nr) is None
+
+
+@pytest.mark.parametrize("url", ["http://192.168.0.10:11434", "http://example.com:11434", "file:///etc/passwd"])
+def test_non_loopback_url_is_refused(monkeypatch, url):
+    monkeypatch.setenv("WIREBOARD_LLM_ENABLED", "1")
+    monkeypatch.setenv("WIREBOARD_LLM_URL", url)
+    assert LlmConfig.from_env().enabled is False
+
+
+def test_http_proxy_is_ignored(monkeypatch):
+    """HTTP_PROXY 가 있어도 사실 JSON 이 프록시로 가지 않는다 (직접 loopback 접속)."""
+    import socket
+    import threading
+    hits = []
+    proxy = socket.socket()
+    proxy.bind(("127.0.0.1", 0))
+    proxy.listen(1)
+    proxy.settimeout(3)
+
+    def accept():
+        try:
+            conn, _ = proxy.accept()
+            hits.append(conn.recv(200))
+            conn.close()
+        except OSError:
+            pass
+    th = threading.Thread(target=accept)
+    th.start()
+    monkeypatch.setenv("HTTP_PROXY", f"http://127.0.0.1:{proxy.getsockname()[1]}")
+    monkeypatch.setenv("http_proxy", f"http://127.0.0.1:{proxy.getsockname()[1]}")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    with pytest.raises(LlmUnavailable):
+        llm_draft.call_model(LlmConfig(True, "ollama", "http://127.0.0.1:9", "m", 2), FACTS)
+    th.join()
+    proxy.close()
+    assert hits == []
+
+
+@pytest.mark.parametrize("resp", [5, [1], {"message": {"content": {"a": 1}}}, {"message": None}])
+def test_malformed_runtime_response_is_unavailable_not_crash(monkeypatch, resp):
+    monkeypatch.setattr(llm_draft, "_OPENER", type("O", (), {"open": lambda self, req, timeout: _Resp(resp)})())
+    with pytest.raises(LlmUnavailable):
+        llm_draft.call_model(CFG, FACTS)
+
+
+class _Resp:
+    def __init__(self, data):
+        self.data = json.dumps(data).encode()
+
+    def read(self):
+        return self.data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_model_unreachable_returns_none(monkeypatch):
+    cap, nr = _capture()
+    cfg = LlmConfig(True, "ollama", "http://127.0.0.1:9", "nope", 2)  # 포트 9: 아무것도 안 떠 있음
+    llm_draft._CACHE.clear()
+    assert draft_for_capture(cap, nr, cfg) is None
+
+
+def _pdf_text(analysis):
+    path, _ = PdfExporter().generate(analysis)
+    try:
+        raw = path.read_bytes().decode("latin-1")
+    finally:
+        path.unlink(missing_ok=True)
+    return re.sub(r"\(Generated: [^)]*\)", "", raw)
+
+
+def test_pdf_identical_without_draft_and_labelled_with_draft():
+    cap, nr = _capture()
+    base = {"target_ip": "10.0.0.31", "sessions": cap.sessions, "attacks": cap.attacks, "annotations": [],
+            "risk": {"risk_level": nr.risk_level, "risk_score": nr.risk_score, "headline": nr.headline,
+                     "risk_factors": nr.risk_factors, "diagnosis": nr.diagnosis, "recommendations": nr.recommendations}}
+    assert _pdf_text(base) == _pdf_text({**base, "ai_draft": None})
+
+    facts = build_facts(cap.attacks, cap.sessions, nr)
+    d = generate_draft(facts, template_paragraphs(nr), CFG, caller=fake(
+        exec_text="Host 10.0.0.31 shows C2 beacon activity toward 203.0.113.77 (T1071); risk is HIGH. Review the host.",
+        exec_ids=("F1", "S1"),
+        narr_text="10.0.0.31 made 48 connections to 203.0.113.77 with CV=3.2%, consistent with beaconing.",
+        narr_ids=("F1",)))
+    assert d["stats"]["passed"] == 2, d["paragraphs"]
+    txt = _pdf_text({**base, "ai_draft": d})
+    assert "Summary \\(AI-generated draft - review required; based on F1, S1\\):" in txt
+    assert "Incident narrative \\(AI-generated draft - review required; based on F1\\):" in txt
+    assert txt.index("Incident narrative") > txt.index("=== THREAT ASSESSMENT ===")
+
+    # 검사 실패 슬롯은 PDF 에 들어가지 않는다 (템플릿 서술이 그 자리를 맡음)
+    d_bad = generate_draft(facts, template_paragraphs(nr), CFG, caller=fake(
+        exec_text="Host 10.0.0.31 is definitely compromised and talked to 203.0.113.77 (T1071).", exec_ids=("F1",),
+        narr_text="10.0.0.31 made 49 connections to 203.0.113.77, consistent with beaconing.", narr_ids=("F1",)))
+    assert d_bad["stats"]["replaced"] == 2
+    assert _pdf_text({**base, "ai_draft": d_bad}) == _pdf_text(base)
+
+
+def test_api_endpoint_disabled_and_pdf_unchanged(api_client_factory=None):
+    """FastAPI 경로: 기본 OFF 면 ai-draft 는 available=False."""
+    from fastapi.testclient import TestClient
+    import main
+    client = TestClient(main.app)
+    r = client.get("/api/summary/00000000-0000-4000-8000-000000000000/ai-draft")
+    assert r.status_code == 404  # 없는 업로드 → 기존 summary 와 같은 404 규약

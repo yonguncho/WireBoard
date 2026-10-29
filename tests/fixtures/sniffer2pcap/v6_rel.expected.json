@@ -1,0 +1,97 @@
+{
+  "linktype": 1,
+  "packets": [
+    {
+      "time": "0.000000",
+      "iface": "port1",
+      "src": null,
+      "dst": null,
+      "cap_len": 42,
+      "is_ip": false
+    },
+    {
+      "time": "0.000112",
+      "iface": "port1",
+      "src": "10.1.1.10",
+      "dst": "192.0.2.53",
+      "cap_len": 71,
+      "is_ip": true
+    },
+    {
+      "time": "0.000532",
+      "iface": "port2",
+      "src": "203.0.113.5",
+      "dst": "192.0.2.53",
+      "cap_len": 71,
+      "is_ip": true
+    },
+    {
+      "time": "0.010632",
+      "iface": "port1",
+      "src": "10.1.1.10",
+      "dst": "198.51.100.20",
+      "cap_len": 58,
+      "is_ip": true
+    },
+    {
+      "time": "0.010682",
+      "iface": "port2",
+      "src": "203.0.113.5",
+      "dst": "198.51.100.20",
+      "cap_len": 58,
+      "is_ip": true
+    },
+    {
+      "time": "0.030982",
+      "iface": "port2",
+      "src": "198.51.100.20",
+      "dst": "203.0.113.5",
+      "cap_len": 54,
+      "is_ip": true
+    },
+    {
+      "time": "0.031022",
+      "iface": "port1",
+      "src": "198.51.100.20",
+      "dst": "10.1.1.10",
+      "cap_len": 54,
+      "is_ip": true
+    },
+    {
+      "time": "0.031322",
+      "iface": "port1",
+      "src": "10.1.1.10",
+      "dst": "198.51.100.20",
+      "cap_len": 121,
+      "is_ip": true
+    },
+    {
+      "time": "0.131322",
+      "iface": "port1",
+      "src": "10.20.0.7",
+      "dst": "10.1.1.10",
+      "cap_len": 78,
+      "is_ip": true
+    },
+    {
+      "time": "0.131922",
+      "iface": "port1",
+      "src": "2001:db8::10",
+      "dst": "2001:db8::1",
+      "cap_len": 74,
+      "is_ip": true
+    },
+    {
+      "time": "1.381922",
+      "iface": "port1",
+      "src": "10.1.1.10",
+      "dst": "198.51.100.20",
+      "cap_len": 54,
+      "is_ip": true
+    }
+  ],
+  "interfaces": [
+    "port1",
+    "port2"
+  ]
+}
