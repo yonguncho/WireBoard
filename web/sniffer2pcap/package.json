@@ -4,6 +4,6 @@
   "type": "module",
   "description": "FortiGate sniffer output to PCAP converter (static, runs in the browser)",
   "scripts": {
-    "test": "node --test tests/"
+    "test": "python -m pytest ../../tests/test_sniffer2pcap_web.py -q"
   }
 }

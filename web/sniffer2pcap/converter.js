@@ -134,8 +134,12 @@ export function classify(d, preferIp = false) {
   const asIp = () => ({ kind: 'ip', ipOffset: 0, ipEnd: rawIpLen, wireLen: Math.max(d.length, rawIpLen) });
   if (preferIp && rawIpLen) return asIp();
   if (ethIpLen) return asEth();
+  // ARP 등 알려진 비IP EtherType 을 raw IP 판정보다 먼저 — 목적지 MAC 이 4x/6x 인 ARP 를
+  // raw IP 로 오판해 파일 전체를 RAW 링크타입으로 바꾸던 버그. 애매하면 다수결에 맡긴다.
+  const nonIpType = KNOWN_ETHERTYPES.has(ethType) && ethType !== 0x0800 && ethType !== 0x86dd;
+  if (nonIpType) return { kind: 'eth', ipOffset: -1, ipEnd: 0, wireLen: d.length, ambiguous: !!rawIpLen };
   if (rawIpLen) return asIp();
-  if (KNOWN_ETHERTYPES.has(ethType)) return { kind: 'eth', ipOffset: -1, wireLen: d.length };
+  if (KNOWN_ETHERTYPES.has(ethType)) return { kind: 'eth', ipOffset: -1, ipEnd: 0, wireLen: d.length };
   return { kind: 'unknown', ipOffset: -1, wireLen: d.length };
 }
 

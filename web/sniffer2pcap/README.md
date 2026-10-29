@@ -68,8 +68,9 @@ WordPress 재작성 규칙(`!-d/!-f`)상 실제 폴더가 우선이라 WP 가 �
   이메일 보호 링크로 바뀌어 깨져 보였음). "분석 없음·외부 스크립트 없음" 약속을 지키기 위해 필수.
 - JS MIME `text/javascript`, 디렉터리 목록 금지.
 
-주의: Cloudflare 엣지가 JS/CSS 를 최대 4시간 캐시한다. `converter.js` 등을 바꿔 재배포하면
-최대 4시간 동안 구버전 JS 가 섞일 수 있다(HTML 은 5분). 급하면 파일명을 바꾸거나 기다릴 것.
+캐시: Cloudflare 엣지가 JS/CSS 를 4시간 캐시하므로, 배포 스크립트가 업로드 사본의 참조
+(`style.css` `app.js` `sample.js` `worker.js` `converter.js`)에 내용 해시 `?v=<10자리>` 를 붙인다.
+원본 파일은 그대로다. 재배포하면 HTML(5분 캐시) 갱신과 함께 새 JS 가 바로 쓰인다.
 
 분석 도구를 붙인다면 쿠키 없는 방식으로, CSP 의 `script-src`/`connect-src` 를 그 도메인 하나만
 허용하도록 바꾸고 `no-transform` 정책과 FAQ 문구("요청 0건")도 함께 고쳐야 한다.

@@ -337,3 +337,32 @@ def test_correct_labels_scale_and_hedged_compromise_pass():
 
 def test_ip_port_is_not_read_as_time():
     assert check_paragraph("Host 10.0.0.21 queried 192.0.2.53:53 in 30 sessions (5.4 KB), see P4.", ["P4"], FACTS) == []
+
+# ── 2차 독립 리뷰 지적 (오탐·미탐) ──
+
+@pytest.mark.parametrize("ok", [
+    "The internal host 10.0.0.31 opened 96 connections to 203.0.113.77, consistent with C2 beaconing.",
+    "An external server, 203.0.113.77, received 96 connections from 10.0.0.31 (CV=2.1%), consistent with beaconing.",
+    "Traffic from 10.0.0.31 to 203.0.113.77 used port 8443; no lateral spread or scanning was observed.",
+    "There is no evidence that 10.0.0.31 was compromised, but its 96 connections to 203.0.113.77 suggest beaconing.",
+    "Collateral traffic from 10.0.0.31 to 203.0.113.77 over an IPsec tunnel is consistent with C2 beaconing.",
+])
+def test_review_false_positives_now_pass(ok):
+    assert check_paragraph(ok, ["F1"], FACTS) == [], check_paragraph(ok, ["F1"], FACTS)
+
+
+@pytest.mark.parametrize("bad, reason", [
+    ("10.0.0.31 has been hacked and beaconed to 203.0.113.77 96 times.", "threat claims not in input"),
+    ("10.0.0.31 was taken over and beaconed to 203.0.113.77 96 times.", "threat claims not in input"),
+    ("Host 10.0.0.31 is external and beaconed to 203.0.113.77 96 times.", "internal/external mislabel"),
+    ("The beacon may be periodic. 10.0.0.31 compromised the network via 203.0.113.77.", "unhedged compromise claim"),
+])
+def test_review_false_negatives_now_rejected(bad, reason):
+    p = check_paragraph(bad, ["F1"], FACTS)
+    assert any(v.startswith(reason) for v in p), p
+
+
+def test_exact_duration_conversion_allowed():
+    facts = json.loads(json.dumps(FACTS))
+    facts["stats"]["duration_seconds"] = 120
+    assert check_paragraph("The capture lasted 2 minutes and 10.0.0.31 beaconed to 203.0.113.77.", ["S1"], facts) == []

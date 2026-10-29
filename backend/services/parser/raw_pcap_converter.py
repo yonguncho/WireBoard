@@ -42,6 +42,7 @@ _PKT_DESC_RE = re.compile(r"->|\barp\b|who-has|\b802\.1q\b|\bllc\b|\bstp\b", re.
 _HEX_LINE_RE = re.compile(r"^0x([0-9a-fA-F]{4,8}):?[\t ]+(.*)$")
 _HEX_TOKEN_RE = re.compile(r"^[0-9a-fA-F]+$")
 _ASCII_SEP_RE = re.compile(r"\t| {2,}")
+_FAST_GROUPS_RE = re.compile(r"(?:[0-9a-fA-F]{4} ){0,7}(?:[0-9a-fA-F]{4}|[0-9a-fA-F]{2})(?= *$)")
 
 _KNOWN_ETHERTYPES = {0x0800, 0x86DD, 0x0806, 0x8035, 0x8100, 0x88A8, 0x8847, 0x8848,
                      0x8863, 0x8864, 0x88CC, 0x888E, 0x8809}
@@ -71,7 +72,7 @@ def _decode(data: bytes) -> str:
         return data[2:].decode("utf-16-le", errors="replace")
     if data[:2] == b"\xfe\xff":
         return data[2:].decode("utf-16-be", errors="replace")
-    return data.decode("utf-8", errors="replace")
+    return data.decode("utf-8-sig", errors="replace")  # UTF-8 BOM 이 첫 헤더 줄을 깨지 않게
 
 
 def _clean(line: str) -> str:
@@ -117,6 +118,10 @@ def _parse_hex_body(body: str) -> tuple[list[int], bool]:
     """hex 줄 본문 → (bytes, partial). ASCII 열은 탭/2칸+ 공백으로 구분, hex 영역은 최대 39자."""
     cut = _ASCII_SEP_RE.search(body)
     hex_part = (body[:cut.start()] if cut else body)[:39]
+    # 빠른 경로: 대부분의 줄은 4자리 그룹만 (마지막 1개는 2자리일 수 있음) — 토큰 루프 없이 한 번에
+    m = _FAST_GROUPS_RE.match(hex_part)
+    if m:
+        return list(bytes.fromhex(m.group(0).replace(" ", ""))), False
     out: list[int] = []
     partial = False
     for tok in hex_part.split(" "):
@@ -170,6 +175,10 @@ def _classify(d: bytes, prefer_ip: bool = False) -> tuple[str, int, int, int, bo
     if eth_ip_len:
         end = eth_hdr + eth_ip_len
         return "eth", eth_hdr, end, max(len(d), end), bool(raw_ip_len)
+    # ARP 등 알려진 비IP EtherType 이 raw IP 판정보다 먼저 — 목적지 MAC 이 4x/6x 로 시작하는 ARP 를
+    # raw IPv4/IPv6 로 오판해 파일 전체 링크타입을 RAW 로 바꾸던 버그. 애매하면 다수결에 맡긴다.
+    if eth_type in _KNOWN_ETHERTYPES and eth_type not in (0x0800, 0x86DD):
+        return "eth", -1, 0, len(d), bool(raw_ip_len)
     if raw_ip_len:
         return "ip", 0, raw_ip_len, max(len(d), raw_ip_len), False
     if eth_type in _KNOWN_ETHERTYPES:
@@ -185,7 +194,7 @@ def _iter_packets(text: str):
         s = _clean(raw)
         if not s:
             continue
-        hm = _HEX_LINE_RE.match(s)
+        hm = _HEX_LINE_RE.match(s) if s.startswith("0x") else None
         if hm:
             off = int(hm.group(1), 16)
             data, partial = _parse_hex_body(hm.group(2))
@@ -216,7 +225,7 @@ def _iter_packets(text: str):
 
 
 def _verbose_hint(text: str) -> int | None:
-    for line in text.splitlines()[:200]:
+    for line in text[:65536].splitlines()[:200]:  # 앞부분만 — 200MB 전체를 줄로 쪼개지 않게
         m = _CMD_RE.search(line)
         if m and m.group(3):
             return int(m.group(3))

@@ -298,3 +298,40 @@ class TestFortigateDetect:
         """detect() → 빈 입력 거부."""
         parser = _load_parser()
         assert parser.detect(b"") is False
+
+
+# ─────────────────────────── 실제 FortiOS 형식 (2026-10-30 수정) ─────────────────────────
+
+
+class TestFortigateRealFormat:
+    def test_tcp_flags_are_not_protocol_and_seq_is_not_payload(self):
+        p = _load_parser()
+        s = p.parse(b"2026-06-04 10:00:00.123456 port1 in 10.0.0.1.51000 -> 10.0.0.2.443: syn 4242660751")
+        assert s[0].protocol == "TCP" and s[0].payload_length == 0 and s[0].confidence == "normal"
+
+    def test_icmp_ipv6_relative_and_no_iface_lines(self):
+        p = _load_parser()
+        lines = [
+            "2026-06-04 10:00:00.1 port1 in 10.0.0.1 -> 10.0.0.2: icmp: echo request",
+            "2026-06-04 10:00:00.2 port1 out 2001:db8::10.546 -> 2001:db8::1.547: udp 12",
+            "3.462208 port2 in 10.0.0.1.1234 -> 10.0.0.2.53: udp 29",
+            "2026-06-04 10:00:00.3 10.0.0.1.1234 -> 10.0.0.2.80: psh 1 ack 2",
+            "2026-06-04 10:00:00.4 port1 in 10.0.0.1 -> 10.0.0.2: ip-proto-50 72",
+        ]
+        s = p.parse("\n".join(lines).encode())
+        assert [x.protocol for x in s] == ["ICMP", "UDP", "UDP", "TCP", "ESP"]
+        assert s[1].src_ip == "2001:db8::10" and s[1].dst_port == 547
+        assert s[2].start_ts == pytest.approx(3.462208)
+
+    def test_nanosecond_timestamp_keeps_log_time(self):
+        p = _load_parser()
+        s = p.parse(b"2026-06-04 10:00:00.123456789 port1 in 10.0.0.1.1 -> 10.0.0.2.2: udp 1")
+        assert abs(s[0].start_ts - datetime(2026, 6, 4, 10, 0, 0, 123456, tzinfo=timezone.utc).timestamp()) < 1e-3
+
+    def test_detect_rejects_sentence_that_only_looks_like_a_header(self):
+        assert _load_parser().detect(b"1.0 add -> bad: x") is False
+
+    def test_utf8_bom_and_long_preamble(self):
+        p = _load_parser()
+        data = b"\xef\xbb\xbf" + b"banner line\n" * 300 + b"2026-06-04 10:00:00.1 port1 in 10.0.0.1.1 -> 10.0.0.2.2: udp 1\n"
+        assert p.detect(data) is True and len(p.parse(data)) == 1

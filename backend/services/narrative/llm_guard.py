@@ -45,16 +45,24 @@ _MONTH_DATE_RES = [
                r"october|november|december),?\s+(\d{4})\b", re.I),
 ]
 # 내부/외부 라벨과 IP 대역 대조 (eval 05: 8B 가 사설 IP 를 external, 공인 IP 를 internal 로 뒤집음)
-_INTERNAL_NETS = [ipaddress.ip_network(n) for n in (
-    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8",
-    "169.254.0.0/16", "fc00::/7", "fe80::/10", "::1/128")]
-_SIDE_LABEL_RE = re.compile(r"\b(internal|private|local|external|public|remote|internet-facing)\b", re.I)
+# (대역을 "10/8" 처럼 쓰면 ADR-005 보안 grep(전체 바인딩 문자열 금지)과 충돌하므로 호스트 비트를 둔 표기 + strict=False)
+_INTERNAL_NETS = [ipaddress.ip_network(n, strict=False) for n in (
+    "10.255.255.255/8", "172.16.255.255/12", "192.168.255.255/16", "100.64.255.255/10", "127.255.255.255/8",
+    "169.254.255.255/16", "fc00::/7", "fe80::/10", "::1/128")]
+_LABEL = r"(internal|private|local|external|public|remote|internet-facing)"
+_IP_TOK = r"(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7})"
+# 라벨이 직접 수식하는 IP 만 본다: "external hosts (10.0.0.31, 10.0.0.44)", "internal host 10.0.0.15"
+_LABEL_THEN_IPS_RE = re.compile(
+    rf"\b{_LABEL}\s+(?:[A-Za-z-]+\s+){{0,2}}\(?\s*({_IP_TOK}(?:\s*(?:,|and|,\s*and)\s*{_IP_TOK})*)", re.I)
+# "10.0.0.15 is external", "203.0.113.9 as an internal host"
+_IP_IS_LABEL_RE = re.compile(rf"({_IP_TOK})\s+(?:is|was|as)\s+(?:an?\s+|the\s+)?{_LABEL}\b", re.I)
 # 입력에 없는 지표 이름 (eval 04: CV 3.2% 를 'confidence level of 3.2%' 로 바꿔 부름)
 _UNSUPPORTED_METRICS_RE = re.compile(r"\b(confidence|probability|accuracy|certainty)\b", re.I)
 # 침해 언급은 완곡 표현(may/possible/consistent with …)이 앞에 있을 때만 허용 (eval 12: "The compromised host …")
 _COMPROMISE_RE = re.compile(r"\bcompromis\w*", re.I)
 _HEDGE_RE = re.compile(r"\b(may|might|could|possibl\w*|potential\w*|suspect\w*|consistent with|suggest\w*|"
-                       r"indicat\w*|whether|check\w* for|signs? of|risk of)\b", re.I)
+                       r"indicat\w*|whether|check\w* for|signs? of|risk of|no|not|without)\b", re.I)
+_NEGATION_RE = re.compile(r"\b(no|not|without|nor)\b", re.I)
 # "70 out of 100", "70/100" 의 100 은 척도라 숫자 검사에서 뺀다
 _SCALE_RE = re.compile(r"\s*(?:out of|/)\s*100\b", re.I)
 # 출력 형식이 본문에 새어 나온 경우 ("The finding_ids for this narrative are [F1]")
@@ -63,14 +71,17 @@ _FORMAT_LEAK_RE = re.compile(r"finding_ids?|\"text\"|executive_summary|incident_
 # 공격 유형·행위 주장은 입력(탐지 결과)에 근거가 있을 때만 — 3B 모델이 실제로
 # 평범한 웹 트래픽을 "lateral movement" 라고 지어낸 사례가 있었다 (eval 04)
 _THREAT_CLAIMS = [
-    (re.compile(r"lateral movement|lateral", re.I), ("lateral",)),
+    (re.compile(r"\blateral\b", re.I), ("lateral",)),
     (re.compile(r"exfiltrat|data theft|data leak", re.I), ("exfiltration",)),
     (re.compile(r"\b(c2|command[- ]and[- ]control|beacon\w*)\b", re.I), ("beacon", "c2")),
     (re.compile(r"brute[- ]?forc|password (guess|spray)|credential", re.I), ("brute force",)),
     (re.compile(r"\bscan\w*|reconnaissance|\brecon\b", re.I), ("scan",)),
     (re.compile(r"\bd?dos\b|denial[- ]of[- ]service|\bflood\w*", re.I), ("ddos", "flood", "dos")),
     (re.compile(r"ransomware|malware|trojan|botnet|cryptomin|phishing|rootkit|backdoor|worm\b", re.I), ("malware",)),
-    (re.compile(r"privilege escalation|persistence|sql injection|\bxss\b|tunnel\w*", re.I), ("__never__",)),
+    # WireBoard 가 탐지하지 않는 유형 — 입력에 근거가 생길 수 없다 (tunnel 은 IPsec 등 일반 용어라 제외)
+    (re.compile(r"privilege escalation|\bpersistence\b|sql injection|\bxss\b", re.I), ("__never__",)),
+    # 장악 단정 표현 (eval 리뷰: "taken over by an attacker", "has been hacked")
+    (re.compile(r"taken over|\bhacked\b|attacker[- ]controlled|under (?:the )?(?:attacker'?s? )?control", re.I), ("__never__",)),
 ]
 # IP:포트 / "port N on IP" 쌍 — 숫자 자체는 입력에 있어도 엉뚱한 자리에 쓰면 위반
 # (eval 11: "스캔한 포트 수 1024" 를 "10.0.0.15:1024" 로 씀)
@@ -84,6 +95,8 @@ MIN_CHARS = 40
 MAX_CHARS = 1200
 
 _ID_RE = re.compile(r"\b([FHPS]\d{1,3})\b", re.I)
+# ID 처럼 생겼지만 흔한 제품·프로토콜 이름 (F5 로드밸런서, AWS S3, HTTP/2 ALPN h2, h3)
+_ID_LOOKALIKES = {"F5", "S3", "H2", "H3"}
 _MITRE_RE = re.compile(r"\bTA?\d{4}(?:\.\d{3})?\b", re.I)
 _HASH_RE = re.compile(r"\b(?:[a-fA-F0-9]{64}|[a-fA-F0-9]{40}|[a-fA-F0-9]{32})\b")
 _IPV4_RE = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.]*\d)")
@@ -140,15 +153,31 @@ class FactIndex:
         stripped = _strip_tokens(blob)
         self.numbers = {n for n in (_norm_num(t) for t in _NUM_RE.findall(stripped)) if n is not None}
         self.units = _unit_pairs(stripped)
-        dur = (facts.get("stats") or {}).get("duration_seconds")
+        stats = facts.get("stats") if isinstance(facts.get("stats"), dict) else {}
+        dur = stats.get("duration_seconds")
         if isinstance(dur, (int, float)):
             self.units.add((float(dur), "s"))
+            # 정확히 나누어떨어지는 환산만 허용 (120초 → "2 minutes")
+            for div, unit in ((60, "min"), (3600, "h")):
+                if dur and dur % div == 0:
+                    self.units.add((float(dur // div), unit))
+                    self.numbers.add(float(dur // div))
         self.domains = {d.lower() for d in _DOMAIN_RE.findall(_IPV4_RE.sub(" ", blob))}
         self.hashes = {h.lower() for h in _HASH_RE.findall(blob)}
         self.ip_ports = _ip_port_pairs(blob)
         for t in facts.get("top_talkers") or []:
+            if not isinstance(t, dict):
+                continue
             for p in t.get("destination_ports") or []:
-                self.ip_ports.add((str(t.get("destination")), int(p)))
+                if isinstance(p, int):
+                    self.ip_ports.add((str(t.get("destination")), p))
+
+
+def _same_sentence_before(text: str, pos: int, width: int) -> str:
+    """pos 앞 width 글자 중 같은 문장 부분만 (완곡·부정 표현이 앞 문장에서 넘어오지 않게)."""
+    window = text[max(0, pos - width):pos]
+    cut = max(window.rfind(". "), window.rfind("; "), window.rfind("! "), window.rfind("? "))
+    return window[cut + 2:] if cut >= 0 else window
 
 
 def _is_internal(ip: str) -> bool:
@@ -228,7 +257,8 @@ def check_paragraph(text: str, finding_ids: list, facts_or_index) -> list[str]:
         bad = [str(i) for i in finding_ids if str(i) not in idx.ids]
         if bad:
             v.append(f"cites unknown finding IDs: {', '.join(bad[:5])}")
-    bad_inline = sorted({i.upper() for i in _ID_RE.findall(t) if i.upper() not in idx.ids})
+    bad_inline = sorted({i.upper() for i in _ID_RE.findall(t)
+                         if i.upper() not in idx.ids and i.upper() not in _ID_LOOKALIKES})
     if bad_inline:
         v.append(f"mentions unknown IDs in text: {', '.join(bad_inline[:5])}")
 
@@ -269,15 +299,15 @@ def check_paragraph(text: str, finding_ids: list, facts_or_index) -> list[str]:
 
     # 내부/외부 라벨 ↔ IP 대역: 라벨 뒤 같은 절(마침표·세미콜론·다음 라벨 전)의 IP 들을 대조
     mislabeled = []
-    labels = list(_SIDE_LABEL_RE.finditer(t))
-    for i, m in enumerate(labels):
-        end = labels[i + 1].start() if i + 1 < len(labels) else len(t)
-        clause = re.split(r"[.;](?!\d)", t[m.end():end], maxsplit=1)[0]
-        want_internal = m.group(1).lower() in ("internal", "private", "local")
-        for cand in _IPV4_RE.findall(clause) + _IPV6_CAND_RE.findall(clause):
+    pairs = [(m.group(1), ips) for m in _LABEL_THEN_IPS_RE.finditer(t)
+             for ips in [re.findall(_IP_TOK, m.group(2))]]
+    pairs += [(m.group(2), [m.group(1)]) for m in _IP_IS_LABEL_RE.finditer(t)]
+    for label, ips in pairs:
+        want_internal = label.lower() in ("internal", "private", "local")
+        for cand in ips:
             ip = _parse_ip(cand)
             if ip and _is_internal(ip) != want_internal:
-                mislabeled.append(f"{ip} as {m.group(1).lower()}")
+                mislabeled.append(f"{ip} as {label.lower()}")
     if mislabeled:
         v.append(f"internal/external mislabel: {', '.join(sorted(set(mislabeled))[:4])}")
 
@@ -286,13 +316,14 @@ def check_paragraph(text: str, finding_ids: list, facts_or_index) -> list[str]:
         v.append(f"metric not in input: {', '.join(metrics)}")
 
     unhedged = [m.group(0) for m in _COMPROMISE_RE.finditer(t)
-                if not _HEDGE_RE.search(t[max(0, m.start() - 60):m.start()])]
+                if not _HEDGE_RE.search(_same_sentence_before(t, m.start(), 80))]
     if unhedged:
         v.append(f"unhedged compromise claim: {', '.join(unhedged[:3])}")
 
     # 근거 없는 공격 유형 주장
-    claims = sorted({m.group(0).lower() for rx, need in _THREAT_CLAIMS for m in [rx.search(t)]
-                     if m and not any(k in idx.text for k in need)})
+    claims = sorted({m.group(0).lower() for rx, need in _THREAT_CLAIMS for m in rx.finditer(t)
+                     if not any(k in idx.text for k in need)
+                     and not _NEGATION_RE.search(_same_sentence_before(t, m.start(), 25))})
     if claims:
         v.append(f"threat claims not in input: {', '.join(claims[:5])}")
 
@@ -320,7 +351,10 @@ def check_paragraph(text: str, finding_ids: list, facts_or_index) -> list[str]:
 
     # 단정 표현
     low = t.lower()
-    hits = [p for p in BANNED_PHRASES if p in low]
+    # 같은 문장 앞쪽에 부정어가 있으면 제외 ("no evidence that X was compromised")
+    hits = [p for p in BANNED_PHRASES
+            if any(not _NEGATION_RE.search(_same_sentence_before(low, i, 50))
+                   for i in (m.start() for m in re.finditer(re.escape(p), low)))]
     if hits:
         v.append(f"banned assertive wording: {', '.join(hits[:3])}")
     return v

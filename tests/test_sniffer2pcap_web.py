@@ -224,3 +224,42 @@ def test_backend_export_pcap_identical_to_web_tool(case, tmp_path):
     assert conv is not None
     web = (res["dir"] / res["files"][0]["name"]).read_bytes()
     assert conv.export_pcap == web
+
+def _v6_lines(frames):
+    lines = []
+    for i, f in enumerate(frames):
+        b = bytes(f)
+        lines.append(f"2026-10-29 01:02:{i:02d}.000000 port1 in 10.0.0.1.1 -> 10.0.0.2.2: syn 1")
+        for off in range(0, len(b), 16):
+            ch = b[off:off + 16]
+            lines.append(f"0x{off:04x}\t " + " ".join(ch[j:j + 2].hex() for j in range(0, len(ch), 2)) + "\t.")
+    return "\n".join(lines) + "\n"
+
+
+def test_arp_to_6x_mac_keeps_ethernet_linktype(tmp_path):
+    """리뷰 재현: 목적지 MAC 6c:… 인 ARP 응답이 raw IPv6 로 오판돼 파일 전체가 RAW 로 바뀌던 버그."""
+    from scapy.all import ARP, IP, TCP, Ether
+    from services.parser.raw_pcap_converter import convert_raw_log
+    frames = [Ether(src="00:50:56:00:00:01", dst="00:09:0f:00:00:01") / IP(src="10.0.0.1", dst="10.0.0.2") / TCP()
+              for _ in range(5)]
+    frames.append(Ether(src="00:09:0f:00:00:01", dst="6c:00:00:00:00:01") / ARP(op=2, psrc="10.0.0.2", pdst="10.0.0.1"))
+    text = _v6_lines(frames)
+    conv = convert_raw_log(text.encode())
+    assert conv.export_linktype == 1
+    s, out = _convert_text(tmp_path, text, "arp6c")
+    assert s["files"][0]["linktype"] == 1
+    assert (out / s["files"][0]["name"]).read_bytes() == conv.export_pcap
+
+
+def test_utf8_bom_does_not_drop_first_packet():
+    from services.parser.raw_pcap_converter import convert_raw_log
+    raw = (CASES / "v6_abs.txt").read_bytes()
+    assert convert_raw_log(b"\xef\xbb\xbf" + raw).packet_count == convert_raw_log(raw).packet_count
+
+
+def test_upload_utf16_log_is_accepted_and_converted(api_client):
+    """PowerShell 리다이렉트(UTF-16LE) 로그가 감지 단계에서 415 로 거절되던 버그."""
+    import io
+    up = api_client.post("/api/upload", files={"file": ("ps.txt", io.BytesIO((CASES / "v6_utf16.txt").read_bytes()), "text/plain")})
+    assert up.status_code == 200, up.text
+    assert up.json()["pcap_available"] is True

@@ -1,4 +1,5 @@
 """POST /api/upload — 파일 수신 + 파싱 + 세션 저장."""
+import asyncio
 import json
 import logging
 import os
@@ -98,13 +99,18 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
             head = f.read(4)
         is_pcap = PcapParser().detect(head)
 
+        # 파싱은 수십 초가 걸릴 수 있는 순수 CPU 작업 — 이벤트 루프 밖에서 돌려 /health 등이 막히지 않게
+        loop = asyncio.get_running_loop()
         if is_pcap:
             # ── 스트리밍 파싱 (GB급 pcap을 전체 메모리로 올리지 않음) ──
             try:
                 p = PcapParser()
-                with open(tmp_path, "rb") as f:
-                    sessions, pkt_map = p.parse_stream(f, parse_warnings=parse_warnings,
-                                                       max_bytes=MAX_UPLOAD_BYTES, size=size)
+
+                def _stream():
+                    with open(tmp_path, "rb") as f:
+                        return p.parse_stream(f, parse_warnings=parse_warnings,
+                                              max_bytes=MAX_UPLOAD_BYTES, size=size)
+                sessions, pkt_map = await loop.run_in_executor(None, _stream)
                 icmp_events = list(p.icmp_events)
                 source_type = "pcap"
                 logger.info("pcap 스트리밍 파싱 완료: sessions=%d size=%d", len(sessions), size)
@@ -117,25 +123,10 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
                 raise HTTPException(status_code=413,
                                     detail=f"Text file size exceeds the {MAX_TEXT_UPLOAD_BYTES // (1024*1024)} MB limit")
             with open(tmp_path, "rb") as f:
-                raw = f.read()
-            for parser in _TEXT_PARSERS:
-                if parser.detect(raw):
-                    try:
-                        result = parser.parse(raw, parse_warnings=parse_warnings)
-                        if isinstance(result, tuple):
-                            sessions, pkt_map = result
-                        else:
-                            sessions, pkt_map = result, {}
-                        if not pkt_map:
-                            pkt_map = getattr(parser, "packet_map", {}) or {}
-                        icmp_events = list(getattr(parser, "icmp_events", []))
-                        source_type = _source_type(parser)
-                        logger.info("텍스트 파싱 완료: parser=%s sessions=%d warnings=%d",
-                                    type(parser).__name__, len(sessions), len(parse_warnings))
-                        break
-                    except (ValueError, KeyError, TypeError, json.JSONDecodeError, ValidationError) as exc:
-                        logger.warning("파서 예외: parser=%s error=%s", type(parser).__name__, exc)
-                        parse_warnings.append(f"{type(exc).__name__}: {exc}")
+                raw = _to_utf8(f.read())
+            parsed = await loop.run_in_executor(None, _parse_text, raw, parse_warnings)
+            if parsed is not None:
+                sessions, pkt_map, icmp_events, source_type = parsed
 
         return await _finalize_upload(
             request, ext, sessions, pkt_map, icmp_events, source_type, parse_warnings, raw,
@@ -147,6 +138,48 @@ async def upload_file(request: Request, file: UploadFile) -> JSONResponse:
             pass
 
 
+def _to_utf8(raw: bytes) -> bytes:
+    """텍스트 업로드 인코딩 정규화: UTF-16(PowerShell 리다이렉트 로그)·UTF-8 BOM → BOM 없는 UTF-8.
+    텍스트 파서들이 UTF-8 만 가정하므로 감지 단계 전에 맞춘다."""
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return raw.decode("utf-16", errors="replace").encode("utf-8")
+    if raw[:3] == b"\xef\xbb\xbf":
+        return raw[3:]
+    return raw
+
+
+def _parse_text(raw: bytes, parse_warnings: list):
+    """HAR/FortiGate/tcpdump 순서로 감지·파싱. → (sessions, pkt_map, icmp_events, source_type) | None"""
+    for parser in _TEXT_PARSERS:
+        if parser.detect(raw):
+            try:
+                result = parser.parse(raw, parse_warnings=parse_warnings)
+                if isinstance(result, tuple):
+                    sessions, pkt_map = result
+                else:
+                    sessions, pkt_map = result, {}
+                if not pkt_map:
+                    pkt_map = getattr(parser, "packet_map", {}) or {}
+                icmp_events = list(getattr(parser, "icmp_events", []))
+                logger.info("텍스트 파싱 완료: parser=%s sessions=%d warnings=%d",
+                            type(parser).__name__, len(sessions), len(parse_warnings))
+                return sessions, pkt_map, icmp_events, _source_type(parser)
+            except (ValueError, KeyError, TypeError, json.JSONDecodeError, ValidationError) as exc:
+                logger.warning("파서 예외: parser=%s error=%s", type(parser).__name__, exc)
+                parse_warnings.append(f"{type(exc).__name__}: {exc}")
+    return None
+
+
+def _convert_and_reparse(raw: bytes, parse_warnings: list):
+    from services.parser.raw_pcap_converter import convert_raw_log
+    conv = convert_raw_log(raw)
+    if conv is None:
+        return None, None
+    pcap_parser = PcapParser()
+    parsed = pcap_parser.parse(conv.internal_pcap, parse_warnings=parse_warnings, max_bytes=MAX_TEXT_UPLOAD_BYTES)
+    return conv, (parsed, list(getattr(pcap_parser, "icmp_events", [])))
+
+
 async def _finalize_upload(request, ext, sessions, pkt_map, icmp_events, source_type,
                            parse_warnings, raw):
     # FortiGate/tcpdump verbose 로그에 16진수 덤프가 있으면 pcap으로 변환 후 재파싱.
@@ -154,15 +187,14 @@ async def _finalize_upload(request, ext, sessions, pkt_map, icmp_events, source_
     pcap_bytes: bytes | None = None
     if source_type in ("fortigate", "tcpdump") and sessions is not None:
         try:
-            from services.parser.raw_pcap_converter import convert_raw_log
-            conv = convert_raw_log(raw)
+            conv, reparsed = await asyncio.get_running_loop().run_in_executor(
+                None, _convert_and_reparse, raw, parse_warnings)
             if conv is not None:
-                pcap_parser = PcapParser()
-                re_sessions, re_pkt_map = pcap_parser.parse(conv.internal_pcap, parse_warnings=parse_warnings, max_bytes=MAX_TEXT_UPLOAD_BYTES)
+                (re_sessions, re_pkt_map), re_icmp = reparsed
                 if re_sessions:
                     sessions = re_sessions
                     pkt_map = re_pkt_map
-                    icmp_events = list(getattr(pcap_parser, "icmp_events", []))
+                    icmp_events = re_icmp
                     # 다운로드는 가짜 MAC 없는 export_pcap (내부 재파싱용과 분리)
                     pcap_bytes = conv.export_pcap
                     logger.info("raw→pcap 변환 완료: packets=%d sessions=%d linktype=%d",

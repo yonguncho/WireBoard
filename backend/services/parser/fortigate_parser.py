@@ -55,6 +55,8 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 _LINE_PREFIX_RE = re.compile(r"^\[[^\]]{4,40}\]\s?")
 
 _TCP_FLAGS = {"syn", "ack", "fin", "rst", "psh", "urg", "ece", "cwr"}
+_IP_PROTO_NAMES = {47: "GRE", 50: "ESP", 51: "AH", 132: "SCTP", 2: "IGMP"}
+_DETECT_MAX_LINES = 500  # 터미널 로그 앞부분 잡음(배너·명령 출력)이 길어도 감지되게
 
 
 def _clean(line: str) -> str:
@@ -91,6 +93,11 @@ def _classify(rest: str) -> tuple[str, int] | None:
         return None
     if words[0] in _TCP_FLAGS:
         return "TCP", 0
+    # "ip-proto-50 72" — ESP/AH/GRE 등 포트 없는 IP 프로토콜
+    m = re.match(r"^ip-proto-(\d+)(?:\s+(\d+))?", low)
+    if m:
+        num = int(m.group(1))
+        return _IP_PROTO_NAMES.get(num, f"IP-PROTO-{num}"), int(m.group(2) or 0)
     m = re.match(r"^(\w+)\s+(\d+)", rest)
     if m:
         return m.group(1).upper(), int(m.group(2))
@@ -101,18 +108,23 @@ class FortigateParser:
     """FortiGate sniffer verbose 1~6 헤더 파서 (FortiGateParser 별칭 지원)."""
     def detect(self, data: bytes) -> bool:
         try:
-            text = data.decode("utf-8", errors="replace")
+            text = data[:262144].decode("utf-8-sig", errors="replace")
         except UnicodeDecodeError:
             return False
-        for line in text.splitlines()[:50]:
+        for line in text.splitlines()[:_DETECT_MAX_LINES]:
             s = _clean(line)
-            if _LINE_RE.match(s) or _DETECT_SIMPLE_RE.search(s):
+            if _DETECT_SIMPLE_RE.search(s):
+                return True
+            m = _LINE_RE.match(s)
+            # 정규식 모양만이 아니라 주소·설명까지 실제로 해석돼야 FortiGate 로 인정
+            # ("1.0 add -> bad: x" 같은 문장이 감지돼 tcpdump 파서 기회를 뺏던 오탐 방지)
+            if m and _split_addr(m.group("src")) and _split_addr(m.group("dst")) and _classify(m.group("rest")):
                 return True
         return False
 
     def parse(self, data: bytes, parse_warnings: list[str] | None = None) -> list[SessionModel]:
         try:
-            text = data.decode("utf-8", errors="replace")
+            text = data.decode("utf-8-sig", errors="replace")
         except UnicodeDecodeError as exc:
             raise ValueError(f"UTF-8 디코딩 실패: {exc}") from exc
 
@@ -133,7 +145,9 @@ class FortigateParser:
                 if m.group("abs"):
                     try:
                         # 로그 시각을 장비 타임존으로 해석 후 UTC epoch로 변환
-                        dt = datetime.strptime(m.group("abs").strip(), "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=_LOG_TZ)
+                        # %f 는 6자리까지 — 나노초(9자리) 타임스탬프는 잘라서 해석
+                        base, frac = m.group("abs").strip().rsplit(".", 1)
+                        dt = datetime.strptime(f"{base}.{frac[:6]}", "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=_LOG_TZ)
                         start_ts = dt.timestamp()
                     except ValueError:
                         start_ts = now_ts
