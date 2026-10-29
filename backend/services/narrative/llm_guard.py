@@ -16,7 +16,7 @@ BANNED_PHRASES = (
     "guaranteed", "proves that", "proof of compromise", "confirmed compromise",
     "confirmed breach", "is compromised", "has been compromised", "was compromised",
     "were compromised", "fully compromised", "100% sure", "100% certain",
-    "has been breached", "was breached", "were breached", "is breached",
+    "breach", "extent of the compromise", "the compromise",
     "is infected", "are infected", "was infected", "were infected", "has been infected",
     "confirmed infection", "confirmed attack", "clearly", "no doubt", "beyond doubt",
     "확실히", "틀림없이", "침해됨", "침해되었", "침해가 확인", "감염됨", "감염되었",
@@ -27,6 +27,26 @@ _NUMBER_WORDS_RE = re.compile(
     r"\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
     r"sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
     r"hundreds?|thousands?|millions?|billions?|dozens?)\b", re.I)
+
+# 공격 유형·행위 주장은 입력(탐지 결과)에 근거가 있을 때만 — 3B 모델이 실제로
+# 평범한 웹 트래픽을 "lateral movement" 라고 지어낸 사례가 있었다 (eval 04)
+_THREAT_CLAIMS = [
+    (re.compile(r"lateral movement|lateral", re.I), ("lateral",)),
+    (re.compile(r"exfiltrat|data theft|data leak", re.I), ("exfiltration",)),
+    (re.compile(r"\b(c2|command[- ]and[- ]control|beacon\w*)\b", re.I), ("beacon", "c2")),
+    (re.compile(r"brute[- ]?forc|password (guess|spray)|credential", re.I), ("brute force",)),
+    (re.compile(r"\bscan\w*|reconnaissance|\brecon\b", re.I), ("scan",)),
+    (re.compile(r"\bd?dos\b|denial[- ]of[- ]service|\bflood\w*", re.I), ("ddos", "flood", "dos")),
+    (re.compile(r"ransomware|malware|trojan|botnet|cryptomin|phishing|rootkit|backdoor|worm\b", re.I), ("malware",)),
+    (re.compile(r"privilege escalation|persistence|sql injection|\bxss\b|tunnel\w*", re.I), ("__never__",)),
+]
+# IP:포트 / "port N on IP" 쌍 — 숫자 자체는 입력에 있어도 엉뚱한 자리에 쓰면 위반
+# (eval 11: "스캔한 포트 수 1024" 를 "10.0.0.15:1024" 로 씀)
+_IP_PORT_RES = [
+    re.compile(r"(?<![\d.])((?:\d{1,3}\.){3}\d{1,3}):(\d{1,5})\b"),
+    re.compile(r"(?<![\d.])((?:\d{1,3}\.){3}\d{1,3}) (?:on )?port (\d{1,5})\b", re.I),
+]
+_PORT_ON_IP_RE = re.compile(r"\bport (\d{1,5}) (?:on|of|at) ((?:\d{1,3}\.){3}\d{1,3})(?![\d.]*\d)", re.I)
 
 MIN_CHARS = 40
 MAX_CHARS = 1200
@@ -93,6 +113,16 @@ class FactIndex:
             self.units.add((float(dur), "s"))
         self.domains = {d.lower() for d in _DOMAIN_RE.findall(_IPV4_RE.sub(" ", blob))}
         self.hashes = {h.lower() for h in _HASH_RE.findall(blob)}
+        self.ip_ports = _ip_port_pairs(blob)
+        for t in facts.get("top_talkers") or []:
+            for p in t.get("destination_ports") or []:
+                self.ip_ports.add((str(t.get("destination")), int(p)))
+
+
+def _ip_port_pairs(text: str) -> set[tuple]:
+    pairs = {(ip, int(p)) for r in _IP_PORT_RES for ip, p in r.findall(text)}
+    pairs |= {(ip, int(p)) for p, ip in _PORT_ON_IP_RE.findall(text)}
+    return pairs
 
 
 def collect_ids(facts: dict) -> list[str]:
@@ -179,6 +209,17 @@ def check_paragraph(text: str, finding_ids: list, facts_or_index) -> list[str]:
             bad_ips.append(ip)
     if bad_ips:
         v.append(f"IPs not in input: {', '.join(sorted(set(bad_ips))[:5])}")
+
+    # IP:포트 쌍
+    bad_pairs = sorted(f"{ip}:{p}" for ip, p in _ip_port_pairs(t) - idx.ip_ports)
+    if bad_pairs:
+        v.append(f"IP:port not in input: {', '.join(bad_pairs[:5])}")
+
+    # 근거 없는 공격 유형 주장
+    claims = sorted({m.group(0).lower() for rx, need in _THREAT_CLAIMS for m in [rx.search(t)]
+                     if m and not any(k in idx.text for k in need)})
+    if claims:
+        v.append(f"threat claims not in input: {', '.join(claims[:5])}")
 
     # 도메인
     bad_dom = [d for d in _DOMAIN_RE.findall(_IPV4_RE.sub(" ", t))

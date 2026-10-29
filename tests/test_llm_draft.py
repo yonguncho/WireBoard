@@ -275,3 +275,27 @@ def test_health_reports_bound_port():
     r = TestClient(main.app).get("/health")
     assert r.status_code == 200
     assert r.json()["port"] == 80  # TestClient 의 가상 서버 포트 — 하드코딩 8764 가 아님
+
+# ── 실제 모델(llama3.2 3B, eval 2026-10-30)이 낸 환각 — 숫자는 입력에 있지만 의미가 틀린 경우 ──
+
+@pytest.mark.parametrize("bad, reason", [
+    # eval 11: '스캔한 포트 수'를 포트 번호로 씀
+    (GOOD_NARR + " Traffic went to 203.0.113.77:96.", "IP:port not in input"),
+    (GOOD_NARR + " It targeted port 140 on 203.0.113.77.", "IP:port not in input"),
+    # eval 04: 입력에 없는 공격 유형을 지어냄
+    (GOOD_NARR + " The top talkers indicate potential lateral movement.", "threat claims not in input"),
+    (GOOD_NARR + " A port scan preceded this.", "threat claims not in input"),
+    (GOOD_NARR + " This may be ransomware staging.", "threat claims not in input"),
+    # eval 11: 침해 전제
+    (GOOD_NARR + " Further analysis will show the extent of the compromise.", "banned assertive wording"),
+    (GOOD_NARR + " This indicates a potential security breach.", "banned assertive wording"),
+])
+def test_real_model_hallucinations_are_rejected(bad, reason):
+    p = check_paragraph(bad, ["F1"], FACTS)
+    assert any(v.startswith(reason) for v in p), p
+
+
+def test_valid_ip_port_and_supported_claims_pass():
+    text = ("10.0.0.31 connected to 203.0.113.77:8443 repeatedly, consistent with C2 beaconing; "
+            "it also sent 140 MB out, which may indicate exfiltration.")
+    assert check_paragraph(text, ["F1", "F2", "P1"], FACTS) == []

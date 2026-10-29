@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 DRAFT_LABEL = "AI-generated draft - review required"
 SLOTS = ("executive_summary", "incident_narrative")
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"  # v2: 숫자-의미 결합·근거 없는 공격 유형 금지 규칙 추가 (eval 04/11 환각 대응)
 _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 _TRUE = ("1", "true", "yes", "on")
 
@@ -49,6 +49,8 @@ Rules:
 - Use ONLY the facts in the JSON you are given. Do not add knowledge from outside it.
 - Copy every IP address, port, number, time, byte size and MITRE technique ID exactly as written in the JSON. If a value is not in the JSON, do not write it.
 - Write numbers as digits, never as words. Do not add up, round or convert numbers.
+- Keep each number with what it describes: a count of ports scanned or connections is not a port number. Write "IP:port" only for a port that the JSON lists for that IP.
+- Name only the attack types that appear in "findings". If "findings" is empty, say that no attack pattern was detected and do not speculate about attacks.
 - Use cautious wording such as "indicates", "is consistent with", "may". Packet data alone cannot prove a compromise: never say a host is definitely or certainly compromised.
 - For each paragraph, list the IDs (like F1, H2, P1, S1) of the facts it relies on in "finding_ids".
 - Write in English. Plain sentences, no bullet points, no markdown.

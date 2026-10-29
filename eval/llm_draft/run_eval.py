@@ -21,7 +21,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1] / "backend"))
 
-from services.narrative.llm_draft import PROMPT_VERSION, LlmConfig, LlmUnavailable, generate_draft  # noqa: E402
+from services.narrative.llm_draft import (  # noqa: E402
+    PROMPT_VERSION, LlmConfig, LlmUnavailable, call_model, generate_draft,
+)
 
 RESULTS = HERE / "results.jsonl"
 
@@ -35,8 +37,14 @@ def run(cfg: LlmConfig) -> dict:
     for path in cases:
         case = json.loads(path.read_text(encoding="utf-8"))
         t0 = time.perf_counter()
+        raw_holder = {}
+
+        def recording_caller(c, facts):
+            raw_holder["raw"] = call_model(c, facts)
+            return raw_holder["raw"]
+
         try:
-            draft = generate_draft(case["facts"], case["templates"], cfg)
+            draft = generate_draft(case["facts"], case["templates"], cfg, caller=recording_caller)
         except LlmUnavailable as exc:
             errors += 1
             total += 2
@@ -51,7 +59,8 @@ def run(cfg: LlmConfig) -> dict:
             for v in p["violations"]:
                 key = v.split(":")[0]
                 reasons[key] = reasons.get(key, 0) + 1
-        detail.append({"case": case["name"], "gen_ms": ms, "paragraphs": draft["paragraphs"]})
+        detail.append({"case": case["name"], "gen_ms": ms, "raw_output": raw_holder.get("raw"),
+                       "paragraphs": draft["paragraphs"]})
         marks = " ".join("PASS" if p["source"] == "llm" else "FAIL" for p in draft["paragraphs"])
         print(f"  {case['name']:<36} {marks}  {ms / 1000:6.1f}s  ({time.perf_counter() - t0:.1f}s wall)")
 
@@ -74,6 +83,28 @@ def run(cfg: LlmConfig) -> dict:
     return summary
 
 
+def rescore(run_file: Path) -> None:
+    """저장된 모델 원문을 현재 검사기로 다시 채점 (모델 호출 없음) — 검사 규칙을 바꿨을 때 비교용."""
+    data = json.loads(run_file.read_text(encoding="utf-8"))
+    cases = {json.loads(p.read_text(encoding="utf-8"))["name"]: json.loads(p.read_text(encoding="utf-8"))
+             for p in (HERE / "cases").glob("*.json")}
+    cfg = LlmConfig(True, "replay", "", data["summary"]["model"], 0)
+    total = passed = 0
+    for d in data["detail"]:
+        if not d.get("raw_output"):
+            print(f"  {d['case']:<36} (원문 없음 — 건너뜀)")
+            continue
+        draft = generate_draft(cases[d["case"]]["facts"], cases[d["case"]]["templates"], cfg,
+                               caller=lambda c, f, raw=d["raw_output"]: raw)
+        total += 2
+        passed += draft["stats"]["passed"]
+        for p in draft["paragraphs"]:
+            mark = "PASS" if p["source"] == "llm" else "FAIL " + " | ".join(p["violations"])
+            print(f"  {d['case']:<36} {p['slot']:<20} {mark}")
+    if total:
+        print(f"rescore: {passed}/{total} 통과 ({passed / total:.0%}) — 저장 당시 {data['summary']['pass_rate']:.0%}")
+
+
 def table() -> None:
     if not RESULTS.exists():
         print("no runs recorded yet")
@@ -94,7 +125,11 @@ def main():
     ap.add_argument("--url")
     ap.add_argument("--timeout", type=float, default=600)
     ap.add_argument("--table", action="store_true")
+    ap.add_argument("--rescore", type=Path, help="runs/*.json 의 원문을 현재 검사기로 재채점")
     a = ap.parse_args()
+    if a.rescore:
+        rescore(a.rescore)
+        return
     if a.table or not a.model:
         table()
         return
