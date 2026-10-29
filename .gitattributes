@@ -1,0 +1,2 @@
+# 줄바꿈·인코딩 자체가 테스트 대상인 픽스처(LF/CRLF/UTF-16) — 바이트 그대로 보존
+tests/fixtures/sniffer2pcap/*.txt -text
