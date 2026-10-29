@@ -314,3 +314,26 @@ def test_spelled_out_date_and_matching_number_word_pass():
 def test_output_format_leak_rejected():
     p = check_paragraph(GOOD_NARR + " The finding_ids for this narrative are [F1].", ["F1"], FACTS)
     assert "output format leaked into text" in p
+
+# ── hermes3 8B 실측(eval 2026-10-30)에서 검사를 통과했던 의미 오류 ──
+
+@pytest.mark.parametrize("bad, reason", [
+    ("Four external hosts (10.0.0.31, 10.0.0.21) communicated with internal hosts (203.0.113.77), "
+     "consistent with C2 beaconing.", "internal/external mislabel"),
+    ("The beacon from 10.0.0.31 to 203.0.113.77 had a high confidence level of 2.1% over 96 connections.",
+     "metric not in input"),
+    ("The compromised host 10.0.0.31 beaconed to 203.0.113.77 over 96 connections (CV=2.1%).",
+     "unhedged compromise claim"),
+])
+def test_8b_semantic_errors_rejected(bad, reason):
+    p = check_paragraph(bad, ["F1"], FACTS)
+    assert any(v.startswith(reason) for v in p), p
+
+
+def test_correct_labels_scale_and_hedged_compromise_pass():
+    text = ("Internal host 10.0.0.31 contacted external address 203.0.113.77 96 times (CV=2.1%), "
+            "which may indicate a compromised host; the risk score is 100 out of 100.")
+    assert check_paragraph(text, ["F1", "S1"], FACTS) == []
+
+def test_ip_port_is_not_read_as_time():
+    assert check_paragraph("Host 10.0.0.21 queried 192.0.2.53:53 in 30 sessions (5.4 KB), see P4.", ["P4"], FACTS) == []

@@ -40,7 +40,9 @@ logger = logging.getLogger(__name__)
 
 DRAFT_LABEL = "AI-generated draft - review required"
 SLOTS = ("executive_summary", "incident_narrative")
-PROMPT_VERSION = "v3"  # v2: 숫자-의미 결합·근거 없는 공격 유형 금지 / v3: findings 없을 때 F1 인용 금지·형식 누설 금지
+# v2: 숫자-의미 결합·근거 없는 공격 유형 금지 / v3: findings 없을 때 F1 인용 금지·형식 누설 금지
+# v4: 내부/외부 대역 정의·침해 단정 금지·필드명 유지 (8B 실측 오류 대응)
+PROMPT_VERSION = "v4"
 _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 _TRUE = ("1", "true", "yes", "on")
 
@@ -50,6 +52,8 @@ Rules:
 - Copy every IP address, port, number, time, byte size and MITRE technique ID exactly as written in the JSON. If a value is not in the JSON, do not write it.
 - Write numbers as digits, never as words. Do not add up, round or convert numbers.
 - Keep each number with what it describes: a count of ports scanned or connections is not a port number. Write "IP:port" only for a port that the JSON lists for that IP.
+- Addresses in 10.x, 172.16-31.x and 192.168.x are internal; other addresses are external. Do not call a host compromised; describe what it did.
+- Use the field names as given (for example "CV" is the timing variation of a beacon, not a confidence level).
 - Name only the attack types that appear in "findings". If "findings" is empty, say that no attack pattern was detected and do not speculate about attacks.
 - Use cautious wording such as "indicates", "is consistent with", "may". Packet data alone cannot prove a compromise: never say a host is definitely or certainly compromised.
 - For each paragraph, list the IDs (like F1, H2, P1, S1) of the facts it relies on in "finding_ids". Use only IDs that exist in the JSON; when "findings" is empty there is no F1, so cite S1, P and H IDs instead. Do not mention "finding_ids" in the text.

@@ -44,6 +44,19 @@ _MONTH_DATE_RES = [
     re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|"
                r"october|november|december),?\s+(\d{4})\b", re.I),
 ]
+# 내부/외부 라벨과 IP 대역 대조 (eval 05: 8B 가 사설 IP 를 external, 공인 IP 를 internal 로 뒤집음)
+_INTERNAL_NETS = [ipaddress.ip_network(n) for n in (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8",
+    "169.254.0.0/16", "fc00::/7", "fe80::/10", "::1/128")]
+_SIDE_LABEL_RE = re.compile(r"\b(internal|private|local|external|public|remote|internet-facing)\b", re.I)
+# 입력에 없는 지표 이름 (eval 04: CV 3.2% 를 'confidence level of 3.2%' 로 바꿔 부름)
+_UNSUPPORTED_METRICS_RE = re.compile(r"\b(confidence|probability|accuracy|certainty)\b", re.I)
+# 침해 언급은 완곡 표현(may/possible/consistent with …)이 앞에 있을 때만 허용 (eval 12: "The compromised host …")
+_COMPROMISE_RE = re.compile(r"\bcompromis\w*", re.I)
+_HEDGE_RE = re.compile(r"\b(may|might|could|possibl\w*|potential\w*|suspect\w*|consistent with|suggest\w*|"
+                       r"indicat\w*|whether|check\w* for|signs? of|risk of)\b", re.I)
+# "70 out of 100", "70/100" 의 100 은 척도라 숫자 검사에서 뺀다
+_SCALE_RE = re.compile(r"\s*(?:out of|/)\s*100\b", re.I)
 # 출력 형식이 본문에 새어 나온 경우 ("The finding_ids for this narrative are [F1]")
 _FORMAT_LEAK_RE = re.compile(r"finding_ids?|\"text\"|executive_summary|incident_narrative|[{}]", re.I)
 
@@ -78,7 +91,7 @@ _IPV6_CAND_RE = re.compile(r"(?<![\w:])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7
 _DOMAIN_RE = re.compile(r"\b(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}\b")
 # 시각·날짜는 숫자 단위가 아니라 통째로 대조한다 (01:49:33 → 02:49:33 재조합 방지)
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
-_TIME_RE = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b")
+_TIME_RE = re.compile(r"(?<![\d.])\d{1,2}:\d{2}(?::\d{2})?\b")  # IP:포트(192.0.2.53:53)의 53:53 은 시각 아님
 # 숫자 앞 글자는 허용(port4444, x_7777 도 검사 대상) — 앞이 숫자/점이면 이미 다른 숫자의 일부
 _NUM_RE = re.compile(r"(?<![\d.])\d+(?:,\d{3})*(?:\.\d+)?")
 # 숫자+단위 쌍은 단위까지 맞아야 한다 ("1.4 GB" 가 입력이면 "1.4 TB" 는 위반)
@@ -136,6 +149,11 @@ class FactIndex:
         for t in facts.get("top_talkers") or []:
             for p in t.get("destination_ports") or []:
                 self.ip_ports.add((str(t.get("destination")), int(p)))
+
+
+def _is_internal(ip: str) -> bool:
+    addr = ipaddress.ip_address(ip)
+    return any(addr.version == n.version and addr in n for n in _INTERNAL_NETS)
 
 
 def _iso_dates(text: str) -> str:
@@ -249,6 +267,29 @@ def check_paragraph(text: str, finding_ids: list, facts_or_index) -> list[str]:
     if bad_pairs:
         v.append(f"IP:port not in input: {', '.join(bad_pairs[:5])}")
 
+    # 내부/외부 라벨 ↔ IP 대역: 라벨 뒤 같은 절(마침표·세미콜론·다음 라벨 전)의 IP 들을 대조
+    mislabeled = []
+    labels = list(_SIDE_LABEL_RE.finditer(t))
+    for i, m in enumerate(labels):
+        end = labels[i + 1].start() if i + 1 < len(labels) else len(t)
+        clause = re.split(r"[.;](?!\d)", t[m.end():end], maxsplit=1)[0]
+        want_internal = m.group(1).lower() in ("internal", "private", "local")
+        for cand in _IPV4_RE.findall(clause) + _IPV6_CAND_RE.findall(clause):
+            ip = _parse_ip(cand)
+            if ip and _is_internal(ip) != want_internal:
+                mislabeled.append(f"{ip} as {m.group(1).lower()}")
+    if mislabeled:
+        v.append(f"internal/external mislabel: {', '.join(sorted(set(mislabeled))[:4])}")
+
+    metrics = sorted({w.lower() for w in _UNSUPPORTED_METRICS_RE.findall(t) if w.lower() not in idx.text})
+    if metrics:
+        v.append(f"metric not in input: {', '.join(metrics)}")
+
+    unhedged = [m.group(0) for m in _COMPROMISE_RE.finditer(t)
+                if not _HEDGE_RE.search(t[max(0, m.start() - 60):m.start()])]
+    if unhedged:
+        v.append(f"unhedged compromise claim: {', '.join(unhedged[:3])}")
+
     # 근거 없는 공격 유형 주장
     claims = sorted({m.group(0).lower() for rx, need in _THREAT_CLAIMS for m in [rx.search(t)]
                      if m and not any(k in idx.text for k in need)})
@@ -262,7 +303,7 @@ def check_paragraph(text: str, finding_ids: list, facts_or_index) -> list[str]:
         v.append(f"domains not in input: {', '.join(sorted(set(bad_dom))[:5])}")
 
     # 숫자 (포트·바이트·횟수 포함) — 시각·IP·ID 등은 위에서 따로 검사하고 지운 뒤
-    plain = _strip_tokens(_DOMAIN_RE.sub(" ", t))
+    plain = _strip_tokens(_DOMAIN_RE.sub(" ", _SCALE_RE.sub(" ", t)))
     bad_nums = []
     for tok in _NUM_RE.findall(plain):
         n = _norm_num(tok)
