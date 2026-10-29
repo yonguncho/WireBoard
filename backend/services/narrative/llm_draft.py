@@ -301,6 +301,7 @@ def generate_draft(facts: dict, templates: dict[str, str], cfg: LlmConfig,
 _CACHE: "OrderedDict[str, dict]" = OrderedDict()
 _CACHE_MAX = 32
 _CACHE_LOCK = threading.Lock()  # executor 스레드 여러 개가 동시에 접근
+_INFLIGHT: dict[str, threading.Lock] = {}
 
 
 def draft_for_capture(capture, narrative, cfg: Optional[LlmConfig] = None) -> Optional[dict]:
@@ -314,13 +315,23 @@ def draft_for_capture(capture, narrative, cfg: Optional[LlmConfig] = None) -> Op
         if key in _CACHE:
             _CACHE.move_to_end(key)
             return _CACHE[key]
-    try:
-        draft = generate_draft(facts, template_paragraphs(narrative), cfg)
-    except LlmUnavailable as exc:
-        logger.warning("AI 초안 생략 (로컬 모델 미가용, 템플릿 보고서 유지): model=%s %s", cfg.model, exc)
-        return None
-    with _CACHE_LOCK:
-        _CACHE[key] = draft
-        while len(_CACHE) > _CACHE_MAX:
-            _CACHE.popitem(last=False)
-    return draft
+        key_lock = _INFLIGHT.setdefault(key, threading.Lock())
+    # 같은 캡처를 동시에 요청하면(PDF 연타 등) 모델은 한 번만 돌리고 나머지는 결과를 기다린다
+    with key_lock:
+        with _CACHE_LOCK:
+            if key in _CACHE:
+                return _CACHE[key]
+        draft = None
+        try:
+            draft = generate_draft(facts, template_paragraphs(narrative), cfg)
+        except LlmUnavailable as exc:
+            logger.warning("AI 초안 생략 (로컬 모델 미가용, 템플릿 보고서 유지): model=%s %s", cfg.model, exc)
+        finally:
+            # 캐시 기록과 in-flight 해제를 한 번에 — 그 사이에 들어온 요청이 모델을 또 돌리지 않게
+            with _CACHE_LOCK:
+                if draft is not None:
+                    _CACHE[key] = draft
+                    while len(_CACHE) > _CACHE_MAX:
+                        _CACHE.popitem(last=False)
+                _INFLIGHT.pop(key, None)
+        return draft

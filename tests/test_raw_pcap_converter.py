@@ -89,7 +89,7 @@ def test_raw_ipv4_with_ethertype_lookalike_src_ip():
 
 
 def test_summary_only_log_returns_none():
-    # verbose 3: 16진수 덤프 없음
+    # verbose 4: 헤더만 있고 16진수 덤프 없음
     summary_only = (
         "2026-03-18 13:41:51.308714 internal2 in 3.3.3.1.56501 -> 10.90.80.163.15902: syn 0\n"
         "2026-03-18 13:41:51.308754 internal1 out 3.3.3.1.56501 -> 10.90.80.163.15902: syn 0\n"

@@ -209,3 +209,18 @@ def test_relative_timestamps_with_base_time(tmp_path):
     assert recs[0][0] == 1793235723 and recs[0][1] == 0
     assert recs[-1][0] - recs[0][0] == 1  # 마지막 패킷 +1.38s
 
+
+
+@pytest.mark.parametrize("case", CASE_NAMES)
+def test_backend_export_pcap_identical_to_web_tool(case, tmp_path):
+    """WireBoard 본체 변환기(export_pcap)와 웹 도구 결과가 바이트 단위로 같아야 한다."""
+    from services.parser.raw_pcap_converter import convert_raw_log
+
+    res = convert(case, tmp_path)
+    conv = convert_raw_log((CASES / f"{case}.txt").read_bytes())
+    if not res["files"]:
+        assert conv is None
+        return
+    assert conv is not None
+    web = (res["dir"] / res["files"][0]["name"]).read_bytes()
+    assert conv.export_pcap == web

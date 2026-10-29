@@ -154,18 +154,19 @@ async def _finalize_upload(request, ext, sessions, pkt_map, icmp_events, source_
     pcap_bytes: bytes | None = None
     if source_type in ("fortigate", "tcpdump") and sessions is not None:
         try:
-            from services.parser.raw_pcap_converter import convert_raw_log_to_pcap
-            conv = convert_raw_log_to_pcap(raw)
+            from services.parser.raw_pcap_converter import convert_raw_log
+            conv = convert_raw_log(raw)
             if conv is not None:
-                converted, pkt_count = conv
                 pcap_parser = PcapParser()
-                re_sessions, re_pkt_map = pcap_parser.parse(converted, parse_warnings=parse_warnings, max_bytes=MAX_TEXT_UPLOAD_BYTES)
+                re_sessions, re_pkt_map = pcap_parser.parse(conv.internal_pcap, parse_warnings=parse_warnings, max_bytes=MAX_TEXT_UPLOAD_BYTES)
                 if re_sessions:
                     sessions = re_sessions
                     pkt_map = re_pkt_map
                     icmp_events = list(getattr(pcap_parser, "icmp_events", []))
-                    pcap_bytes = converted
-                    logger.info("raw→pcap 변환 완료: packets=%d sessions=%d", pkt_count, len(re_sessions))
+                    # 다운로드는 가짜 MAC 없는 export_pcap (내부 재파싱용과 분리)
+                    pcap_bytes = conv.export_pcap
+                    logger.info("raw→pcap 변환 완료: packets=%d sessions=%d linktype=%d",
+                                conv.packet_count, len(re_sessions), conv.export_linktype)
         except Exception as exc:  # 변환 실패는 치명적이지 않음 — 요약 세션 유지
             logger.warning("raw→pcap 변환 실패 (요약 세션 유지): %s", exc)
 

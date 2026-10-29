@@ -242,3 +242,36 @@ def test_api_endpoint_disabled_and_pdf_unchanged(api_client_factory=None):
     client = TestClient(main.app)
     r = client.get("/api/summary/00000000-0000-4000-8000-000000000000/ai-draft")
     assert r.status_code == 404  # 없는 업로드 → 기존 summary 와 같은 404 규약
+
+
+def test_concurrent_requests_run_model_once(monkeypatch):
+    """같은 캡처 동시 요청(PDF 연타) → 모델 호출 1회, 모두 같은 결과."""
+    import threading
+    import time as _t
+    calls = []
+
+    def slow(facts, templates, cfg, caller=None):
+        calls.append(1)
+        _t.sleep(0.3)
+        return {"paragraphs": [], "stats": {"passed": 0, "replaced": 0, "gen_ms": 300}}
+
+    monkeypatch.setattr(llm_draft, "generate_draft", slow)
+    llm_draft._CACHE.clear()
+    cap, nr = _capture()
+    out = []
+    ths = [threading.Thread(target=lambda: out.append(draft_for_capture(cap, nr, CFG))) for _ in range(5)]
+    for t in ths:
+        t.start()
+    for t in ths:
+        t.join()
+    assert len(calls) == 1
+    assert len(out) == 5 and all(o is out[0] for o in out)
+    assert llm_draft._INFLIGHT == {}
+
+
+def test_health_reports_bound_port():
+    from fastapi.testclient import TestClient
+    import main
+    r = TestClient(main.app).get("/health")
+    assert r.status_code == 200
+    assert r.json()["port"] == 80  # TestClient 의 가상 서버 포트 — 하드코딩 8764 가 아님
