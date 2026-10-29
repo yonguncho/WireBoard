@@ -22,11 +22,30 @@ BANNED_PHRASES = (
     "확실히", "틀림없이", "침해됨", "침해되었", "침해가 확인", "감염됨", "감염되었",
 )
 
-# 숫자를 단어로 쓰면 대조할 수 없으므로 금지 ("forty-two hosts")
-_NUMBER_WORDS_RE = re.compile(
+# 단어 숫자: 값이 입력에 있으면 허용("two C2 beacons" + findings 2건), 없거나 큰 단위면 위반
+_NUMBER_WORDS = {w: i for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen "
+    "sixteen seventeen eighteen nineteen twenty".split())}
+_NUMBER_WORDS.update({"thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90})
+_TENS = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety"
+_UNITS = "one|two|three|four|five|six|seven|eight|nine"
+_COMPOUND_RE = re.compile(rf"\b({_TENS})[- ]({_UNITS})\b", re.I)       # forty-two → 42
+_SIMPLE_WORD_RE = re.compile(
     r"\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
-    r"sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
-    r"hundreds?|thousands?|millions?|billions?|dozens?)\b", re.I)
+    rf"sixteen|seventeen|eighteen|nineteen|{_TENS})\b", re.I)
+# 크기 단위 단어는 값으로 대조할 수 없으므로 금지 ("nine thousand sessions")
+_NUMBER_WORDS_RE = re.compile(r"\b(hundreds?|thousands?|millions?|billions?|dozens?)\b", re.I)
+# "October 29, 2026" / "29 October 2026" → ISO 로 바꿔 날짜 검사 (풀어 쓴 날짜는 정상 표현)
+_MONTHS = {m: i for i, m in enumerate(
+    "january february march april may june july august september october november december".split(), 1)}
+_MONTH_DATE_RES = [
+    re.compile(r"\b(january|february|march|april|may|june|july|august|september|october|november|december)"
+               r"\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b", re.I),
+    re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(january|february|march|april|may|june|july|august|september|"
+               r"october|november|december),?\s+(\d{4})\b", re.I),
+]
+# 출력 형식이 본문에 새어 나온 경우 ("The finding_ids for this narrative are [F1]")
+_FORMAT_LEAK_RE = re.compile(r"finding_ids?|\"text\"|executive_summary|incident_narrative|[{}]", re.I)
 
 # 공격 유형·행위 주장은 입력(탐지 결과)에 근거가 있을 때만 — 3B 모델이 실제로
 # 평범한 웹 트래픽을 "lateral movement" 라고 지어낸 사례가 있었다 (eval 04)
@@ -119,6 +138,19 @@ class FactIndex:
                 self.ip_ports.add((str(t.get("destination")), int(p)))
 
 
+def _iso_dates(text: str) -> str:
+    def md(m):
+        return f"{m.group(3)}-{_MONTHS[m.group(1).lower()]:02d}-{int(m.group(2)):02d}"
+
+    def dm(m):
+        return f"{m.group(3)}-{_MONTHS[m.group(2).lower()]:02d}-{int(m.group(1)):02d}"
+    text = _MONTH_DATE_RES[0].sub(md, text)
+    text = _MONTH_DATE_RES[1].sub(dm, text)
+    # 단어 숫자 → 숫자: 이후 숫자·단위 검사를 그대로 받게 한다 ("two beacons" → "2 beacons")
+    text = _COMPOUND_RE.sub(lambda m: str(_NUMBER_WORDS[m.group(1).lower()] + _NUMBER_WORDS[m.group(2).lower()]), text)
+    return _SIMPLE_WORD_RE.sub(lambda m: str(_NUMBER_WORDS[m.group(1).lower()]), text)
+
+
 def _ip_port_pairs(text: str) -> set[tuple]:
     pairs = {(ip, int(p)) for r in _IP_PORT_RES for ip, p in r.findall(text)}
     pairs |= {(ip, int(p)) for p, ip in _PORT_ON_IP_RE.findall(text)}
@@ -160,7 +192,9 @@ def check_paragraph(text: str, finding_ids: list, facts_or_index) -> list[str]:
     v: list[str] = []
     if not isinstance(text, str) or not text.strip():
         return ["empty paragraph"]
-    t = text.strip()
+    t = _iso_dates(text.strip())
+    if _FORMAT_LEAK_RE.search(t):
+        v.append("output format leaked into text")
     if len(t) < MIN_CHARS:
         v.append(f"too short ({len(t)} chars)")
     if len(t) > MAX_CHARS:

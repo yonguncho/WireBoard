@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 DRAFT_LABEL = "AI-generated draft - review required"
 SLOTS = ("executive_summary", "incident_narrative")
-PROMPT_VERSION = "v2"  # v2: 숫자-의미 결합·근거 없는 공격 유형 금지 규칙 추가 (eval 04/11 환각 대응)
+PROMPT_VERSION = "v3"  # v2: 숫자-의미 결합·근거 없는 공격 유형 금지 / v3: findings 없을 때 F1 인용 금지·형식 누설 금지
 _LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 _TRUE = ("1", "true", "yes", "on")
 
@@ -52,7 +52,7 @@ Rules:
 - Keep each number with what it describes: a count of ports scanned or connections is not a port number. Write "IP:port" only for a port that the JSON lists for that IP.
 - Name only the attack types that appear in "findings". If "findings" is empty, say that no attack pattern was detected and do not speculate about attacks.
 - Use cautious wording such as "indicates", "is consistent with", "may". Packet data alone cannot prove a compromise: never say a host is definitely or certainly compromised.
-- For each paragraph, list the IDs (like F1, H2, P1, S1) of the facts it relies on in "finding_ids".
+- For each paragraph, list the IDs (like F1, H2, P1, S1) of the facts it relies on in "finding_ids". Use only IDs that exist in the JSON; when "findings" is empty there is no F1, so cite S1, P and H IDs instead. Do not mention "finding_ids" in the text.
 - Write in English. Plain sentences, no bullet points, no markdown.
 Paragraphs:
 - executive_summary: 2-4 sentences for a manager. What was observed, the overall risk level, and the general next step.

@@ -80,7 +80,8 @@ def test_grounded_paragraphs_pass():
     (GOOD_NARR + " This matches t1059.", "MITRE IDs not in input"),                            # 소문자 MITRE
     (GOOD_NARR + " See also f9.", "mentions unknown IDs in text"),                             # 소문자 ID
     (GOOD_NARR + " It reached ample.com.", "domains not in input"),                            # 부분 문자열 도메인
-    (GOOD_NARR + " It contacted forty-two hosts.", "numbers written as words"),                # 단어 숫자
+    (GOOD_NARR + " It contacted forty-two hosts.", "numbers not in input"),                    # 단어 숫자 → 42 로 환산해 검사
+    (GOOD_NARR + " It made nine thousand requests.", "numbers written as words"),               # 크기 단위 단어
     (GOOD_NARR + " The host has been breached.", "banned assertive wording"),
     (GOOD_NARR + " The host is infected.", "banned assertive wording"),
 ])
@@ -299,3 +300,17 @@ def test_valid_ip_port_and_supported_claims_pass():
     text = ("10.0.0.31 connected to 203.0.113.77:8443 repeatedly, consistent with C2 beaconing; "
             "it also sent 140 MB out, which may indicate exfiltration.")
     assert check_paragraph(text, ["F1", "F2", "P1"], FACTS) == []
+
+def test_spelled_out_date_and_matching_number_word_pass():
+    """실모델이 쓴 정상 표현: 풀어 쓴 날짜, 입력과 같은 값의 단어 숫자 (eval 07/05 오탐이었음)."""
+    text = ("On October 29, 2026, 10.0.0.31 showed C2 beacon activity toward 203.0.113.77 with six "
+            "external connections and 140 MB sent, which may indicate exfiltration.")
+    assert check_paragraph(text, ["F1", "F2"], FACTS) == []
+    bad = text.replace("October 29, 2026", "October 30, 2026")
+    assert any(v.startswith("times/dates not in input") for v in check_paragraph(bad, ["F1"], FACTS))
+    assert any(v.startswith("numbers not in input") for v in check_paragraph(text.replace("six", "seventeen"), ["F1"], FACTS))
+
+
+def test_output_format_leak_rejected():
+    p = check_paragraph(GOOD_NARR + " The finding_ids for this narrative are [F1].", ["F1"], FACTS)
+    assert "output format leaked into text" in p
