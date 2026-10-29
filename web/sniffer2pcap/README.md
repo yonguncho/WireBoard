@@ -47,34 +47,30 @@ FortiGate `diagnose sniffer packet` 텍스트 출력을 libpcap(.pcap)로 바꾸
 
 ## 검증
 
-검증 스크립트·픽스처는 보호 경로(`tests/`) 정책 때문에 아직 저장소 밖(세션 scratchpad)에 있다.
-승인 후 `tests/test_sniffer2pcap_web.py` + `tests/fixtures/sniffer2pcap/` 로 옮길 예정.
-- tshark 4.0.14로 패킷 수·시각(µs)·주소·링크타입·캡처길이·malformed 0 대조 (픽스처 8종)
-- 기존 변환기와 IP 바이트·시각 동일성 비교 (3종)
-- Playwright E2E: 업로드→다운로드, 40MB(100,936패킷) 3.3초, 변환 중 메인스레드 응답 ≤5ms,
-  로드 후 네트워크 요청 0건, 콘솔 에러 0, 375px 가로 스크롤 없음
+- `tests/test_sniffer2pcap_web.py` + `tests/fixtures/sniffer2pcap/` (픽스처 8종, `gen_fixtures.py` 로 재생성)
+- tshark 4.0.14로 패킷 수·시각(µs)·주소·링크타입·캡처길이·malformed 0 대조
+- WireBoard 본체 변환기(`raw_pcap_converter.export_pcap`)와 **바이트 단위 동일** (픽스처 8종)
+- `tools/e2e_sniffer2pcap_browser.py` (Playwright): 업로드→다운로드, 40MB(100,936패킷) 약 5초,
+  변환 중 메인스레드 응답 ≤21ms, 로드 후 네트워크 요청 0건, 콘솔 에러 0, 375px 가로 스크롤 없음
 
-## 배포 (호스팅 위치는 미정 — 결정 필요)
+## 배포 — https://choiceguidelab.com/tools/fortigate-sniffer-to-pcap/ (2026-10-30 게시)
 
-정적 파일 7개를 그대로 올리면 된다. `.js` 가 `text/javascript` MIME으로 서빙되기만 하면 된다.
+배포 스크립트: `C:\AI_WORKPLACE\choiceguidelab-migration-git\deploy_sniffer2pcap.py`
+(`--probe` 는 서버 상태만 확인). WP 루트 아래 실제 폴더 `tools/fortigate-sniffer-to-pcap/` 에
+정적 파일 6개(`index.html style.css app.js worker.js converter.js sample.js`)와 `.htaccess` 를 올린다.
+WordPress 재작성 규칙(`!-d/!-f`)상 실제 폴더가 우선이라 WP 가 가로채지 않는다.
 
-**CSP 는 HTTP 헤더로도 보낼 것.** `<meta>` CSP 는 문서에만 적용되고, 변환이 실제로 일어나는
-module Worker(`worker.js`)는 자기 응답 헤더의 CSP 를 따른다. 그래서 서버(또는 Cloudflare Transform Rule)에서
-`index.html`·`worker.js` 둘 다에 아래 헤더를 붙인다. 붙이기 전까지 페이지 문구는 "코드에 전송 로직이 없고
-CSP 가 fetch/XHR 을 막는다" 수준으로만 주장한다(현재 문구).
+`.htaccess` 가 하는 일:
+- **CSP 를 HTTP 헤더로** 보낸다 — `<meta>` CSP 는 module Worker 에 적용되지 않으므로 필수.
+  라이브 확인: `index.html`·`worker.js`·`converter.js` 모두 헤더 CSP 수신.
+- **`Cache-Control: no-transform`** — 이게 없으면 Cloudflare 가 Web Analytics 비콘과
+  이메일 난독화 스크립트를 페이지에 끼워 넣는다(실제로 발견됨: `ssh admin@192.0.2.1` 이
+  이메일 보호 링크로 바뀌어 깨져 보였음). "분석 없음·외부 스크립트 없음" 약속을 지키기 위해 필수.
+- JS MIME `text/javascript`, 디렉터리 목록 금지.
 
-```
-Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'
-```
+주의: Cloudflare 엣지가 JS/CSS 를 최대 4시간 캐시한다. `converter.js` 등을 바꿔 재배포하면
+최대 4시간 동안 구버전 JS 가 섞일 수 있다(HTML 은 5분). 급하면 파일명을 바꾸거나 기다릴 것.
 
-| 선택지 | 장점 | 단점 |
-|--------|------|------|
-| **A. choiceguidelab.com 하위 경로** (예: `/tools/fortigate-sniffer-to-pcap/`, wp-content 밖 정적 폴더) | 기존 도메인 권위·내부링크(APO 글) 효과, 별도 비용 0, APO 유입 동선 짧음 | WordPress/캐시 플러그인이 헤더·HTML을 건드릴 수 있음, Cloudflare 캐시 갱신 관리 필요 |
-| **B. 별도 도메인** (예: sniffer2pcap 류 키워드 도메인) | 키워드 도메인, 사이트 장애·플러그인과 무관, 도구 자체 브랜딩 | 도메인 권위 0에서 시작, 연 1~2만원 비용, APO로의 유입은 링크 1개뿐 |
-| **C. GitHub Pages / Cloudflare Pages** (+ 나중에 커스텀 도메인) | 무료, 배포 = git push, HTTPS 자동, 소스 공개로 "업로드 안 함" 신뢰 증명 | `*.github.io` 하위면 SEO 약함 → 결국 A나 B 도메인 연결 필요 |
-
-추천: **A (choiceguidelab 하위 경로)** — 목적이 APO 유입이라 같은 도메인에 두는 게 가장 직접적이다.
-배포 시 `index.html` 에 `<link rel="canonical">` 을 최종 URL로 추가할 것(현재는 URL 미정이라 비워둠).
-분석 도구를 붙인다면 쿠키 없는 방식(Cloudflare Web Analytics 등)으로, 이 경우 CSP의
-`script-src`/`connect-src` 를 그 도메인 하나만 허용하도록 바꾸고 FAQ 문구("요청 0건")도 함께 고쳐야 한다.
+분석 도구를 붙인다면 쿠키 없는 방식으로, CSP 의 `script-src`/`connect-src` 를 그 도메인 하나만
+허용하도록 바꾸고 `no-transform` 정책과 FAQ 문구("요청 0건")도 함께 고쳐야 한다.
 입력 내용은 Worker 안에만 있으므로 분석 스크립트가 읽을 경로는 없다.

@@ -8,7 +8,9 @@
 <meta name="referrer" content="no-referrer">
 <title>FortiGate Sniffer to PCAP Converter — Free, Runs in Your Browser</title>
 <meta name="description" content="Convert FortiGate 'diagnose sniffer packet' output (verbose 3 or 6) to a .pcap file you can open in Wireshark. Free, no install, no login. Your capture never leaves your browser.">
+<link rel="canonical" href="https://choiceguidelab.com/tools/fortigate-sniffer-to-pcap/">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://choiceguidelab.com/tools/fortigate-sniffer-to-pcap/">
 <meta property="og:title" content="FortiGate Sniffer to PCAP Converter">
 <meta property="og:description" content="Turn 'diagnose sniffer packet' output into a Wireshark-ready .pcap. Runs entirely in your browser — nothing is uploaded.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232457d6'/%3E%3Cpath d='M7 20h5l3-9 3 13 3-8h4' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -117,7 +119,7 @@
     <ul>
       <li><strong>PuTTY:</strong> before connecting, open <em>Session → Logging</em>, choose <em>All session output</em> and a log file name. Connect, run the sniffer, then drop the log file here.</li>
       <li><strong>SecureCRT:</strong> <em>File → Log Session</em>, pick a file, then run the sniffer.</li>
-      <li><strong>macOS / Linux terminal:</strong> <code>script sniffer.txt</code> (macOS) or <code>script -c "ssh admin@192.0.2.1" sniffer.txt</code> (Linux) records everything shown in the terminal.</li>
+      <li><strong>macOS / Linux terminal:</strong> <code>script sniffer.txt</code> (macOS) or <code>script -c "ssh -l admin 192.0.2.1" sniffer.txt</code> (Linux) records everything shown in the terminal.</li>
       <li><strong>Short captures:</strong> just select the output in your terminal, copy, and paste it into the box above.</li>
     </ul>
     <p class="muted">Prompts, the command line, blank lines, <code>--More--</code>, colour codes and per-line timestamps added by your terminal are ignored automatically.</p>
