@@ -2,7 +2,7 @@
 from collections import defaultdict
 
 from models.session import SessionModel
-from services.attack_detector.base import AttackResult
+from services.attack_detector.base import AttackResult, is_unanswered
 
 _ATTEMPTS_HIGH = 50
 _ATTEMPTS_MEDIUM = 10
@@ -35,6 +35,9 @@ class BruteForceDetector:
 
         by_key: dict[tuple[str, str, int], list[SessionModel]] = defaultdict(list)
         for s in sessions:
+            # 서버에 닿지도 못한 연결은 로그인 시도가 아니다 (방화벽 차단·서버 다운)
+            if is_unanswered(s):
+                continue
             by_key[(s.src_ip, s.dst_ip, s.dst_port)].append(s)
 
         best: AttackResult | None = None

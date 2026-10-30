@@ -3,7 +3,7 @@ import math
 from collections import defaultdict
 
 from models.session import SessionModel
-from services.attack_detector.base import AttackResult
+from services.attack_detector.base import AttackResult, is_unanswered
 
 _MIN_SAMPLES = 5
 _HIGH_CV = 5.0    # CV ≤ 5% → high
@@ -50,6 +50,9 @@ class BeaconDetector:
     def detect(self, sessions: list[SessionModel]) -> AttackResult | None:
         groups: dict[tuple[str, str], list] = defaultdict(list)
         for s in sessions:
+            # 응답 없는 연결의 주기적 재시도는 앱 재시도이지 C2 통신이 아니다
+            if is_unanswered(s):
+                continue
             groups[(s.src_ip, s.dst_ip)].append(s)
 
         best: tuple[AttackResult, int] | None = None
