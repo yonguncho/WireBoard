@@ -238,14 +238,25 @@ app.include_router(license_router)
 # ── Stateless liveness probe (2026-07-11) ──
 # 외부 워치독이 캡처 업로드 없이 서버 생존을 확인할 수 있는 무상태 엔드포인트.
 # 기존 /api/health/{upload_id}는 세션별 진단이라 liveness 용도로 부적합.
+_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+# 기동 시 화면(index.html)이 있었는지 — 있었는데 사라졌으면 고장이다.
+# (2026-10-30 실제 사고: PyInstaller 단일 EXE 의 %TEMP%\_MEI* 추출 폴더가 16일 뒤 정리돼
+#  화면이 500 이었는데 /health 는 200 이라 워치독이 '정상'으로 판정했다)
+_STATIC_INDEX = os.path.join(_STATIC_DIR, "index.html")
+_STATIC_EXPECTED = os.path.isfile(_STATIC_INDEX)
+
+
 @app.get("/health", include_in_schema=False)
 async def _liveness(request: Request):
     # launcher 는 8764 가 차 있으면 다음 빈 포트를 쓴다 — 실제로 바인딩된 포트를 보고한다
     server = request.scope.get("server") or (None, 8764)
+    if _STATIC_EXPECTED and not os.path.isfile(_STATIC_INDEX):
+        # 503 + degraded → 워치독(200·"healthy" 요구)이 재시작한다
+        return JSONResponse(status_code=503, content={
+            "status": "degraded", "version": APP_VERSION, "port": server[1],
+            "detail": "UI files missing (temporary extraction folder was cleaned) - restart required",
+        })
     return {"status": "healthy", "version": APP_VERSION, "port": server[1]}
-
-
-_STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(_STATIC_DIR):
     _assets_dir = os.path.join(_STATIC_DIR, "assets")
     if os.path.isdir(_assets_dir):

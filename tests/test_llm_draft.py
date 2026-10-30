@@ -380,3 +380,16 @@ def test_v4_3b_passed_errors_now_rejected(bad, reason):
 def test_indicates_is_not_a_hedge_for_compromise():
     p = check_paragraph("10.0.0.31 beaconed to 203.0.113.77 96 times. This indicates a serious security compromise.", ["F1"], FACTS)
     assert any(v.startswith("unhedged compromise claim") for v in p), p
+
+def test_health_degraded_when_ui_files_vanish(monkeypatch, tmp_path):
+    """2026-10-30 사고 재현: 기동 때 있던 index.html 이 사라지면 /health 가 503 degraded (워치독 재시작 유도)."""
+    from fastapi.testclient import TestClient
+    import main
+    client = TestClient(main.app)
+    monkeypatch.setattr(main, "_STATIC_EXPECTED", True)
+    monkeypatch.setattr(main, "_STATIC_INDEX", str(tmp_path / "index.html"))
+    r = client.get("/health")
+    assert r.status_code == 503 and r.json()["status"] == "degraded"
+    (tmp_path / "index.html").write_text("<html></html>")
+    r = client.get("/health")
+    assert r.status_code == 200 and r.json()["status"] == "healthy"
