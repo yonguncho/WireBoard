@@ -201,6 +201,25 @@ pytest tests/test_geoip.py -v
 - **TTL**: 세션 900초 / LRU 10건 자동 삭제
 - **EDR**: Windows Defender PASS
 
+## 데이터 재수집 안내
+
+WireBoard는 **오프라인 분석 툴**이라 운영 DB·사용자 계정·쿠키·테넌트 설정이 없다. 업로드 파일은 세션 메모리에만 머물다 TTL/LRU로 삭제된다(`backend/routers/capture.py`는 임시파일만 사용).
+기본 동작(PCAP 분석·내장 GeoIP 폴백·OUI·YARA·데모 pcap·사전 빌드 UI)은 **레포만으로 완결**된다. 레포에 없는 것은 아래가 전부이며, 모두 **선택** 항목이다.
+
+| # | 무엇이 (이름·형식·위치) | 왜 없나 | 어떻게 다시 확보하나 / 어디서 얻나 |
+|---|---|---|---|
+| 1 | **`GeoLite2-Country.mmdb`** (MaxMind 바이너리 DB) — `WireBoard.exe` 옆, 또는 레포 루트/`backend/` (`backend/services/analytics/geoip_analyzer.py`의 검색 경로) | MaxMind EULA상 재배포 불가 + 대용량 | **원천 재수집**: maxmind.com 무료 GeoLite2 계정 가입 → Download Files → *GeoLite2 Country* (`.mmdb`) 받아 위 경로에 배치. 없으면 레포의 `geoip_fallback.json`(CIDR 폴백)으로 자동 동작. |
+| 2 | **라이선스 서명 개인키** `wireboard_license_ed25519.key` (Ed25519 개인키 hex 1줄) — 기본 `C:\AI_WORKPLACE\secrets\` (`tools/sign_license.py --key`) | 비밀(배포 시 누구나 라이선스 위조 가능) | **백업 복원**: 제품 소유자(Jayden) 보관본 / `C:\AI_WORKPLACE\secrets\`(gitignore, `ai-workplace-system-backup` 대상 여부 **미확인**). **분실 시 재생성**: 새 Ed25519 키쌍 생성 → 개인키 hex를 위 파일에 저장 → 공개키 hex로 `backend/services/licensing.py`의 `_LICENSE_PUBKEY_HEX` 교체 후 재빌드(기존 발급 라이선스는 무효화됨). 앱 실행에는 불필요(기본 비게이팅). |
+| 3 | **사용자 라이선스 토큰** `WB1.<payload>.<sig>` — `license.dat`(EXE 옆 또는 작업 디렉터리) 또는 env `WIREBOARD_LICENSE` | 구매자 개인 데이터(이메일 포함, PII) | **재생성**: 소유자가 `python tools/sign_license.py --email <구매자> [--expires YYYY-MM-DD] [--seats N]` 실행 → 토큰 전달. 구매자는 `POST /api/license/activate` 또는 `license.dat`에 붙여넣기. 상세: `docs/LICENSING_AND_LEGAL.md`. 기본(`WIREBOARD_LICENSE_ENFORCE=0`)에선 없어도 모든 기능 동작. |
+| 4 | **Lemon Squeezy 라이선스 키** (온라인 검증, `licensing.verify_online()`) | 구매자별 비밀 | **원천 재수집**: Lemon Squeezy 스토어 대시보드(구매 시 발급). 스토어/제품 설정값은 레포 코드에 없음 — 실제 운영 여부·스토어 ID **미확인**. 선택 기능. |
+| 5 | **`ABUSEIPDB_API_KEY`** (env 문자열) + `ENABLE_EXTERNAL_REPUTATION=1` | 비밀(API 키) | **원천 재수집**: abuseipdb.com 계정 → API 키 발급 → 환경변수로 설정(레포의 `.env.example`를 템플릿으로 사용 가능). ip-api·URLhaus·Feodo는 키 불필요, 옵트인 스위치만 켜면 됨. 기본 꺼짐(외부 호출 0건). |
+| 6 | **로컬 LLM 모델 가중치** (예: `llama3.2:3b`) — Ollama 또는 OpenAI 호환 서버, loopback 주소만 허용 | 대용량(GB 단위) + 제3자 라이선스 | **원천 재수집**: [Ollama](https://ollama.com/download) 설치 → `ollama pull llama3.2:3b` → `WIREBOARD_LLM_ENABLED=1` (선택: `WIREBOARD_LLM_API/URL/MODEL/TIMEOUT`). 상세: `docs/local-llm-draft.md`. 평가 재실행: `python eval/llm_draft/run_eval.py --model llama3.2:3b`. 숨은 실험 기능, 기본 꺼짐. |
+| 7 | **`WireBoard.exe`** (PyInstaller onefile, ~38 MB) | 빌드 생성물(대용량) | **재생성**: `pip install -r requirements.txt` → `build.bat` → `dist\WireBoard.exe`. 배포본은 choiceguidelab 다운로드 페이지(`wp-content` 정적 파일 + SHA-256)에서도 받을 수 있음. |
+| 8 | **프론트엔드 빌드** `backend/static/` (레포에 포함) / `frontend/node_modules/` (미포함) | node_modules는 생성물 | UI를 수정할 때만: `cd frontend && npm ci && npm run build` → `vite.config.ts`의 `outDir`로 `backend/static/` 재생성. |
+| 9 | **테스트 외부 도구**: Node.js(sniffer2pcap 웹 테스트), Wireshark `tshark`(`C:\Program Files\Wireshark\tshark.exe` 또는 PATH) | 시스템 설치 프로그램 | **원천 재수집**: nodejs.org, wireshark.org 설치. 없으면 해당 테스트만 skip. 테스트 픽스처(`tests/fixtures/`)와 데모 pcap(`backend/static/demo.pcap`)은 레포에 포함. |
+| 10 | **실제 분석 대상 PCAP/로그** (pcap/pcapng/FortiGate 로그/HAR) | 고객 네트워크 트래픽(PII·기밀) | **원천 재수집**: 분석할 현장 장비에서 직접 캡처(Wireshark/tcpdump/FortiGate `diagnose sniffer` → 웹도구 `web/sniffer2pcap`로 pcap 변환). 레포에 넣지 말 것. 데모는 `backend/static/demo.pcap`. |
+| 11 | **운영 상태 파일** `wireboard_status.json`, `logs/` | 실행 생성물(gitignore) | **재생성**: `watchdog.ps1`(5분 주기)이 상태 파일을, `launcher.py`가 `logs/`(`WIREBOARD_LOG_DIR`로 변경 가능)를 자동 생성. 복원 불필요. |
+
 ## 라이선스
 
 의존성 라이선스 상세: `licenses.txt`
